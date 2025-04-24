@@ -57,7 +57,9 @@ class Users:
                 if not batch:
                     break
                     
-                users.extend(batch)
+                # Filter users with accountType = 'atlassian'
+                filtered_batch = [user for user in batch if user.accountType == 'atlassian']
+                users.extend(filtered_batch)
                 
                 if len(batch) < 100 or len(users) >= max_results:
                     break
@@ -201,7 +203,7 @@ if __name__ == "__main__":
         user_service = Users()
         
         # Example: Get first 10 users
-        all_users = user_service.get_all_users(max_results=10)
+        all_users = user_service.get_all_users(max_results=100)
         print(f"Found {len(all_users)} users:")
         for user in all_users:
             print(f"- {user['displayName']}")
