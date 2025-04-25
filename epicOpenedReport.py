@@ -48,7 +48,6 @@ class EpicOpenedReport:
                     # Get the full issue to access all fields
                     issue_key = epic["key"]
                     issue_details = self.jira_service.get_issue(issue_key)
-                    
                     # Parse the creation date using dateutil for more robust parsing
                     try:
                         creation_date = dateutil.parser.parse(issue_details["created"])
@@ -65,7 +64,9 @@ class EpicOpenedReport:
                         "summary": issue_details["summary"],
                         "status": issue_details["status"],
                         "creation": creation_date.strftime("%Y-%m-%d"),
-                        "daysSinceCreation": days_since_creation
+                        "daysSinceCreation": days_since_creation,
+                        "Reporter": issue_details["reporter"],
+												"Assignee": issue_details["assignee"],
                     }
                     
                     epics_with_details.append(epic_info)
@@ -97,10 +98,11 @@ class EpicOpenedReport:
             
             for project in projects:
                 project_key = project.key
+                project_name = project.name
                 try:
                     epics = self.get_epics_for_project(project_key)
                     if epics:  # Only include projects that have open epics
-                        all_epics[project_key] = epics
+                        all_epics[f"{project_name}({project_key})"] = epics
                 except Exception as e:
                     logger.warning(f"Error retrieving epics for project {project_key}: {str(e)}. Skipping.")
                     
@@ -117,28 +119,11 @@ if __name__ == "__main__":
     try:
         report = EpicOpenedReport()
         
-        # Connect to Jira to get projects directly
         jira = report.jira_service.connect()
-        projects = jira.projects()
-        
-        print("Available Projects:")
-        for project in projects:
-            print(f"  {project.key}: {project.name}")
-            
-        # Example: Get epics for a specific project
-        if projects:
-            example_project = projects[2].key
-            print(f"\nEpics for project {example_project}:")
-            epics = report.get_epics_for_project(example_project)
-            for epic in epics:
-                print(f"  {epic['idIssue']}: {epic['summary']} ({epic['status']}) - Created: {epic['creation']} ({epic['daysSinceCreation']} days ago)")
-                
-        # Example: Get epics for all projects
-        print("\nAll epics for all projects:")
         all_epics = report.get_epics_for_all_projects()
         for project_key, project_epics in all_epics.items():
-            print(f"\nProject: {project_key}")
+            print(f"\nProject: {project_key} ")
             for epic in project_epics:
-                print(f"  {epic['idIssue']}: {epic['summary']} ({epic['status']}) - Created: {epic['creation']} ({epic['daysSinceCreation']} days ago)")
+                print(f"  {epic['idIssue']}: {epic['summary']} ({epic['status']}) - Created: {epic['creation']} ({epic['daysSinceCreation']} days ago) - Reporter: {epic['Reporter']} - Assignee: {epic['Assignee']}")
     except Exception as e:
         print(f"Error: {str(e)}")

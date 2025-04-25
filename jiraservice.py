@@ -71,6 +71,7 @@ class JiraService:
                 "assignee": issue.fields.assignee.displayName if issue.fields.assignee else None,
                 "created": issue.fields.created,
                 "updated": issue.fields.updated,
+                "reporter": issue.fields.reporter.displayName if issue.fields.reporter else None,
             }
         except Exception as e:
             logger.error(f"Error retrieving issue {issue_key}: {str(e)}")
