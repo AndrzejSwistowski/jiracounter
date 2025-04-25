@@ -6,6 +6,9 @@ import logging
 from typing import Optional, Dict, List, Any
 from jira import JIRA
 import config
+import dateutil.parser
+from datetime import datetime
+from utils import calculate_days_since_date
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL))
@@ -64,12 +67,16 @@ class JiraService:
         jira = self.connect()
         try:
             issue = jira.issue(issue_key)
+            created_date = issue.fields.created
+            
             return {
                 "key": issue.key,
                 "summary": issue.fields.summary,
                 "status": issue.fields.status.name,
                 "assignee": issue.fields.assignee.displayName if issue.fields.assignee else None,
-                "created": issue.fields.created,
+                "created": created_date,
+                "creationDate": dateutil.parser.parse(created_date).strftime("%Y-%m-%d"),
+                "daysSinceCreation": calculate_days_since_date(created_date),
                 "updated": issue.fields.updated,
                 "reporter": issue.fields.reporter.displayName if issue.fields.reporter else None,
             }

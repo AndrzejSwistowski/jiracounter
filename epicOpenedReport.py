@@ -5,15 +5,12 @@
 #     # - idIssue
 #     # - summary
 #     # - status
-			# - creation 
+			# - creationDate 
 #     # - numers of days from creation to now
 
 import logging
 from typing import List, Dict, Any
-from datetime import datetime
-import dateutil.parser
 from jiraservice import JiraService
-from utils import calculate_days_since_date
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -50,18 +47,15 @@ class EpicOpenedReport:
                     issue_key = epic["key"]
                     issue_details = self.jira_service.get_issue(issue_key)
                     
-                    # Calculate days since creation using the utility function from utils.py
-                    days_since_creation = calculate_days_since_date(issue_details["created"])
-                    
                     # Create the epic information dictionary
                     epic_info = {
                         "idIssue": issue_key,
                         "summary": issue_details["summary"],
                         "status": issue_details["status"],
-                        "creation": dateutil.parser.parse(issue_details["created"]).strftime("%Y-%m-%d"),
-                        "daysSinceCreation": days_since_creation,
+                        "creationDate": issue_details["creationDate"],
+                        "daysSinceCreation": issue_details["daysSinceCreation"],
                         "Reporter": issue_details["reporter"],
-						"Assignee": issue_details["assignee"],
+                        "Assignee": issue_details["assignee"],
                     }
                     
                     epics_with_details.append(epic_info)
@@ -119,6 +113,6 @@ if __name__ == "__main__":
         for project_key, project_epics in all_epics.items():
             print(f"\nProject: {project_key} ")
             for epic in project_epics:
-                print(f"  {epic['idIssue']}: {epic['summary']} ({epic['status']}) - Created: {epic['creation']} ({epic['daysSinceCreation']} days ago) - Reporter: {epic['Reporter']} - Assignee: {epic['Assignee']}")
+                print(f"  {epic['idIssue']}: {epic['summary']} ({epic['status']}) - Created: {epic['creationDate']} ({epic['daysSinceCreation']} days ago) - Reporter: {epic['Reporter']} - Assignee: {epic['Assignee']}")
     except Exception as e:
         print(f"Error: {str(e)}")
