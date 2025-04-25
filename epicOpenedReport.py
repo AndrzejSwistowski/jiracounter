@@ -13,6 +13,7 @@ from typing import List, Dict, Any
 from datetime import datetime
 import dateutil.parser
 from jiraservice import JiraService
+from utils import calculate_days_since_date
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -48,25 +49,19 @@ class EpicOpenedReport:
                     # Get the full issue to access all fields
                     issue_key = epic["key"]
                     issue_details = self.jira_service.get_issue(issue_key)
-                    # Parse the creation date using dateutil for more robust parsing
-                    try:
-                        creation_date = dateutil.parser.parse(issue_details["created"])
-                    except (ValueError, TypeError) as e:
-                        logger.warning(f"Error parsing creation date for {issue_key}: {str(e)}")
-                        creation_date = datetime.now().astimezone()
                     
-                    # Calculate days since creation
-                    days_since_creation = (datetime.now().astimezone() - creation_date).days
+                    # Calculate days since creation using the utility function from utils.py
+                    days_since_creation = calculate_days_since_date(issue_details["created"])
                     
                     # Create the epic information dictionary
                     epic_info = {
                         "idIssue": issue_key,
                         "summary": issue_details["summary"],
                         "status": issue_details["status"],
-                        "creation": creation_date.strftime("%Y-%m-%d"),
+                        "creation": dateutil.parser.parse(issue_details["created"]).strftime("%Y-%m-%d"),
                         "daysSinceCreation": days_since_creation,
                         "Reporter": issue_details["reporter"],
-												"Assignee": issue_details["assignee"],
+						"Assignee": issue_details["assignee"],
                     }
                     
                     epics_with_details.append(epic_info)
