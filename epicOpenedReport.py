@@ -37,7 +37,7 @@ class EpicOpenedReport:
             jql = f'project = "{project_key}" AND Type = Epic AND status NOT IN (Done, Canceled, Closed, Completed) ORDER BY created DESC'
             
             # Get raw issues data
-            raw_epics = self.jira_service.search_issues(jql, max_results=100)
+            raw_epics = self.jira_service.search_issues(jql)
             
             # Process each epic to include additional information
             epics_with_details = []
