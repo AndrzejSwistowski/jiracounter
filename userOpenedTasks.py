@@ -41,7 +41,7 @@ class UserOpenedTasks:
             jql = f'assignee = "{user_account_id}" AND status NOT IN (Backlog, \"TO DO\", \"DO ZROBIENIA\", Done, Canceled, Closed, Completed, Dotarło, Resolved) ORDER BY created DESC'
             
             # Get raw issues data
-            raw_tasks = self.jira_service.search_issues(jql, max_results=100)
+            raw_tasks = self.jira_service.search_issues(jql)
             
             # Process each task to include additional information
             tasks_with_details = []
@@ -56,6 +56,7 @@ class UserOpenedTasks:
                         "key": issue_key,
                         "summary": issue_details["summary"],
                         "status": issue_details["status"],
+                        "type": task.get("type", issue_details.get("type", "Unknown")),  # Try to get from task first, then issue_details
                         "creationDate": issue_details["creationDate"],
                         "daysSinceCreation": issue_details["daysSinceCreation"],
                         "reporter": issue_details["reporter"],
@@ -170,7 +171,7 @@ if __name__ == "__main__":
         for user_name, user_tasks in all_tasks.items():
             print(f"\nUser: {user_name} - {len(user_tasks)} open tasks:")
             for task in user_tasks:
-                print(f"  {task['key']}: {task['summary']} ({task['status']}) - "
+                print(f"  {task['key']}: [{task['type']}] {task['summary']} ({task['status']}) - "
                       f"Created {task['creationDate']} ({task['daysSinceCreation']} days ago)")
                 
         # If command line arguments are provided, use them to get tasks for a specific user
@@ -181,7 +182,7 @@ if __name__ == "__main__":
             user_specific_tasks = user_tasks.get_tasks_by_display_name(user_name)
             print(f"Found {len(user_specific_tasks)} open tasks for {user_name}:")
             for task in user_specific_tasks:
-                print(f"  {task['key']}: {task['summary']} ({task['status']}) - "
+                print(f"  {task['key']}: TypZadania:[{task['type']}|'Nieznany'] {task['summary']} ({task['status']}) - "
                       f"Created {task['creationDate']} ({task['daysSinceCreation']} days ago)")
                 
     except Exception as e:

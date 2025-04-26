@@ -73,6 +73,7 @@ class JiraService:
                 "key": issue.key,
                 "summary": issue.fields.summary,
                 "status": issue.fields.status.name,
+                "type": issue.fields.issuetype.name,
                 "assignee": issue.fields.assignee.displayName if issue.fields.assignee else None,
                 "created": created_date,
                 "creationDate": dateutil.parser.parse(created_date).strftime("%Y-%m-%d"),
@@ -84,28 +85,61 @@ class JiraService:
             logger.error(f"Error retrieving issue {issue_key}: {str(e)}")
             raise
 
-    def search_issues(self, jql_query: str, max_results: int = 50) -> List[Dict[str, Any]]:
-        """Search for issues using JQL.
+    def search_issues(self, jql_query: str) -> List[Dict[str, Any]]:
+        """Search for issues using JQL with automatic pagination.
         
         Args:
             jql_query: JQL query string
-            max_results: Maximum number of results to return
             
         Returns:
-            List of issues matching the query
+            List of issues matching the query (up to 1000 results)
         """
         jira = self.connect()
+        all_issues = []
+        max_allowed_results = 1000
+        
         try:
-            issues = jira.search_issues(jql_query, maxResults=max_results)
-            return [
-                {
-                    "key": issue.key,
-                    "summary": issue.fields.summary,
-                    "status": issue.fields.status.name,
-                    "assignee": issue.fields.assignee.displayName if issue.fields.assignee else None,
-                } 
-                for issue in issues
-            ]
+            # JIRA API typically limits each request to 100 items
+            page_size = 100
+            start_at = 0
+            
+            while len(all_issues) < max_allowed_results:
+                # Fetch the current page of results
+                logger.debug(f"Fetching issues starting at {start_at} with page size {page_size}")
+                issues_page = jira.search_issues(
+                    jql_query, 
+                    startAt=start_at, 
+                    maxResults=page_size
+                )
+                
+                # If no more results, break the loop
+                if len(issues_page) == 0:
+                    break
+                    
+                # Process and add the current page results
+                for issue in issues_page:
+                    all_issues.append({
+                        "key": issue.key,
+                        "summary": issue.fields.summary,
+                        "status": issue.fields.status.name,
+                        "type": issue.fields.issuetype.name if hasattr(issue.fields, 'issuetype') and issue.fields.issuetype else "Unknown",
+                        "assignee": issue.fields.assignee.displayName if issue.fields.assignee else None,
+                    })
+                
+                # If we got fewer results than requested, there are no more results
+                if len(issues_page) < page_size:
+                    break
+                    
+                # Update the starting point for the next iteration
+                start_at += len(issues_page)
+                
+                # Check if we've reached the maximum allowed total
+                if len(all_issues) >= max_allowed_results:
+                    logger.warning(f"Reached maximum result limit of {max_allowed_results} records. Some results may be omitted.")
+                    break
+                
+            return all_issues
+            
         except Exception as e:
             logger.error(f"Error searching issues with query {jql_query}: {str(e)}")
             raise
