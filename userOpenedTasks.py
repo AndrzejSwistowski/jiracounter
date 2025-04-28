@@ -38,7 +38,7 @@ class UserOpenedTasks:
         """
         try:
             # JQL query to find all issues assigned to the user that are opencl
-            jql = f'type != Epic AND assignee = "{user_account_id}" AND status NOT IN (Backlog, \"TO DO\", \"DO ZROBIENIA\", Done, Canceled, Closed, Completed, Dotarło, Resolved) ORDER BY created DESC'
+            jql = f'type NOT IN ( Epic, Spotkanie ) AND assignee = "{user_account_id}" AND status NOT IN (Backlog, \"TO DO\", \"DO ZROBIENIA\", Done, Canceled, Closed, Completed, Dotarło, Resolved) ORDER BY created DESC'
             
             # Get raw issues data
             raw_tasks = self.jira_service.search_issues(jql)
