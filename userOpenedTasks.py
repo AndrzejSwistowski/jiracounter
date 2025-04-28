@@ -38,7 +38,7 @@ class UserOpenedTasks:
         """
         try:
             # JQL query to find all issues assigned to the user that are opencl
-            jql = f'assignee = "{user_account_id}" AND status NOT IN (Backlog, \"TO DO\", \"DO ZROBIENIA\", Done, Canceled, Closed, Completed, Dotarło, Resolved) ORDER BY created DESC'
+            jql = f'type != Epic AND assignee = "{user_account_id}" AND status NOT IN (Backlog, \"TO DO\", \"DO ZROBIENIA\", Done, Canceled, Closed, Completed, Dotarło, Resolved) ORDER BY created DESC'
             
             # Get raw issues data
             raw_tasks = self.jira_service.search_issues(jql)
@@ -159,10 +159,10 @@ class UserOpenedTasks:
 # Usage example
 if __name__ == "__main__":
     try:
-        user_tasks = UserOpenedTasks()
+        user_tasksService = UserOpenedTasks()
         
         # Example: Get tasks for all users
-        all_tasks = user_tasks.get_all_users_open_tasks()
+        all_tasks = user_tasksService.get_all_users_open_tasks()
         
         # Display the results
         total_tasks = sum(len(tasks) for tasks in all_tasks.values())
@@ -179,7 +179,7 @@ if __name__ == "__main__":
         if len(sys.argv) > 1:
             user_name = sys.argv[1]
             print(f"\n\nLooking up tasks for user: {user_name}")
-            user_specific_tasks = user_tasks.get_tasks_by_display_name(user_name)
+            user_specific_tasks = user_tasksService.get_tasks_by_display_name(user_name)
             print(f"Found {len(user_specific_tasks)} open tasks for {user_name}:")
             for task in user_specific_tasks:
                 print(f"  {task['key']}: TypZadania:[{task['type']}|'Nieznany'] {task['summary']} ({task['status']}) - "
