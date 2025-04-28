@@ -12,6 +12,10 @@ JIRA_BASE_URL = os.environ.get('JIRA_BASE_URL', 'https://voyager-team.atlassian.
 JIRA_USERNAME = os.environ.get('JIRA_USERNAME', 'andrzej.swistowski@voyager.pl')
 JIRA_API_TOKEN = os.environ.get('JIRA_API_TOKEN', '')  # Use API token instead of password for security
 
+# Jira custom field mappings
+JIRA_CUSTOM_FIELDS = {
+    'RODZAJ_PRACY': 'customfield_10138'
+}
 
 # Application behavior
 CACHE_DURATION = int(os.environ.get('JIRA_CACHE_DURATION', '3600'))  # Cache duration in seconds
