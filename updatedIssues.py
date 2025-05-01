@@ -9,6 +9,7 @@ from datetime import datetime, timedelta
 import dateutil.parser
 from jiraservice import JiraService
 import config
+from utils import calculate_days_since_date
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, "INFO"))
@@ -80,7 +81,9 @@ class UpdatedIssuesReport:
                         "reporter": issue_details["reporter"],
                         "assignee": issue_details["assignee"],
                         "projectKey": issue_key.split("-")[0],  # Extract project key from issue key
-                        "backetKey": issue_details.get("backetKey", "Undefined")  # Add backetKey information
+                        "backetKey": issue_details.get("backetKey", "Undefined"),  # Add backetKey information
+                        "statusChangeDate": issue_details.get("statusChangeDate", None),
+                        "daysInCurrentStatus": calculate_days_since_date(issue_details.get("statusChangeDate", None)) if issue_details.get("statusChangeDate") else None
                     }
                     
                     issues_with_details.append(issue_info)
@@ -177,7 +180,14 @@ if __name__ == "__main__":
             sorted_issues = sorted(project_issues, key=lambda x: x["updated"], reverse=True)
             
             for issue in sorted_issues:
-                print(f"  {issue['key']}: [{issue['type']}] {issue['summary']} ({issue['status']}) - "
+                status_info = f"({issue['status']})"
+                if issue.get('daysInCurrentStatus') is not None:
+                    if issue.get('daysInCurrentStatus') == 0:
+                        status_info = f"({issue['status']} - since today)"
+                    else:
+                        status_info = f"({issue['status']} - {issue['daysInCurrentStatus']} days)"
+                
+                print(f"  {issue['key']}: [{issue['type']}] {issue['summary']} {status_info} - "
                       f"Updated: {issue['updatedDate']} - Created: {issue['creationDate']} ({issue['daysSinceCreation']} days ago) [{issue['backetKey']}]")
                 
         # If a specific project is requested via command line
@@ -191,7 +201,14 @@ if __name__ == "__main__":
             sorted_issues = sorted(project_specific_issues, key=lambda x: x["updated"], reverse=True)
             
             for issue in sorted_issues:
-                print(f"  {issue['key']}: [{issue['type']}] {issue['summary']} ({issue['status']}) - "
+                status_info = f"({issue['status']})"
+                if issue.get('daysInCurrentStatus') is not None:
+                    if issue.get('daysInCurrentStatus') == 0:
+                        status_info = f"({issue['status']} - since today)"
+                    else:
+                        status_info = f"({issue['status']} - {issue['daysInCurrentStatus']} days)"
+                
+                print(f"  {issue['key']}: [{issue['type']}] {issue['summary']} {status_info} - "
                       f"Updated: {issue['updatedDate']} - Created: {issue['creationDate']} ({issue['daysSinceCreation']} days ago) [{issue['backetKey']}]")
                 
     except Exception as e:
