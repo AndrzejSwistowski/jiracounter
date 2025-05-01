@@ -67,7 +67,7 @@ def test_get_issue(service):
     # Try to get an issue from previous search results if available
     try:
         # Search for any issue to use as a test
-        issues = service.search_issues("updated >= -30d")
+        issues = service.search_issues("updated >= -3d")
         if not issues:
             print("❌ No issues found to test issue retrieval")
             return
@@ -84,6 +84,41 @@ def test_get_issue(service):
         print(f"  Updated: {issue_details['updated']}")
     except Exception as e:
         print(f"❌ Issue retrieval failed: {str(e)}")
+
+def test_get_issue_changelog(service):
+    """Test retrieving changelog for a specific issue."""
+    print("\nTesting issue changelog retrieval...")
+    
+    try:
+        # Search for any issue to use as a test
+        issues = service.search_issues("key='BAI-589'")
+        if not issues:
+            print("❌ No issues found to test changelog retrieval")
+            return
+            
+        test_issue_key = issues[0]["key"]
+        print(f"Using issue {test_issue_key} for changelog testing...")
+        
+        changelog = service.get_issue_changelog(test_issue_key)
+        print(f"✅ Successfully retrieved changelog for issue: {test_issue_key}")
+        
+        if changelog:
+            print(f"  Found {len(changelog)} changelog entries")
+            
+            # Display a few recent changelog entries
+            for entry in changelog[:3]:  # Show first 3 entries
+                print(f"  - Changed by {entry['author']} on {entry['created_date']}")
+                
+                # Show the changes in this entry
+                for change in entry['changes'][:2]:  # Show first 2 changes per entry
+                    print(f"    • {change['field']}: {change['from']} → {change['to']}")
+                    
+                if len(entry['changes']) > 2:
+                    print(f"    • ... and {len(entry['changes']) - 2} more changes")
+        else:
+            print("  No changelog entries found for this issue")
+    except Exception as e:
+        print(f"❌ Changelog retrieval failed: {str(e)}")
 
 def check_api_token():
     """Check if API token is set."""
@@ -113,5 +148,6 @@ if __name__ == "__main__":
     test_projects(service)
     test_search_issues(service)
     test_get_issue(service)
+    test_get_issue_changelog(service)
     
     print("\nAll tests completed.")

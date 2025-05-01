@@ -280,6 +280,58 @@ class JiraService:
         
         return backet_value, backet_key
 
+    def get_issue_changelog(self, issue_key: str) -> List[Dict[str, Any]]:
+        """Retrieve the changelog for a specific issue.
+        
+        Args:
+            issue_key: The Jira issue key (e.g., "PROJ-123")
+            
+        Returns:
+            List of changelog entries containing the history of changes
+            
+        Raises:
+            ConnectionError: If there's an issue connecting to Jira
+            Exception: For other errors retrieving the changelog
+        """
+        if not issue_key:
+            logger.error("Issue key cannot be empty")
+            raise ValueError("Issue key is required")
+            
+        jira = self.connect()
+        try:
+            issue = jira.issue(issue_key, expand='changelog')
+            
+            changelog_entries = []
+            if hasattr(issue, 'changelog') and hasattr(issue.changelog, 'histories'):
+                for history in issue.changelog.histories:
+                    author = history.author.displayName if hasattr(history.author, 'displayName') else history.author.name
+                    created = history.created
+                    
+                    changes = []
+                    for item in history.items:
+                        changes.append({
+                            'field': item.field,
+                            'fieldtype': item.fieldtype if hasattr(item, 'fieldtype') else None,
+                            'from': item.fromString,
+                            'to': item.toString
+                        })
+                    
+                    changelog_entries.append({
+                        'author': author,
+                        'created': created,
+                        'created_date': dateutil.parser.parse(created).strftime("%Y-%m-%d %H:%M:%S"),
+                        'changes': changes
+                    })
+                
+            return changelog_entries
+            
+        except ConnectionError as e:
+            logger.error(f"Connection error retrieving changelog for issue {issue_key}: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"Error retrieving changelog for issue {issue_key}: {str(e)}")
+            raise
+
 # Usage example
 if __name__ == "__main__":
     try:
