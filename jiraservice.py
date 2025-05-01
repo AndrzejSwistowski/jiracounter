@@ -359,6 +359,205 @@ class JiraService:
             logger.error(f"Error retrieving changelog for issue {issue_key}: {str(e)}")
             raise
 
+    def get_issue_history(self, start_date, end_date, max_issues=None):
+        """Retrieve issue history records from JIRA for data warehouse population.
+        
+        This method fetches issues that have been updated within the specified date range
+        and transforms them into history records suitable for the data warehouse.
+        
+        Args:
+            start_date: The date to start fetching from
+            end_date: The date to fetch up to
+            max_issues: Maximum number of issues to process (default: no limit)
+            
+        Returns:
+            List of history record dictionaries containing the required fields for warehouse
+            
+        Raises:
+            ConnectionError: If there's an issue connecting to Jira
+            Exception: For other errors retrieving the issues
+        """
+        jira = self.connect()
+        history_records = []
+        
+        try:
+            # Format dates for JQL
+            start_date_str = start_date.strftime("%Y-%m-%d %H:%M") if start_date else ""
+            end_date_str = end_date.strftime("%Y-%m-%d %H:%M") if end_date else ""
+            
+            # Construct JQL query to find issues updated in the date range
+            jql = "updated >= '{}' AND updated <= '{}'".format(start_date_str, end_date_str)
+            
+            logger.info(f"Executing JQL query: {jql}")
+            
+            # Set a reasonable page size for pagination
+            page_size = 50
+            start_at = 0
+            total_processed = 0
+            
+            while True:
+                # Check if we've reached the maximum number of issues
+                if max_issues is not None and total_processed >= max_issues:
+                    logger.info(f"Reached maximum number of issues to process: {max_issues}")
+                    break
+                
+                # Calculate how many issues to fetch in this batch
+                current_batch_size = page_size
+                if max_issues is not None:
+                    current_batch_size = min(page_size, max_issues - total_processed)
+                
+                # Fetch a batch of issues
+                logger.debug(f"Fetching issues with startAt={start_at}, maxResults={current_batch_size}")
+                issues_batch = jira.search_issues(
+                    jql, 
+                    startAt=start_at, 
+                    maxResults=current_batch_size,
+                    expand='changelog'  # Include changelog to get history
+                )
+                
+                # If no more issues, break the loop
+                if len(issues_batch) == 0:
+                    break
+                
+                # Process each issue in the batch
+                for issue in issues_batch:
+                    # Extract basic issue information
+                    issue_id = issue.id
+                    issue_key = issue.key
+                    issue_type = issue.fields.issuetype.name if hasattr(issue.fields, 'issuetype') and issue.fields.issuetype else "Unknown"
+                    status_name = issue.fields.status.name if hasattr(issue.fields, 'status') and issue.fields.status else "Unknown"
+                    
+                    # Extract project information
+                    project_key = issue.fields.project.key if hasattr(issue.fields, 'project') and issue.fields.project else None
+                    project_name = issue.fields.project.name if hasattr(issue.fields, 'project') and issue.fields.project else None
+                    
+                    # Extract assignee information
+                    assignee_username = None
+                    assignee_display = None
+                    if hasattr(issue.fields, 'assignee') and issue.fields.assignee:
+                        assignee_username = issue.fields.assignee.name if hasattr(issue.fields.assignee, 'name') else None
+                        assignee_display = issue.fields.assignee.displayName if hasattr(issue.fields.assignee, 'displayName') else None
+                    
+                    # Extract reporter information
+                    reporter_username = None
+                    reporter_display = None
+                    if hasattr(issue.fields, 'reporter') and issue.fields.reporter:
+                        reporter_username = issue.fields.reporter.name if hasattr(issue.fields.reporter, 'name') else None
+                        reporter_display = issue.fields.reporter.displayName if hasattr(issue.fields.reporter, 'displayName') else None
+                    
+                    # Extract allocation code (backet key) if available
+                    backet_value, allocation_code = self._extract_backet_info(issue)
+                    
+                    # Extract parent key for sub-tasks
+                    parent_key = None
+                    if hasattr(issue.fields, 'parent') and issue.fields.parent:
+                        parent_key = issue.fields.parent.key
+                    
+                    # Create a creation history record (represents the issue creation)
+                    creation_date = issue.fields.created if hasattr(issue.fields, 'created') else None
+                    if creation_date:
+                        creation_date_dt = dateutil.parser.parse(creation_date)
+                        
+                        # Author of creation is the reporter
+                        author_username = reporter_username
+                        author_display = reporter_display
+                        
+                        # Create a history record for the creation event
+                        creation_record = {
+                            'historyId': f"{issue_id}-creation",
+                            'historyDate': creation_date_dt,
+                            'factType': 'CREATION',
+                            'issueId': issue_id,
+                            'issueKey': issue_key,
+                            'typeName': issue_type,
+                            'statusName': status_name,
+                            'assigneeUserName': assignee_username,
+                            'assigneeDisplayName': assignee_display,
+                            'reporterUserName': reporter_username,
+                            'reporterDisplayName': reporter_display,
+                            'allocationCode': allocation_code,
+                            'projectKey': project_key,
+                            'projectName': project_name,
+                            'parentKey': parent_key,
+                            'authorUserName': author_username,
+                            'authorDisplayName': author_display
+                        }
+                        history_records.append(creation_record)
+                    
+                    # Extract changelog history
+                    if hasattr(issue, 'changelog') and hasattr(issue.changelog, 'histories'):
+                        for history in issue.changelog.histories:
+                            history_id = history.id
+                            history_date = dateutil.parser.parse(history.created)
+                            
+                            # Get the author of this change
+                            author_username = history.author.name if hasattr(history.author, 'name') else None
+                            author_display = history.author.displayName if hasattr(history.author, 'displayName') else None
+                            
+                            # Create a fact for each item in the history
+                            for item in history.items:
+                                field_name = item.field
+                                from_string = item.fromString
+                                to_string = item.toString
+                                
+                                # Determine the fact type based on the field
+                                fact_type = 'UPDATE'
+                                if field_name.lower() == 'status':
+                                    fact_type = 'STATUS_CHANGE'
+                                    status_name = to_string  # Update status name
+                                elif field_name.lower() == 'assignee':
+                                    fact_type = 'ASSIGNEE_CHANGE'
+                                    # Update assignee info if this is an assignee change
+                                    # This is simplified - in a real system you might 
+                                    # need to look up the user info by username
+                                    if to_string:
+                                        assignee_display = to_string
+                                
+                                # Create a history record for this change
+                                history_record = {
+                                    'historyId': f"{history_id}-{field_name}",
+                                    'historyDate': history_date,
+                                    'factType': fact_type,
+                                    'issueId': issue_id,
+                                    'issueKey': issue_key,
+                                    'typeName': issue_type,
+                                    'statusName': status_name,
+                                    'assigneeUserName': assignee_username,
+                                    'assigneeDisplayName': assignee_display,
+                                    'reporterUserName': reporter_username,
+                                    'reporterDisplayName': reporter_display,
+                                    'allocationCode': allocation_code,
+                                    'projectKey': project_key,
+                                    'projectName': project_name,
+                                    'parentKey': parent_key,
+                                    'authorUserName': author_username,
+                                    'authorDisplayName': author_display,
+                                    # Additional fields specific to this change
+                                    'fieldName': field_name,
+                                    'fromValue': from_string,
+                                    'toValue': to_string
+                                }
+                                history_records.append(history_record)
+                    
+                # Update counts for pagination
+                total_processed += len(issues_batch)
+                if len(issues_batch) < current_batch_size:
+                    # We got fewer results than requested, so there are no more results
+                    break
+                
+                # Move to the next page
+                start_at += len(issues_batch)
+            
+            logger.info(f"Processed {total_processed} issues, extracted {len(history_records)} history records")
+            return history_records
+            
+        except ConnectionError as e:
+            logger.error(f"Connection error retrieving issue history: {str(e)}")
+            raise
+        except Exception as e:
+            logger.error(f"Error retrieving issue history: {str(e)}")
+            raise
+
 # Usage example
 if __name__ == "__main__":
     try:
