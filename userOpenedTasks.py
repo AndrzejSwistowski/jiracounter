@@ -176,8 +176,11 @@ if __name__ == "__main__":
             for task in user_tasks:
                 status_info = f"({task['status']})"
 
-                if task.get('daysInCurrentStatus') is not None and task.get('daysInCurrentStatus') != 0:
-                    status_info = f"({task['status']} - {task['daysInCurrentStatus']} days)"
+                if task.get('daysInCurrentStatus') is not None:
+                    if task.get('daysInCurrentStatus') == 0:
+                        status_info = f"({task['status']} - since today)"
+                    else:
+                        status_info = f"({task['status']} - {task['daysInCurrentStatus']} days)"
                 
                 print(f"  {task['key']}: [{task['type']}] {task['summary']} {status_info} - "
                       f"Created {task['creationDate']} ({task['daysSinceCreation']} days ago): [{task['backetKey']}] ")
@@ -191,10 +194,13 @@ if __name__ == "__main__":
             print(f"Found {len(user_specific_tasks)} open tasks for {user_name}:")
             for task in user_specific_tasks:
                 status_info = f"({task['status']})"
-                if task.get('daysInCurrentStatus') is not None and task.get('daysInCurrentStatus') != 0:
-                    status_info = f"({task['status']} - {task['daysInCurrentStatus']} days)"
+                if task.get('daysInCurrentStatus') is not None:
+                    if task.get('daysInCurrentStatus') == 0:
+                        status_info = f"({task['status']} - since today)"
+                    else:
+                        status_info = f"({task['status']} - {task['daysInCurrentStatus']} days)"
                 
-                print(f"  {task['key']}: TypZadania:[{task['type']}|'Nieznany'] {task['summary']} {status_info} - "
+                print(f"  {task['key']}: TaskType:[{task['type']}|'Unknown'] {task['summary']} {status_info} - "
                       f"Created {task['creationDate']} ({task['daysSinceCreation']} days ago) [{task['backetKey']}]")
                 
     except Exception as e:
