@@ -6,8 +6,12 @@ including connection, project listing, and issue searching.
 """
 import sys
 import os
+import codecs
 from jiraservice import JiraService
 import config
+
+# Force UTF-8 output encoding
+sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer)
 
 def test_connection():
     """Test basic connection to Jira."""
