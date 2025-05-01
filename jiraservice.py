@@ -116,6 +116,11 @@ class JiraService:
                     if hasattr(component, 'description') and component.description:
                         comp_info["description"] = component.description
                     components.append(comp_info)
+            
+            # Extract labels
+            labels = []
+            if hasattr(issue.fields, 'labels') and issue.fields.labels:
+                labels = issue.fields.labels
                     
             return {
                 "key": issue.key,
@@ -131,7 +136,8 @@ class JiraService:
                 "backet": backet_value,
                 "backetKey": backet_key,
                 "statusChangeDate": status_change_date,
-                "components": components
+                "components": components,
+                "labels": labels
             }
         except ConnectionError as e:
             logger.error(f"Connection error retrieving issue {issue_key}: {str(e)}")
@@ -197,6 +203,11 @@ class JiraService:
                                 comp_info["description"] = component.description
                             components.append(comp_info)
                     
+                    # Extract labels information
+                    labels = []
+                    if hasattr(issue.fields, 'labels') and issue.fields.labels:
+                        labels = issue.fields.labels
+                    
                     all_issues.append({
                         "key": issue.key,
                         "summary": issue.fields.summary,
@@ -204,7 +215,8 @@ class JiraService:
                         "type": issue.fields.issuetype.name if hasattr(issue.fields, 'issuetype') and issue.fields.issuetype else "Unknown",
                         "assignee": issue.fields.assignee.displayName if issue.fields.assignee else None,
                         "statusChangeDate": status_change_date,
-                        "components": components
+                        "components": components,
+                        "labels": labels
                     })
                 
                 # If we got fewer results than requested, there are no more results

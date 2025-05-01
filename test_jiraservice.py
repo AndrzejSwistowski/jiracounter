@@ -59,10 +59,16 @@ def test_search_issues(service):
                 if 'components' in issue and issue['components']:
                     component_names = [comp['name'] for comp in issue['components']]
                     print(f"  Components: {', '.join(component_names)}")
+                # Display labels for each issue in search results
+                if 'labels' in issue and issue['labels']:
+                    print(f"  Labels: {', '.join(issue['labels'])}")
+            return issues  # Return the issues found
         else:
             print("No matching issues found.")
+            return []  # Return an empty list if no issues found
     except Exception as e:
         print(f"❌ Issue search failed: {str(e)}")
+        return []  # Return an empty list on error
 
 def test_get_issue(service):
     """Test retrieving a specific issue."""
@@ -97,6 +103,12 @@ def test_get_issue(service):
                 print(comp_info)
         else:
             print("  Components: None")
+            
+        # Display labels information
+        if 'labels' in issue_details and issue_details['labels']:
+            print(f"  Labels: {', '.join(issue_details['labels'])}")
+        else:
+            print("  Labels: None")
     except Exception as e:
         print(f"❌ Issue retrieval failed: {str(e)}")
 
@@ -106,7 +118,7 @@ def test_get_issue_changelog(service):
     
     try:
         # Search for any issue to use as a test
-        issues = service.search_issues("key='BAI-589'")
+        issues = service.search_issues("key='BZPB-343'")
         if not issues:
             print("❌ No issues found to test changelog retrieval")
             return
@@ -121,15 +133,13 @@ def test_get_issue_changelog(service):
             print(f"  Found {len(changelog)} changelog entries")
             
             # Display a few recent changelog entries
-            for entry in changelog[:3]:  # Show first 3 entries
+            for entry in changelog:  # Show first 3 entries
                 print(f"  - History ID: {entry['id']} | Changed by {entry['author']} on {entry['created_date']}")
                 
                 # Show the changes in this entry
-                for change in entry['changes'][:2]:  # Show first 2 changes per entry
+                for change in entry['changes']:  # Show first 2 changes per entry
                     print(f"    • {change['field']}: {change['from']} → {change['to']}")
                     
-                if len(entry['changes']) > 2:
-                    print(f"    • ... and {len(entry['changes']) - 2} more changes")
         else:
             print("  No changelog entries found for this issue")
     except Exception as e:
