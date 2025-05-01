@@ -30,6 +30,7 @@ ENV/
 # Cached data
 data/*.cache
 data/*.json
+*.txt
 
 # Jupyter Notebook
 .ipynb_checkpoints
