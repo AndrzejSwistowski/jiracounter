@@ -13,6 +13,7 @@ JiraLicznik is a Python application designed to interact with Jira API to retrie
 ### 2. Issue Retrieval
 - Retrieve complete issue details by issue key
 - Support custom fields, particularly 'rodzaj pracy' field
+- Support custom field 'data zmiany statusu' for tracking status change dates
 - Extract and format date information for reporting
 - Calculate time-based metrics such as days since creation
 

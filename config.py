@@ -14,7 +14,8 @@ JIRA_API_TOKEN = os.environ.get('JIRA_API_TOKEN', '')  # Use API token instead o
 
 # Jira custom field mappings
 JIRA_CUSTOM_FIELDS = {
-    'RODZAJ_PRACY': 'customfield_10138'
+    'RODZAJ_PRACY': 'customfield_10138',
+    'DATA_ZMIANY_STATUSU': 'customfield_10070'  # Correct field ID found in Jira instance
 }
 
 # Application behavior

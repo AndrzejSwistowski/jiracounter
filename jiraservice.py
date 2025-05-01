@@ -89,6 +89,18 @@ class JiraService:
             if rodzaj_pracy_field:
                 issue.fields.rodzaj_pracy = getattr(issue.fields, rodzaj_pracy_field, None)
             
+            # Get data zmiany statusu field value if available
+            data_zmiany_statusu_field = self.field_ids.get('data_zmiany_statusu')
+            status_change_date = None
+            if data_zmiany_statusu_field:
+                status_change_date_raw = getattr(issue.fields, data_zmiany_statusu_field, None)
+                if status_change_date_raw:
+                    # Parse date if available
+                    try:
+                        status_change_date = dateutil.parser.parse(status_change_date_raw).strftime("%Y-%m-%d")
+                    except (ValueError, TypeError):
+                        logger.debug(f"Could not parse 'data zmiany statusu' date: {status_change_date_raw}")
+            
             created_date = issue.fields.created
             backet_value, backet_key = self._extract_backet_info(issue)
             
@@ -105,6 +117,7 @@ class JiraService:
                 "reporter": issue.fields.reporter.displayName if issue.fields.reporter else None,
                 "backet": backet_value,
                 "backetKey": backet_key,
+                "statusChangeDate": status_change_date,
             }
         except ConnectionError as e:
             logger.error(f"Connection error retrieving issue {issue_key}: {str(e)}")
@@ -146,12 +159,24 @@ class JiraService:
                     
                 # Process and add the current page results
                 for issue in issues_page:
+                    # Get data zmiany statusu field value if available
+                    status_change_date = None
+                    data_zmiany_statusu_field = self.field_ids.get('data_zmiany_statusu')
+                    if data_zmiany_statusu_field:
+                        status_change_date_raw = getattr(issue.fields, data_zmiany_statusu_field, None)
+                        if status_change_date_raw:
+                            try:
+                                status_change_date = dateutil.parser.parse(status_change_date_raw).strftime("%Y-%m-%d")
+                            except (ValueError, TypeError):
+                                logger.debug(f"Could not parse 'data zmiany statusu' date: {status_change_date_raw}")
+                    
                     all_issues.append({
                         "key": issue.key,
                         "summary": issue.fields.summary,
                         "status": issue.fields.status.name,
                         "type": issue.fields.issuetype.name if hasattr(issue.fields, 'issuetype') and issue.fields.issuetype else "Unknown",
                         "assignee": issue.fields.assignee.displayName if issue.fields.assignee else None,
+                        "statusChangeDate": status_change_date,
                     })
                 
                 # If we got fewer results than requested, there are no more results
@@ -216,6 +241,16 @@ class JiraService:
             # Fallback to the ID from config if available
             self.field_ids['rodzaj_pracy'] = config.JIRA_CUSTOM_FIELDS.get('RODZAJ_PRACY')
             logger.debug(f"Using fallback ID for 'rodzaj pracy' field: {self.field_ids['rodzaj_pracy']}")
+            
+        # Look up and cache the "data zmiany statusu" field ID
+        data_zmiany_statusu_id = self.get_field_id_by_name("data zmiany statusu")
+        if data_zmiany_statusu_id:
+            self.field_ids['data_zmiany_statusu'] = data_zmiany_statusu_id
+            logger.debug(f"Found 'data zmiany statusu' field with ID: {data_zmiany_statusu_id}")
+        else:
+            # Fallback to the ID from config if available
+            self.field_ids['data_zmiany_statusu'] = config.JIRA_CUSTOM_FIELDS.get('DATA_ZMIANY_STATUSU')
+            logger.debug(f"Using fallback ID for 'data zmiany statusu' field: {self.field_ids['data_zmiany_statusu']}")
     
     def _extract_backet_info(self, issue) -> tuple:
         """Extract backet value and key from the rodzaj_pracy field.
