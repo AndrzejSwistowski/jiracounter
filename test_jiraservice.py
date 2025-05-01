@@ -48,7 +48,7 @@ def test_search_issues(service):
     jql = "updated >= -7d ORDER BY updated DESC"
     
     try:
-        issues = service.search_issues(jql, max_results=5)
+        issues = service.search_issues(jql)
         print(f"✅ Search successful, found {len(issues)} recent issues")
         
         if issues:
@@ -67,7 +67,7 @@ def test_get_issue(service):
     # Try to get an issue from previous search results if available
     try:
         # Search for any issue to use as a test
-        issues = service.search_issues("updated >= -30d", max_results=1)
+        issues = service.search_issues("updated >= -30d")
         if not issues:
             print("❌ No issues found to test issue retrieval")
             return
