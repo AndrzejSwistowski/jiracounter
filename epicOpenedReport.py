@@ -119,7 +119,7 @@ if __name__ == "__main__":
         for (project_key, project_name), project_epics in all_epics.items():
             print(f"\nProject: {project_name} ({project_key})")
             for epic in project_epics:
-                status_info = f"({epic['status']})"
+                status_info = f"{epic['status']}"
                 if epic.get('daysInCurrentStatus') is not None:
                     status_info += f" - {epic['daysInCurrentStatus']} days in current status"
                 print(f"  {epic['idIssue']}: {epic['summary']} ({status_info}) - Created: {epic['creationDate']} ({epic['daysSinceCreation']} days ago) - Reporter: {epic['Reporter']} - Assignee: {epic['Assignee']}")
