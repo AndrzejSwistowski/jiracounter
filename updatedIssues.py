@@ -79,7 +79,8 @@ class UpdatedIssuesReport:
                         "daysSinceCreation": issue_details["daysSinceCreation"],
                         "reporter": issue_details["reporter"],
                         "assignee": issue_details["assignee"],
-                        "projectKey": issue_key.split("-")[0]  # Extract project key from issue key
+                        "projectKey": issue_key.split("-")[0],  # Extract project key from issue key
+                        "backetKey": issue_details.get("backetKey", "Undefined")  # Add backetKey information
                     }
                     
                     issues_with_details.append(issue_info)
@@ -177,7 +178,7 @@ if __name__ == "__main__":
             
             for issue in sorted_issues:
                 print(f"  {issue['key']}: [{issue['type']}] {issue['summary']} ({issue['status']}) - "
-                      f"Updated: {issue['updatedDate']} - Created: {issue['creationDate']} ({issue['daysSinceCreation']} days ago)")
+                      f"Updated: {issue['updatedDate']} - Created: {issue['creationDate']} ({issue['daysSinceCreation']} days ago) [{issue['backetKey']}]")
                 
         # If a specific project is requested via command line
         if len(sys.argv) > 3:
@@ -191,7 +192,7 @@ if __name__ == "__main__":
             
             for issue in sorted_issues:
                 print(f"  {issue['key']}: [{issue['type']}] {issue['summary']} ({issue['status']}) - "
-                      f"Updated: {issue['updatedDate']} - Created: {issue['creationDate']} ({issue['daysSinceCreation']} days ago)")
+                      f"Updated: {issue['updatedDate']} - Created: {issue['creationDate']} ({issue['daysSinceCreation']} days ago) [{issue['backetKey']}]")
                 
     except Exception as e:
         print(f"Error: {str(e)}")
