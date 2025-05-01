@@ -97,7 +97,7 @@ class JiraService:
                 if status_change_date_raw:
                     # Parse date if available
                     try:
-                        status_change_date = dateutil.parser.parse(status_change_date_raw).strftime("%Y-%m-%d")
+                        status_change_date = dateutil.parser.parse(status_change_date_raw).strftime("%Y-%m-%d %H:%M:%S")
                     except (ValueError, TypeError):
                         logger.debug(f"Could not parse 'data zmiany statusu' date: {status_change_date_raw}")
             
@@ -166,7 +166,7 @@ class JiraService:
                         status_change_date_raw = getattr(issue.fields, data_zmiany_statusu_field, None)
                         if status_change_date_raw:
                             try:
-                                status_change_date = dateutil.parser.parse(status_change_date_raw).strftime("%Y-%m-%d")
+                                status_change_date = dateutil.parser.parse(status_change_date_raw).strftime("%Y-%m-%d %H:%M:%S")
                             except (ValueError, TypeError):
                                 logger.debug(f"Could not parse 'data zmiany statusu' date: {status_change_date_raw}")
                     
