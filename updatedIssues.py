@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 import dateutil.parser
 from jiraservice import JiraService
 import config
-from utils import calculate_days_since_date
+from utils import calculate_days_since_date, validate_and_format_dates
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, "INFO"))
@@ -34,22 +34,8 @@ class UpdatedIssuesReport:
             List of dictionaries containing issue information
         """
         try:
-            # Validate and format dates
-            try:
-                # Parse dates and ensure they're in the correct format
-                start_date_obj = dateutil.parser.parse(start_date)
-                end_date_obj = dateutil.parser.parse(end_date)
-                
-                # Format for JQL (inclusive of the start date, exclusive of the end date)
-                formatted_start = start_date_obj.strftime("%Y-%m-%d")
-                
-                # Add one day to end_date to make the query inclusive of the end date
-                end_date_obj = end_date_obj + timedelta(days=1)
-                formatted_end = end_date_obj.strftime("%Y-%m-%d")
-                
-            except ValueError as e:
-                logger.error(f"Invalid date format: {str(e)}")
-                raise ValueError(f"Invalid date format. Use YYYY-MM-DD format: {str(e)}")
+            # Validate and format dates using utility function
+            formatted_start, formatted_end = validate_and_format_dates(start_date, end_date)
             
             # Build JQL query
             project_clause = f'project = "{project_key}" AND ' if project_key else ''
