@@ -1,8 +1,8 @@
-# JiraLicznik Design Document
+# JiraCounter Design Document
 
 ## Architecture Overview
 
-JiraLicznik follows a service-oriented architecture with clear separation of concerns. The application is organized into the following layers:
+JiraCounter follows a service-oriented architecture with clear separation of concerns. The application is organized into the following layers:
 
 ### 1. Core Service Layer
 - `JiraService`: Central component for Jira API interaction

@@ -1,5 +1,5 @@
 """
-Jira Service module for JiraLicznik application.
+Jira Service module for JiraCounter application.
 
 This module provides functionality to connect to the JIRA server and interact with the Jira API.
 It uses the JIRA API token for authentication, with credentials retrieved from the config module.

@@ -1,6 +1,6 @@
-# Coding Principles for JiraLicznik
+# Coding Principles for JiraCounter
 
-This document outlines the coding principles and standards to be followed by all contributors to the JiraLicznik project.
+This document outlines the coding principles and standards to be followed by all contributors to the JiraCounter project.
 
 ## Code Organization
 

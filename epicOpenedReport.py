@@ -1,5 +1,5 @@
 """
-Epic Opened Report module for JiraLicznik application.
+Epic Opened Report module for JiraCounter application.
 
 This module contains functionality to retrieve information about open epics
 from Jira projects. It can report on epics that are not in Done, Canceled,

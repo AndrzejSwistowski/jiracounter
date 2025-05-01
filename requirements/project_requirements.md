@@ -1,7 +1,7 @@
-# JiraLicznik Project Requirements
+# JiraCounter Project Requirements
 
 ## Overview
-JiraLicznik is a Python application designed to interact with Jira API to retrieve and process issue information for reporting and tracking purposes.
+JiraCounter is a Python application designed to interact with Jira API to retrieve and process issue information for reporting and tracking purposes.
 
 ## Functional Requirements
 
