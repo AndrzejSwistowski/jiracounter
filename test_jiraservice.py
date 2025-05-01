@@ -20,10 +20,10 @@ def test_connection():
     
     try:
         jira = service.connect()
-        print(f"✅ Successfully connected to {config.JIRA_BASE_URL}")
+        print(f"[SUCCESS] Successfully connected to {config.JIRA_BASE_URL}")
         return service
     except Exception as e:
-        print(f"❌ Connection failed: {str(e)}")
+        print(f"[ERROR] Connection failed: {str(e)}")
         sys.exit(1)
 
 def test_projects(service):
@@ -33,7 +33,7 @@ def test_projects(service):
     
     try:
         projects = jira.projects()
-        print(f"✅ Found {len(projects)} projects")
+        print(f"[SUCCESS] Found {len(projects)} projects")
         
         if projects:
             print("\nSample projects:")
@@ -42,7 +42,7 @@ def test_projects(service):
         else:
             print("No projects found. Check your permissions.")
     except Exception as e:
-        print(f"❌ Project listing failed: {str(e)}")
+        print(f"[ERROR] Project listing failed: {str(e)}")
 
 def test_search_issues(service):
     """Test searching for issues."""
@@ -53,7 +53,7 @@ def test_search_issues(service):
     
     try:
         issues = service.search_issues(jql)
-        print(f"✅ Search successful, found {len(issues)} recent issues")
+        print(f"[SUCCESS] Search successful, found {len(issues)} recent issues")
         
         if issues:
             print("\nSample issues:")
@@ -71,7 +71,7 @@ def test_search_issues(service):
             print("No matching issues found.")
             return []  # Return an empty list if no issues found
     except Exception as e:
-        print(f"❌ Issue search failed: {str(e)}")
+        print(f"[ERROR] Issue search failed: {str(e)}")
         return []  # Return an empty list on error
 
 def test_get_issue(service):
@@ -83,14 +83,14 @@ def test_get_issue(service):
         # Search for any issue to use as a test
         issues = service.search_issues("updated >= -3d")
         if not issues:
-            print("❌ No issues found to test issue retrieval")
+            print("[ERROR] No issues found to test issue retrieval")
             return
             
         test_issue_key = issues[0]["key"]
         print(f"Using issue {test_issue_key} for testing...")
         
         issue_details = service.get_issue(test_issue_key)
-        print(f"✅ Successfully retrieved issue: {test_issue_key}")
+        print(f"[SUCCESS] Successfully retrieved issue: {test_issue_key}")
         print(f"  Summary: {issue_details['summary']}")
         print(f"  Status: {issue_details['status']}")
         print(f"  Assignee: {issue_details['assignee']}")
@@ -101,7 +101,7 @@ def test_get_issue(service):
         if 'components' in issue_details and issue_details['components']:
             print(f"  Components ({len(issue_details['components'])}):")
             for component in issue_details['components']:
-                comp_info = f"    • {component['name']} (ID: {component['id']})"
+                comp_info = f"    - {component['name']} (ID: {component['id']})"
                 if 'description' in component and component['description']:
                     comp_info += f" - {component['description']}"
                 print(comp_info)
@@ -114,7 +114,7 @@ def test_get_issue(service):
         else:
             print("  Labels: None")
     except Exception as e:
-        print(f"❌ Issue retrieval failed: {str(e)}")
+        print(f"[ERROR] Issue retrieval failed: {str(e)}")
 
 def test_get_issue_changelog(service):
     """Test retrieving changelog for a specific issue."""
@@ -124,14 +124,14 @@ def test_get_issue_changelog(service):
         # Search for any issue to use as a test
         issues = service.search_issues("key='BZPB-343'")
         if not issues:
-            print("❌ No issues found to test changelog retrieval")
+            print("[ERROR] No issues found to test changelog retrieval")
             return
             
         test_issue_key = issues[0]["key"]
         print(f"Using issue {test_issue_key} for changelog testing...")
         
         changelog = service.get_issue_changelog(test_issue_key)
-        print(f"✅ Successfully retrieved changelog for issue: {test_issue_key}")
+        print(f"[SUCCESS] Successfully retrieved changelog for issue: {test_issue_key}")
         
         if changelog:
             print(f"  Found {len(changelog)} changelog entries")
@@ -142,17 +142,17 @@ def test_get_issue_changelog(service):
                 
                 # Show the changes in this entry
                 for change in entry['changes']:  # Show first 2 changes per entry
-                    print(f"    • {change['field']}: {change['from']} → {change['to']}")
+                    print(f"    - {change['field']}: {change['from']} → {change['to']}")
                     
         else:
             print("  No changelog entries found for this issue")
     except Exception as e:
-        print(f"❌ Changelog retrieval failed: {str(e)}")
+        print(f"[ERROR] Changelog retrieval failed: {str(e)}")
 
 def check_api_token():
     """Check if API token is set."""
     if not config.JIRA_API_TOKEN:
-        print("\n⚠️  WARNING: JIRA_API_TOKEN is not set")
+        print("\n[WARNING] JIRA_API_TOKEN is not set")
         print("To set it in the environment, run:")
         if os.name == 'nt':  # Windows
             print("set JIRA_API_TOKEN=your_token_here")
