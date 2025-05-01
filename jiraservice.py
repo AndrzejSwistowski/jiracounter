@@ -48,6 +48,26 @@ class JiraService:
             logger.error(f"Error finding field ID for '{field_name}': {str(e)}")
             return None
         
+    def _cache_field_ids(self) -> None:
+        """Look up and cache custom field IDs for use in Jira operations.
+        
+        This function populates self.field_ids with the IDs of custom fields
+        that are needed for various operations.
+        """
+        if not self.connected or not self.jira_client:
+            logger.warning("Cannot cache field IDs without a connection. Connect first.")
+            return
+            
+        # Look up and cache the "rodzaj pracy" field ID
+        rodzaj_pracy_id = self.get_field_id_by_name("rodzaj pracy")
+        if rodzaj_pracy_id:
+            self.field_ids['rodzaj_pracy'] = rodzaj_pracy_id
+            logger.debug(f"Found 'rodzaj pracy' field with ID: {rodzaj_pracy_id}")
+        else:
+            # Fallback to the ID from config if available
+            self.field_ids['rodzaj_pracy'] = config.JIRA_CUSTOM_FIELDS.get('RODZAJ_PRACY')
+            logger.debug(f"Using fallback ID for 'rodzaj pracy' field: {self.field_ids['rodzaj_pracy']}")
+        
     def connect(self) -> JIRA:
         """Connect to the Jira server using credentials from config.
         
@@ -75,15 +95,8 @@ class JiraService:
             self.connected = True
             logger.info("Successfully connected to Jira")
             
-            # Look up and cache field IDs after successful connection
-            rodzaj_pracy_id = self.get_field_id_by_name("rodzaj pracy")
-            if rodzaj_pracy_id:
-                self.field_ids['rodzaj_pracy'] = rodzaj_pracy_id
-                logger.info(f"Found 'rodzaj pracy' field with ID: {rodzaj_pracy_id}")
-            else:
-                # Fallback to the ID from config if available
-                self.field_ids['rodzaj_pracy'] = config.JIRA_CUSTOM_FIELDS.get('RODZAJ_PRACY')
-                logger.info(f"Using fallback ID for 'rodzaj pracy' field: {self.field_ids['rodzaj_pracy']}")
+            # Cache custom field IDs after successful connection
+            self._cache_field_ids()
                 
             return self.jira_client
             
