@@ -22,52 +22,7 @@ class JiraService:
         self.jira_client = None
         self.connected = False
         self.field_ids = {}
-        
-    def get_field_id_by_name(self, field_name: str) -> Optional[str]:
-        """Find the custom field ID by its visible name.
-        
-        Args:
-            field_name: The visible name of the field in Jira
-            
-        Returns:
-            Optional[str]: The field ID if found, None otherwise
-        """
-        if not self.connected or not self.jira_client:
-            self.connect()
-            
-        try:
-            fields = self.jira_client.fields()
-            for field in fields:
-                if field['name'].lower() == field_name.lower():
-                    logger.debug(f"Found field '{field_name}' with ID: {field['id']}")
-                    return field['id']
-            
-            logger.warning(f"Field '{field_name}' not found in Jira")
-            return None
-        except Exception as e:
-            logger.error(f"Error finding field ID for '{field_name}': {str(e)}")
-            return None
-        
-    def _cache_field_ids(self) -> None:
-        """Look up and cache custom field IDs for use in Jira operations.
-        
-        This function populates self.field_ids with the IDs of custom fields
-        that are needed for various operations.
-        """
-        if not self.connected or not self.jira_client:
-            logger.warning("Cannot cache field IDs without a connection. Connect first.")
-            return
-            
-        # Look up and cache the "rodzaj pracy" field ID
-        rodzaj_pracy_id = self.get_field_id_by_name("rodzaj pracy")
-        if rodzaj_pracy_id:
-            self.field_ids['rodzaj_pracy'] = rodzaj_pracy_id
-            logger.debug(f"Found 'rodzaj pracy' field with ID: {rodzaj_pracy_id}")
-        else:
-            # Fallback to the ID from config if available
-            self.field_ids['rodzaj_pracy'] = config.JIRA_CUSTOM_FIELDS.get('RODZAJ_PRACY')
-            logger.debug(f"Using fallback ID for 'rodzaj pracy' field: {self.field_ids['rodzaj_pracy']}")
-        
+    
     def connect(self) -> JIRA:
         """Connect to the Jira server using credentials from config.
         
@@ -113,7 +68,15 @@ class JiraService:
             
         Returns:
             Dict containing the issue details
+            
+        Raises:
+            ConnectionError: If there's an issue connecting to Jira
+            Exception: For other errors retrieving the issue
         """
+        if not issue_key:
+            logger.error("Issue key cannot be empty")
+            raise ValueError("Issue key is required")
+            
         jira = self.connect()
         try:
             issue = jira.issue(issue_key)
@@ -124,31 +87,7 @@ class JiraService:
                 issue.fields.rodzaj_pracy = getattr(issue.fields, rodzaj_pracy_field, None)
             
             created_date = issue.fields.created
-            
-            # Handle the rodzaj_pracy field which could be a CustomFieldOption object
-            backet_value = None
-            backet_key = None
-            
-            if hasattr(issue.fields, 'rodzaj_pracy') and issue.fields.rodzaj_pracy:
-                # Check if rodzaj_pracy is a CustomFieldOption object
-                if hasattr(issue.fields.rodzaj_pracy, 'value'):
-                    # It's a CustomFieldOption object
-                    backet_value = issue.fields.rodzaj_pracy.value
-                    # Try to extract the key if it has the format "Something [KEY]"
-                    if '[' in backet_value and ']' in backet_value:
-                        try:
-                            backet_key = backet_value.split('[')[1].split(']')[0]
-                        except (IndexError, AttributeError):
-                            pass
-                elif isinstance(issue.fields.rodzaj_pracy, str):
-                    # It's a string
-                    backet_value = issue.fields.rodzaj_pracy
-                    # Try to extract the key if it has the format "Something [KEY]"
-                    if '[' in backet_value and ']' in backet_value:
-                        try:
-                            backet_key = backet_value.split('[')[1].split(']')[0]
-                        except (IndexError, AttributeError):
-                            pass
+            backet_value, backet_key = self._extract_backet_info(issue)
             
             return {
                 "key": issue.key,
@@ -164,6 +103,9 @@ class JiraService:
                 "backet": backet_value,
                 "backetKey": backet_key,
             }
+        except ConnectionError as e:
+            logger.error(f"Connection error retrieving issue {issue_key}: {str(e)}")
+            raise
         except Exception as e:
             logger.error(f"Error retrieving issue {issue_key}: {str(e)}")
             raise
@@ -226,6 +168,79 @@ class JiraService:
         except Exception as e:
             logger.error(f"Error searching issues with query {jql_query}: {str(e)}")
             raise
+            
+    def get_field_id_by_name(self, field_name: str) -> Optional[str]:
+        """Find the custom field ID by its visible name.
+        
+        Args:
+            field_name: The visible name of the field in Jira
+            
+        Returns:
+            Optional[str]: The field ID if found, None otherwise
+        """
+        if not self.connected or not self.jira_client:
+            self.connect()
+            
+        try:
+            fields = self.jira_client.fields()
+            for field in fields:
+                if field['name'].lower() == field_name.lower():
+                    logger.debug(f"Found field '{field_name}' with ID: {field['id']}")
+                    return field['id']
+            
+            logger.warning(f"Field '{field_name}' not found in Jira")
+            return None
+        except Exception as e:
+            logger.error(f"Error finding field ID for '{field_name}': {str(e)}")
+            return None
+    
+    def _cache_field_ids(self) -> None:
+        """Look up and cache custom field IDs for use in Jira operations.
+        
+        This function populates self.field_ids with the IDs of custom fields
+        that are needed for various operations.
+        """
+        if not self.connected or not self.jira_client:
+            logger.warning("Cannot cache field IDs without a connection. Connect first.")
+            return
+            
+        # Look up and cache the "rodzaj pracy" field ID
+        rodzaj_pracy_id = self.get_field_id_by_name("rodzaj pracy")
+        if rodzaj_pracy_id:
+            self.field_ids['rodzaj_pracy'] = rodzaj_pracy_id
+            logger.debug(f"Found 'rodzaj pracy' field with ID: {rodzaj_pracy_id}")
+        else:
+            # Fallback to the ID from config if available
+            self.field_ids['rodzaj_pracy'] = config.JIRA_CUSTOM_FIELDS.get('RODZAJ_PRACY')
+            logger.debug(f"Using fallback ID for 'rodzaj pracy' field: {self.field_ids['rodzaj_pracy']}")
+    
+    def _extract_backet_info(self, issue) -> tuple:
+        """Extract backet value and key from the rodzaj_pracy field.
+        
+        Args:
+            issue: Jira issue object
+            
+        Returns:
+            tuple: (backet_value, backet_key)
+        """
+        backet_value = None
+        backet_key = None
+        
+        if hasattr(issue.fields, 'rodzaj_pracy') and issue.fields.rodzaj_pracy:
+            # Check if rodzaj_pracy is a CustomFieldOption object
+            if hasattr(issue.fields.rodzaj_pracy, 'value'):
+                backet_value = issue.fields.rodzaj_pracy.value
+            elif isinstance(issue.fields.rodzaj_pracy, str):
+                backet_value = issue.fields.rodzaj_pracy
+                
+            # Try to extract the key if it has the format "Something [KEY]"
+            if backet_value and '[' in backet_value and ']' in backet_value:
+                try:
+                    backet_key = backet_value.split('[')[1].split(']')[0]
+                except (IndexError, AttributeError):
+                    logger.debug(f"Could not extract backet key from value: {backet_value}")
+        
+        return backet_value, backet_key
 
 # Usage example
 if __name__ == "__main__":
