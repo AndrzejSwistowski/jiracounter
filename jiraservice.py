@@ -63,6 +63,70 @@ class JiraService:
             self.connected = False
             raise ConnectionError(f"Could not connect to Jira: {str(e)}")
     
+    def _extract_issue_data(self, issue) -> Dict[str, Any]:
+        """Extract common issue data into a standardized dictionary.
+        
+        Args:
+            issue: Jira issue object
+            
+        Returns:
+            Dict containing the standardized issue details
+        """
+        # Set rodzaj_pracy field if available
+        rodzaj_pracy_field = self.field_ids.get('rodzaj_pracy')
+        if rodzaj_pracy_field:
+            issue.fields.rodzaj_pracy = getattr(issue.fields, rodzaj_pracy_field, None)
+        
+        # Extract backet information
+        backet_value, backet_key = self._extract_backet_info(issue)
+        
+        # Extract status change date if available
+        status_change_date = None
+        data_zmiany_statusu_field = self.field_ids.get('data_zmiany_statusu')
+        if data_zmiany_statusu_field:
+            status_change_date_raw = getattr(issue.fields, data_zmiany_statusu_field, None)
+            if status_change_date_raw:
+                try:
+                    status_change_date = dateutil.parser.parse(status_change_date_raw).strftime("%Y-%m-%d %H:%M:%S")
+                except (ValueError, TypeError):
+                    logger.debug(f"Could not parse 'data zmiany statusu' date: {status_change_date_raw}")
+        
+        # Extract component information
+        components = []
+        if hasattr(issue.fields, 'components') and issue.fields.components:
+            for component in issue.fields.components:
+                comp_info = {
+                    "id": component.id,
+                    "name": component.name
+                }
+                # Add description if available
+                if hasattr(component, 'description') and component.description:
+                    comp_info["description"] = component.description
+                components.append(comp_info)
+        
+        # Extract labels
+        labels = []
+        if hasattr(issue.fields, 'labels') and issue.fields.labels:
+            labels = issue.fields.labels
+            
+        # Extract basic issue data
+        issue_data = {
+            "id": issue.id,
+            "key": issue.key,
+            "summary": issue.fields.summary,
+            "status": issue.fields.status.name,
+            "type": issue.fields.issuetype.name if hasattr(issue.fields, 'issuetype') and issue.fields.issuetype else "Unknown",
+            "assignee": issue.fields.assignee.displayName if issue.fields.assignee else None,
+            "statusChangeDate": status_change_date,
+            "components": components,
+            "labels": labels,
+            "reporter": issue.fields.reporter.displayName if hasattr(issue.fields, 'reporter') and issue.fields.reporter else None,
+            "backet": backet_value,
+            "backetKey": backet_key,
+        }
+        
+        return issue_data
+
     def get_issue(self, issue_key: str) -> Dict[str, Any]:
         """Retrieve an issue by its key.
         
@@ -84,61 +148,20 @@ class JiraService:
         try:
             issue = jira.issue(issue_key)
             
-            # Use the dynamically discovered field ID if available
-            rodzaj_pracy_field = self.field_ids.get('rodzaj_pracy')
-            if rodzaj_pracy_field:
-                issue.fields.rodzaj_pracy = getattr(issue.fields, rodzaj_pracy_field, None)
+            # Extract common issue data (including rodzaj_pracy and backet info)
+            issue_data = self._extract_issue_data(issue)
             
-            # Get data zmiany statusu field value if available
-            data_zmiany_statusu_field = self.field_ids.get('data_zmiany_statusu')
-            status_change_date = None
-            if data_zmiany_statusu_field:
-                status_change_date_raw = getattr(issue.fields, data_zmiany_statusu_field, None)
-                if status_change_date_raw:
-                    # Parse date if available
-                    try:
-                        status_change_date = dateutil.parser.parse(status_change_date_raw).strftime("%Y-%m-%d %H:%M:%S")
-                    except (ValueError, TypeError):
-                        logger.debug(f"Could not parse 'data zmiany statusu' date: {status_change_date_raw}")
-            
+            # Add fields specific to get_issue method
             created_date = issue.fields.created
-            backet_value, backet_key = self._extract_backet_info(issue)
             
-            # Extract component information
-            components = []
-            if hasattr(issue.fields, 'components') and issue.fields.components:
-                for component in issue.fields.components:
-                    comp_info = {
-                        "id": component.id,
-                        "name": component.name
-                    }
-                    # Add description if available
-                    if hasattr(component, 'description') and component.description:
-                        comp_info["description"] = component.description
-                    components.append(comp_info)
-            
-            # Extract labels
-            labels = []
-            if hasattr(issue.fields, 'labels') and issue.fields.labels:
-                labels = issue.fields.labels
-                    
-            return {
-                "key": issue.key,
-                "summary": issue.fields.summary,
-                "status": issue.fields.status.name,
-                "type": issue.fields.issuetype.name,
-                "assignee": issue.fields.assignee.displayName if issue.fields.assignee else None,
+            issue_data.update({
                 "created": created_date,
                 "creationDate": dateutil.parser.parse(created_date).strftime("%Y-%m-%d"),
                 "daysSinceCreation": calculate_days_since_date(created_date),
                 "updated": issue.fields.updated,
-                "reporter": issue.fields.reporter.displayName if issue.fields.reporter else None,
-                "backet": backet_value,
-                "backetKey": backet_key,
-                "statusChangeDate": status_change_date,
-                "components": components,
-                "labels": labels
-            }
+            })
+                    
+            return issue_data
         except ConnectionError as e:
             logger.error(f"Connection error retrieving issue {issue_key}: {str(e)}")
             raise
@@ -179,45 +202,9 @@ class JiraService:
                     
                 # Process and add the current page results
                 for issue in issues_page:
-                    # Get data zmiany statusu field value if available
-                    status_change_date = None
-                    data_zmiany_statusu_field = self.field_ids.get('data_zmiany_statusu')
-                    if data_zmiany_statusu_field:
-                        status_change_date_raw = getattr(issue.fields, data_zmiany_statusu_field, None)
-                        if status_change_date_raw:
-                            try:
-                                status_change_date = dateutil.parser.parse(status_change_date_raw).strftime("%Y-%m-%d %H:%M:%S")
-                            except (ValueError, TypeError):
-                                logger.debug(f"Could not parse 'data zmiany statusu' date: {status_change_date_raw}")
-                    
-                    # Extract component information
-                    components = []
-                    if hasattr(issue.fields, 'components') and issue.fields.components:
-                        for component in issue.fields.components:
-                            comp_info = {
-                                "id": component.id,
-                                "name": component.name
-                            }
-                            # Add description if available
-                            if hasattr(component, 'description') and component.description:
-                                comp_info["description"] = component.description
-                            components.append(comp_info)
-                    
-                    # Extract labels information
-                    labels = []
-                    if hasattr(issue.fields, 'labels') and issue.fields.labels:
-                        labels = issue.fields.labels
-                    
-                    all_issues.append({
-                        "key": issue.key,
-                        "summary": issue.fields.summary,
-                        "status": issue.fields.status.name,
-                        "type": issue.fields.issuetype.name if hasattr(issue.fields, 'issuetype') and issue.fields.issuetype else "Unknown",
-                        "assignee": issue.fields.assignee.displayName if issue.fields.assignee else None,
-                        "statusChangeDate": status_change_date,
-                        "components": components,
-                        "labels": labels
-                    })
+                    # Extract standardized issue data 
+                    issue_data = self._extract_issue_data(issue)
+                    all_issues.append(issue_data)
                 
                 # If we got fewer results than requested, there are no more results
                 if len(issues_page) < page_size:
@@ -346,7 +333,6 @@ class JiraService:
                 for history in issue.changelog.histories:
                     author = history.author.displayName if hasattr(history.author, 'displayName') else history.author.name
                     created = history.created
-                    
                     changes = []
                     for item in history.items:
                         changes.append({
