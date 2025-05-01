@@ -61,6 +61,7 @@ class UserOpenedTasks:
                         "daysSinceCreation": issue_details["daysSinceCreation"],
                         "reporter": issue_details["reporter"],
                         "assignee": issue_details["assignee"],
+                        "backetKey": issue_details.get("backetKey", "Undefined"),  # Default to "Nieokreślony" if not found
                     }
                     
                     tasks_with_details.append(task_info)
@@ -172,7 +173,7 @@ if __name__ == "__main__":
             print(f"\nUser: {user_name} - {len(user_tasks)} open tasks:")
             for task in user_tasks:
                 print(f"  {task['key']}: [{task['type']}] {task['summary']} ({task['status']}) - "
-                      f"Created {task['creationDate']} ({task['daysSinceCreation']} days ago)")
+                      f"Created {task['creationDate']} ({task['daysSinceCreation']} days ago): [{task['backetKey']}] ")
                 
         # If command line arguments are provided, use them to get tasks for a specific user
         import sys
@@ -183,7 +184,7 @@ if __name__ == "__main__":
             print(f"Found {len(user_specific_tasks)} open tasks for {user_name}:")
             for task in user_specific_tasks:
                 print(f"  {task['key']}: TypZadania:[{task['type']}|'Nieznany'] {task['summary']} ({task['status']}) - "
-                      f"Created {task['creationDate']} ({task['daysSinceCreation']} days ago)")
+                      f"Created {task['creationDate']} ({task['daysSinceCreation']} days ago) [{task['backetKey']}]")
                 
     except Exception as e:
         print(f"Error: {str(e)}")

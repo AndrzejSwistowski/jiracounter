@@ -91,7 +91,7 @@ class EpicOpenedReport:
                 try:
                     epics = self.get_epics_for_project(project_key)
                     if epics:  # Only include projects that have open epics
-                        all_epics[f"{project_name}({project_key})"] = epics
+                        all_epics[(project_key, project_name)] = epics
                 except Exception as e:
                     logger.warning(f"Error retrieving epics for project {project_key}: {str(e)}. Skipping.")
                     
@@ -110,8 +110,8 @@ if __name__ == "__main__":
         
         jira = report.jira_service.connect()
         all_epics = report.get_epics_for_all_projects()
-        for project_key, project_epics in all_epics.items():
-            print(f"\nProject: {project_key} ")
+        for (project_key, project_name), project_epics in all_epics.items():
+            print(f"\nProject: {project_name} ({project_key})")
             for epic in project_epics:
                 print(f"  {epic['idIssue']}: {epic['summary']} ({epic['status']}) - Created: {epic['creationDate']} ({epic['daysSinceCreation']} days ago) - Reporter: {epic['Reporter']} - Assignee: {epic['Assignee']}")
     except Exception as e:
