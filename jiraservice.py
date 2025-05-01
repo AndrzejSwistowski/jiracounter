@@ -317,6 +317,7 @@ class JiraService:
                         })
                     
                     changelog_entries.append({
+                        'id': history.id,  # Adding history ID to identify each change
                         'author': author,
                         'created': created,
                         'created_date': dateutil.parser.parse(created).strftime("%Y-%m-%d %H:%M:%S"),
@@ -339,6 +340,7 @@ if __name__ == "__main__":
         jira = service.connect()
 
         issue = service.get_issue("PFBP-139")
+        change_log = service.get_issue_changelog("PFBP-139")
         days_in_status = calculate_days_since_date(issue.get('statusChangeDate')) if issue.get('statusChangeDate') else "N/A"
         print(f"Issue: {issue['key']} - {issue['summary']} {issue['backetKey']} ({issue['status']} - {days_in_status} days in status) - Created: {issue['creationDate']} ({issue['daysSinceCreation']} days ago) - Reporter: {issue['reporter']} - Assignee: {issue['assignee']}")   
         print(f"Connected to Jira as {config.JIRA_USERNAME}")
