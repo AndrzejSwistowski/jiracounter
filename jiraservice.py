@@ -1,6 +1,9 @@
-#function that connects to the JIRA server and returns a JIRA object
-# using the JIRA API token for authentication.
-# credentials are retrieved from the config module.
+"""
+Jira Service module for JiraLicznik application.
+
+This module provides functionality to connect to the JIRA server and interact with the Jira API.
+It uses the JIRA API token for authentication, with credentials retrieved from the config module.
+"""
 
 import logging
 from typing import Optional, Dict, List, Any

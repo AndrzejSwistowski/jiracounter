@@ -1,12 +1,17 @@
-#class returs list 
-# and Type = Epic AND status NOT IN (Done, Canceled, Closed, Completed )
-# has metods get all projects and get returns epics of requested project
-# epic information contains:
-#     # - idIssue
-#     # - summary
-#     # - status
-			# - creationDate 
-#     # - numers of days from creation to now
+"""
+Epic Opened Report module for JiraLicznik application.
+
+This module contains functionality to retrieve information about open epics
+from Jira projects. It can report on epics that are not in Done, Canceled,
+Closed, or Completed status. The epic information includes:
+- Issue ID
+- Summary
+- Status
+- Creation date
+- Number of days from creation to now
+- Reporter
+- Assignee
+"""
 
 import logging
 from typing import List, Dict, Any
