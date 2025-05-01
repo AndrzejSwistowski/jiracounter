@@ -104,6 +104,19 @@ class JiraService:
             created_date = issue.fields.created
             backet_value, backet_key = self._extract_backet_info(issue)
             
+            # Extract component information
+            components = []
+            if hasattr(issue.fields, 'components') and issue.fields.components:
+                for component in issue.fields.components:
+                    comp_info = {
+                        "id": component.id,
+                        "name": component.name
+                    }
+                    # Add description if available
+                    if hasattr(component, 'description') and component.description:
+                        comp_info["description"] = component.description
+                    components.append(comp_info)
+                    
             return {
                 "key": issue.key,
                 "summary": issue.fields.summary,
@@ -118,6 +131,7 @@ class JiraService:
                 "backet": backet_value,
                 "backetKey": backet_key,
                 "statusChangeDate": status_change_date,
+                "components": components
             }
         except ConnectionError as e:
             logger.error(f"Connection error retrieving issue {issue_key}: {str(e)}")
@@ -170,6 +184,19 @@ class JiraService:
                             except (ValueError, TypeError):
                                 logger.debug(f"Could not parse 'data zmiany statusu' date: {status_change_date_raw}")
                     
+                    # Extract component information
+                    components = []
+                    if hasattr(issue.fields, 'components') and issue.fields.components:
+                        for component in issue.fields.components:
+                            comp_info = {
+                                "id": component.id,
+                                "name": component.name
+                            }
+                            # Add description if available
+                            if hasattr(component, 'description') and component.description:
+                                comp_info["description"] = component.description
+                            components.append(comp_info)
+                    
                     all_issues.append({
                         "key": issue.key,
                         "summary": issue.fields.summary,
@@ -177,6 +204,7 @@ class JiraService:
                         "type": issue.fields.issuetype.name if hasattr(issue.fields, 'issuetype') and issue.fields.issuetype else "Unknown",
                         "assignee": issue.fields.assignee.displayName if issue.fields.assignee else None,
                         "statusChangeDate": status_change_date,
+                        "components": components
                     })
                 
                 # If we got fewer results than requested, there are no more results

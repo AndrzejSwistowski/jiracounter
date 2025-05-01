@@ -53,8 +53,12 @@ def test_search_issues(service):
         
         if issues:
             print("\nSample issues:")
-            for issue in issues:
+            for issue in issues[:30]:  # Show first 5 issues
                 print(f"- {issue['key']}: {issue['summary']} ({issue['status']})")
+                # Display components for each issue in search results
+                if 'components' in issue and issue['components']:
+                    component_names = [comp['name'] for comp in issue['components']]
+                    print(f"  Components: {', '.join(component_names)}")
         else:
             print("No matching issues found.")
     except Exception as e:
@@ -82,6 +86,17 @@ def test_get_issue(service):
         print(f"  Assignee: {issue_details['assignee']}")
         print(f"  Created: {issue_details['created']}")
         print(f"  Updated: {issue_details['updated']}")
+        
+        # Display component information
+        if 'components' in issue_details and issue_details['components']:
+            print(f"  Components ({len(issue_details['components'])}):")
+            for component in issue_details['components']:
+                comp_info = f"    • {component['name']} (ID: {component['id']})"
+                if 'description' in component and component['description']:
+                    comp_info += f" - {component['description']}"
+                print(comp_info)
+        else:
+            print("  Components: None")
     except Exception as e:
         print(f"❌ Issue retrieval failed: {str(e)}")
 
