@@ -61,6 +61,7 @@ class EpicOpenedReport:
                         "daysSinceCreation": issue_details["daysSinceCreation"],
                         "Reporter": issue_details["reporter"],
                         "Assignee": issue_details["assignee"],
+                        "statusChangeDate": issue_details.get("statusChangeDate", None),
                     }
                     
                     epics_with_details.append(epic_info)
@@ -118,6 +119,9 @@ if __name__ == "__main__":
         for (project_key, project_name), project_epics in all_epics.items():
             print(f"\nProject: {project_name} ({project_key})")
             for epic in project_epics:
-                print(f"  {epic['idIssue']}: {epic['summary']} ({epic['status']}) - Created: {epic['creationDate']} ({epic['daysSinceCreation']} days ago) - Reporter: {epic['Reporter']} - Assignee: {epic['Assignee']}")
+                status_info = f"({epic['status']})"
+                if epic.get('daysInCurrentStatus') is not None:
+                    status_info += f" - {epic['daysInCurrentStatus']} days in current status"
+                print(f"  {epic['idIssue']}: {epic['summary']} ({status_info}) - Created: {epic['creationDate']} ({epic['daysSinceCreation']} days ago) - Reporter: {epic['Reporter']} - Assignee: {epic['Assignee']}")
     except Exception as e:
         print(f"Error: {str(e)}")
