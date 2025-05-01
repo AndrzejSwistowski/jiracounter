@@ -56,6 +56,8 @@ The `JiraService` class acts as a facade, providing a simplified interface to th
 ### UserOpenedTasks
 - Finds tasks opened by specific users
 - Filters by date ranges and statuses
+- Calculates and displays days spent in current status based on statusDateChanged field
+- Provides time-based analysis of issue progression
 
 ### Configuration Management
 - Secure credential handling

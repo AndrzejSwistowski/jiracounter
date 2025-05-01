@@ -20,7 +20,17 @@ def calculate_days_since_date(date_str: str) -> int:
     """
     try:
         parsed_date = dateutil.parser.parse(date_str)
-        days_since = (datetime.now().astimezone() - parsed_date).days
+        # Make sure both datetimes are either offset-aware or offset-naive
+        now = datetime.now()
+        if parsed_date.tzinfo is not None:
+            # If parsed_date has timezone info, make sure now has it too
+            now = now.astimezone()
+        else:
+            # If parsed_date has no timezone, remove it from now if present
+            parsed_date = parsed_date.replace(tzinfo=None)
+            now = now.replace(tzinfo=None)
+            
+        days_since = (now - parsed_date).days
         return days_since
     except (ValueError, TypeError) as e:
         logger.warning(f"Error parsing date {date_str}: {str(e)}")
