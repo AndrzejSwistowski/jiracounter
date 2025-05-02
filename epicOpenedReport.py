@@ -62,6 +62,7 @@ class EpicOpenedReport:
                         "Reporter": issue_details["reporter"],
                         "Assignee": issue_details["assignee"],
                         "statusChangeDate": issue_details.get("statusChangeDate", None),
+                        "daysInCurrentStatus": issue_details.get("daysInCurrentStatus", None),
                     }
                     
                     epics_with_details.append(epic_info)
