@@ -10,7 +10,7 @@ from typing import Optional, Dict, List, Any
 from jira import JIRA
 import config
 import dateutil.parser
-from datetime import datetime
+from datetime import datetime, timedelta
 from utils import calculate_days_since_date
 
 # Configure logging
@@ -357,6 +357,216 @@ class JiraService:
             raise
         except Exception as e:
             logger.error(f"Error retrieving changelog for issue {issue_key}: {str(e)}")
+            raise
+
+    def get_issue_history(self, start_date=None, end_date=None, max_issues=None) -> List[Dict[str, Any]]:
+        """Retrieve issue history records for issues updated within a date range.
+        
+        This method retrieves issues updated within the specified date range and
+        extracts their changelog entries for storage in a data warehouse or
+        Elasticsearch index.
+        
+        Args:
+            start_date: The start date for the search (datetime or str)
+            end_date: The end date for the search (datetime or str)
+            max_issues: Maximum number of issues to process
+            
+        Returns:
+            List of history records with standardized format
+        """
+        jira = self.connect()
+        
+        # Format dates for JQL
+        if start_date:
+            if isinstance(start_date, datetime):
+                start_str = start_date.strftime("%Y-%m-%d %H:%M")
+            else:
+                start_str = str(start_date)
+        else:
+            # Default to 7 days ago if no start date provided
+            start_str = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M")
+            
+        if end_date:
+            if isinstance(end_date, datetime):
+                end_str = end_date.strftime("%Y-%m-%d %H:%M")
+            else:
+                end_str = str(end_date)
+        else:
+            end_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+            
+        logger.info(f"Retrieving issues updated between {start_str} and {end_str}")
+        
+        # Build JQL query for issues updated in the date range
+        jql = f'updated >= "{start_str}" AND updated <= "{end_str}" ORDER BY updated ASC'
+        
+        try:
+            # Get all issues updated in the date range
+            all_issues = []
+            
+            # JIRA API typically limits each request to 100 items
+            page_size = 100
+            start_at = 0
+            
+            while True:
+                # Fetch the current page of results
+                logger.debug(f"Fetching issues starting at {start_at} with page size {page_size}")
+                issues_page = jira.search_issues(
+                    jql, 
+                    startAt=start_at, 
+                    maxResults=page_size,
+                    fields="key,issuetype,status,project,summary,assignee,reporter,created,updated"
+                )
+                
+                # If no more results, break the loop
+                if len(issues_page) == 0:
+                    break
+                    
+                # Add the issues to our list
+                all_issues.extend(issues_page)
+                
+                # If we got fewer results than requested, there are no more results
+                if len(issues_page) < page_size:
+                    break
+                    
+                # Update the starting point for the next iteration
+                start_at += len(issues_page)
+                
+                # Check if we've reached the maximum allowed total
+                if max_issues and len(all_issues) >= max_issues:
+                    logger.info(f"Reached maximum issue limit of {max_issues}.")
+                    break
+            
+            logger.info(f"Found {len(all_issues)} issues updated in the specified date range")
+            
+            # Process each issue to extract history records
+            all_history_records = []
+            
+            for issue in all_issues:
+                issue_key = issue.key
+                logger.debug(f"Processing changelog for issue {issue_key}")
+                
+                # Get the issue with expanded changelog
+                issue_with_changelog = jira.issue(issue_key, expand="changelog")
+                
+                # Extract basic issue information
+                issue_type = issue.fields.issuetype.name
+                status_name = issue.fields.status.name
+                project_key = issue.fields.project.key
+                project_name = issue.fields.project.name
+                
+                # Extract assignee and reporter information
+                assignee_username = None
+                assignee_display = None
+                if hasattr(issue.fields, 'assignee') and issue.fields.assignee:
+                    assignee_username = issue.fields.assignee.name if hasattr(issue.fields.assignee, 'name') else issue.fields.assignee.accountId
+                    assignee_display = issue.fields.assignee.displayName if hasattr(issue.fields.assignee, 'displayName') else None
+                
+                reporter_username = None
+                reporter_display = None
+                if hasattr(issue.fields, 'reporter') and issue.fields.reporter:
+                    reporter_username = issue.fields.reporter.name if hasattr(issue.fields.reporter, 'name') else issue.fields.reporter.accountId
+                    reporter_display = issue.fields.reporter.displayName if hasattr(issue.fields.reporter, 'displayName') else None
+                
+                # Extract parent issue key if this is a subtask
+                parent_key = None
+                if hasattr(issue.fields, 'parent'):
+                    parent_key = issue.fields.parent.key
+                
+                # Extract allocation information
+                allocation_code = None
+                if hasattr(issue.fields, 'rodzaj_pracy') and issue.fields.rodzaj_pracy:
+                    backet_value, backet_key = self._extract_backet_info(issue)
+                    allocation_code = backet_key
+                
+                # Process creation record
+                created_date = dateutil.parser.parse(issue.fields.created)
+                
+                # Create a history record for the issue creation
+                creation_record = {
+                    'historyId': int(f"{issue.id}00000"),  # Use a synthetic ID for creation
+                    'historyDate': created_date,
+                    'factType': 0,  # 0 = create
+                    'issueId': issue.id,
+                    'issueKey': issue_key,
+                    'typeName': issue_type,
+                    'statusName': 'Open',  # Assume issues start as Open
+                    'assigneeUserName': assignee_username,
+                    'assigneeDisplayName': assignee_display,
+                    'reporterUserName': reporter_username,
+                    'reporterDisplayName': reporter_display,
+                    'allocationCode': allocation_code,
+                    'projectKey': project_key,
+                    'projectName': project_name,
+                    'parentKey': parent_key,
+                    'authorUserName': reporter_username,
+                    'authorDisplayName': reporter_display,
+                    'changes': []
+                }
+                
+                # Only add creation record if it's within our date range
+                if start_date is None or created_date >= start_date:
+                    all_history_records.append(creation_record)
+                
+                # Process changelog entries
+                if hasattr(issue_with_changelog, 'changelog') and hasattr(issue_with_changelog.changelog, 'histories'):
+                    for history in issue_with_changelog.changelog.histories:
+                        history_date = dateutil.parser.parse(history.created)
+                        
+                        # Skip records outside our date range
+                        if (start_date and history_date < start_date) or (end_date and history_date > end_date):
+                            continue
+                            
+                        # Determine fact type (default to update)
+                        fact_type = 3  # 3 = update
+                        
+                        # Check if this is a status change
+                        changes = []
+                        for item in history.items:
+                            changes.append({
+                                'field': item.field,
+                                'from': item.fromString,
+                                'to': item.toString
+                            })
+                            
+                            if item.field == 'status':
+                                fact_type = 2  # 2 = transition
+                        
+                        # Get author information
+                        author_username = history.author.name if hasattr(history.author, 'name') else history.author.accountId
+                        author_display = history.author.displayName if hasattr(history.author, 'displayName') else None
+                        
+                        # Create a history record
+                        history_record = {
+                            'historyId': int(history.id),
+                            'historyDate': history_date,
+                            'factType': fact_type,
+                            'issueId': issue.id,
+                            'issueKey': issue_key,
+                            'typeName': issue_type,
+                            'statusName': status_name,
+                            'assigneeUserName': assignee_username,
+                            'assigneeDisplayName': assignee_display,
+                            'reporterUserName': reporter_username,
+                            'reporterDisplayName': reporter_display,
+                            'allocationCode': allocation_code,
+                            'projectKey': project_key,
+                            'projectName': project_name,
+                            'parentKey': parent_key,
+                            'authorUserName': author_username,
+                            'authorDisplayName': author_display,
+                            'changes': changes
+                        }
+                        
+                        all_history_records.append(history_record)
+            
+            # Sort by history date
+            all_history_records.sort(key=lambda x: x['historyDate'])
+            
+            logger.info(f"Extracted {len(all_history_records)} history records")
+            return all_history_records
+            
+        except Exception as e:
+            logger.error(f"Error retrieving issue history: {str(e)}")
             raise
 
 # Usage example
