@@ -21,7 +21,7 @@ logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, "INFO"))
 logger = logging.getLogger(__name__)
 
 # Get Elasticsearch settings from environment variables
-# Format for ELASTIC_URL is expected to be: https://hostname:port
+# Format for ELASTIC_URL is expected to be: http://hostname:port/
 ELASTIC_URL = os.environ.get('ELASTIC_URL')
 ELASTIC_APIKEY = os.environ.get('ELASTIC_APIKEY')
 
