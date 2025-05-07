@@ -77,31 +77,45 @@ class JiraElasticsearchPopulator:
     def connect(self):
         """Establishes a connection to Elasticsearch."""
         try:
-            # If full URL is provided, use it directly
+            # Remove trailing slash if present in URL
             if self.url:
-                logger.info(f"Connecting to Elasticsearch with URL: {self.url}")
-                connect_args = {
-                    'hosts': [self.url]
-                }
-            else:
-                # Otherwise build connection from host/port
-                logger.info(f"Connecting to Elasticsearch at {self.host}:{self.port}")
-                connect_args = {
-                    'hosts': [f'{"https" if self.use_ssl else "http"}://{self.host}:{self.port}']
-                }
+                self.url = self.url.rstrip('/')
             
-            # Add API key authentication if provided
-            if self.api_key:
-                connect_args['api_key'] = self.api_key
-                logger.info("Using API key authentication")
+            # First, test the connection using requests library (which we know works)
+            import requests
+            
+            # Build base URL
+            if self.url:
+                base_url = self.url
+            else:
+                base_url = f'{"https" if self.use_ssl else "http"}://{self.host}:{self.port}'
                 
+            # Prepare headers with API key authentication
+            headers = {"Content-Type": "application/json"}
+            if self.api_key:
+                headers["Authorization"] = f"ApiKey {self.api_key}"
+                logger.info("Using API key authentication")
+            
+            # Test the connection by requesting cluster health
+            response = requests.get(f"{base_url}/_cluster/health", headers=headers)
+            
+            if response.status_code != 200:
+                raise ConnectionError(f"Could not connect to Elasticsearch: {response.status_code} - {response.text}")
+                
+            health_data = response.json()
+            logger.info(f"Successfully connected to Elasticsearch cluster: {health_data['cluster_name']} / Status: {health_data['status']}")
+            
+            # Now, create the Elasticsearch client instance with the same connection params
+            connect_args = {'hosts': [base_url]}
+            
+            # Add API key authentication if provided - using headers like in requests
+            if self.api_key:
+                connect_args['headers'] = headers
+            
             self.es = Elasticsearch(**connect_args)
             
-            # Check connection
-            if not self.es.ping():
-                raise ConnectionError("Could not connect to Elasticsearch")
-                
-            logger.info("Successfully connected to Elasticsearch")
+            # We won't check with ping() since we already verified the connection works
+            
             return self.es
         except Exception as e:
             logger.error(f"Error connecting to Elasticsearch: {e}")
@@ -116,18 +130,44 @@ class JiraElasticsearchPopulator:
     def create_indices(self):
         """Creates the necessary indices in Elasticsearch if they don't exist."""
         try:
-            # Check if the changelog index exists
-            if not self.es.indices.exists(index=INDEX_CHANGELOG):
-                # Define the mapping for changelog entries
+            # Use the requests library which we know works with your setup
+            import requests
+            
+            # Build base URL
+            if self.url:
+                base_url = self.url.rstrip('/')
+            else:
+                base_url = f'{"https" if self.use_ssl else "http"}://{self.host}:{self.port}'
+                
+            # Prepare headers with API key authentication
+            headers = {"Content-Type": "application/json"}
+            if self.api_key:
+                headers["Authorization"] = f"ApiKey {self.api_key}"
+            
+            # First, check if the changelog index exists
+            check_response = requests.head(f"{base_url}/{INDEX_CHANGELOG}", headers=headers)
+            
+            if check_response.status_code == 404:
+                logger.info(f"Index {INDEX_CHANGELOG} does not exist, creating it")
+                
+                # Define a better mapping for changelog entries with proper field types for aggregations
                 changelog_mapping = {
                     "mappings": {
                         "properties": {
                             "historyId": {"type": "keyword"},
                             "historyDate": {"type": "date"},
                             "factType": {"type": "integer"},
+                            "issueId": {"type": "keyword"},  # Use keyword instead of text for aggregations
+                            "issueKey": {"type": "keyword"},
+                            "typeName": {"type": "keyword"},
+                            "statusName": {"type": "keyword"},
+                            "projectKey": {"type": "keyword"},
+                            "projectName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                            "authorUserName": {"type": "keyword"},
+                            "authorDisplayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                             "issue": {
                                 "properties": {
-                                    "id": {"type": "keyword"},
+                                    "id": {"type": "keyword"},  # Key fix - ensure issue.id is keyword for aggregations
                                     "key": {"type": "keyword"},
                                     "type": {
                                         "properties": {
@@ -139,6 +179,18 @@ class JiraElasticsearchPopulator:
                                             "name": {"type": "keyword"}
                                         }
                                     }
+                                }
+                            },
+                            "project": {
+                                "properties": {
+                                    "key": {"type": "keyword"},
+                                    "name": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
+                                }
+                            },
+                            "author": {
+                                "properties": {
+                                    "username": {"type": "keyword"},
+                                    "displayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
                                 }
                             },
                             "assignee": {
@@ -159,19 +211,7 @@ class JiraElasticsearchPopulator:
                                     "name": {"type": "keyword"}
                                 }
                             },
-                            "project": {
-                                "properties": {
-                                    "key": {"type": "keyword"},
-                                    "name": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
-                                }
-                            },
                             "parentKey": {"type": "keyword"},
-                            "author": {
-                                "properties": {
-                                    "username": {"type": "keyword"},
-                                    "displayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
-                                }
-                            },
                             "changes": {
                                 "type": "nested",
                                 "properties": {
@@ -188,13 +228,32 @@ class JiraElasticsearchPopulator:
                     }
                 }
                 
-                # Create the index
-                self.es.indices.create(index=INDEX_CHANGELOG, body=changelog_mapping)
-                logger.info(f"Created {INDEX_CHANGELOG} index")
+                # Create the index using requests
+                create_response = requests.put(
+                    f"{base_url}/{INDEX_CHANGELOG}", 
+                    headers=headers,
+                    json=changelog_mapping
+                )
+                
+                if create_response.status_code >= 200 and create_response.status_code < 300:
+                    logger.info(f"Created {INDEX_CHANGELOG} index successfully")
+                else:
+                    error_detail = create_response.text
+                    logger.error(f"Error creating {INDEX_CHANGELOG} index: {create_response.status_code} - {error_detail}")
+                    return False
+            elif check_response.status_code != 200:
+                logger.error(f"Error checking if {INDEX_CHANGELOG} exists: {check_response.status_code}")
+                return False
+            else:
+                logger.info(f"Index {INDEX_CHANGELOG} already exists")
             
             # Check if the settings index exists
-            if not self.es.indices.exists(index=INDEX_SETTINGS):
-                # Define the mapping for settings
+            check_response = requests.head(f"{base_url}/{INDEX_SETTINGS}", headers=headers)
+            
+            if check_response.status_code == 404:
+                logger.info(f"Index {INDEX_SETTINGS} does not exist, creating it")
+                
+                # Define a simpler mapping for settings
                 settings_mapping = {
                     "mappings": {
                         "properties": {
@@ -209,9 +268,24 @@ class JiraElasticsearchPopulator:
                     }
                 }
                 
-                # Create the index
-                self.es.indices.create(index=INDEX_SETTINGS, body=settings_mapping)
-                logger.info(f"Created {INDEX_SETTINGS} index")
+                # Create the index using requests
+                create_response = requests.put(
+                    f"{base_url}/{INDEX_SETTINGS}", 
+                    headers=headers,
+                    json=settings_mapping
+                )
+                
+                if create_response.status_code >= 200 and create_response.status_code < 300:
+                    logger.info(f"Created {INDEX_SETTINGS} index successfully")
+                else:
+                    error_detail = create_response.text
+                    logger.error(f"Error creating {INDEX_SETTINGS} index: {create_response.status_code} - {error_detail}")
+                    return False
+            elif check_response.status_code != 200:
+                logger.error(f"Error checking if {INDEX_SETTINGS} exists: {check_response.status_code}")
+                return False
+            else:
+                logger.info(f"Index {INDEX_SETTINGS} already exists")
                 
             return True
         except Exception as e:
@@ -603,6 +677,67 @@ class JiraElasticsearchPopulator:
         except Exception as e:
             logger.error(f"Error getting database summary: {e}")
             return None
+
+    def update_field_mapping(self):
+        """
+        Updates the field mapping in an existing index to enable fielddata for text fields used in aggregations.
+        This allows aggregations on fields that were previously not configured for it.
+        """
+        try:
+            # Use the requests library which we know works with your setup
+            import requests
+            
+            # Build base URL
+            if self.url:
+                base_url = self.url.rstrip('/')
+            else:
+                base_url = f'{"https" if self.use_ssl else "http"}://{self.host}:{self.port}'
+                
+            # Prepare headers with API key authentication
+            headers = {"Content-Type": "application/json"}
+            if self.api_key:
+                headers["Authorization"] = f"ApiKey {self.api_key}"
+            
+            # Update mapping to enable fielddata on issue.id field and other fields used in aggregations
+            mapping_update = {
+                "properties": {
+                    "issue": {
+                        "properties": {
+                            "id": {
+                                "type": "text",
+                                "fielddata": True
+                            }
+                        }
+                    },
+                    "project": {
+                        "properties": {
+                            "key": {
+                                "type": "text",
+                                "fielddata": True
+                            }
+                        }
+                    }
+                }
+            }
+            
+            # Apply the mapping update
+            update_response = requests.put(
+                f"{base_url}/{INDEX_CHANGELOG}/_mapping",
+                headers=headers,
+                json=mapping_update
+            )
+            
+            if update_response.status_code >= 200 and update_response.status_code < 300:
+                logger.info(f"Successfully updated mapping for {INDEX_CHANGELOG} index")
+                return True
+            else:
+                error_detail = update_response.text
+                logger.error(f"Error updating mapping: {update_response.status_code} - {error_detail}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error updating field mapping: {e}")
+            return False
             
 # Example usage
 if __name__ == "__main__":

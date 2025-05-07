@@ -481,6 +481,14 @@ class JiraService:
                 # Process creation record
                 created_date = dateutil.parser.parse(issue.fields.created)
                 
+                # Ensure both dates are timezone-aware or naive for comparison
+                if start_date and start_date.tzinfo is None and created_date.tzinfo is not None:
+                    # Make start_date timezone-aware by assigning the same timezone as created_date
+                    start_date = start_date.replace(tzinfo=created_date.tzinfo)
+                elif start_date and start_date.tzinfo is not None and created_date.tzinfo is None:
+                    # Make created_date timezone-aware by assigning the same timezone as start_date
+                    created_date = created_date.replace(tzinfo=start_date.tzinfo)
+                
                 # Create a history record for the issue creation
                 creation_record = {
                     'historyId': int(f"{issue.id}00000"),  # Use a synthetic ID for creation
@@ -510,10 +518,35 @@ class JiraService:
                 # Process changelog entries
                 if hasattr(issue_with_changelog, 'changelog') and hasattr(issue_with_changelog.changelog, 'histories'):
                     for history in issue_with_changelog.changelog.histories:
+                        # Make sure dates have consistent timezone info for comparison
                         history_date = dateutil.parser.parse(history.created)
                         
+                        # Default variable initializations
+                        start_date_comp = None
+                        end_date_comp = None
+                        history_date_comp_start = history_date
+                        history_date_comp_end = history_date
+                        
+                        # Handle timezone differences for comparison with start_date
+                        if start_date:
+                            if start_date.tzinfo is None and history_date.tzinfo is not None:
+                                start_date_comp = start_date.replace(tzinfo=history_date.tzinfo)
+                            elif start_date.tzinfo is not None and history_date.tzinfo is None:
+                                history_date_comp_start = history_date.replace(tzinfo=start_date.tzinfo)
+                            else:
+                                start_date_comp = start_date
+                            
+                        # Handle timezone differences for comparison with end_date
+                        if end_date:
+                            if end_date.tzinfo is None and history_date.tzinfo is not None:
+                                end_date_comp = end_date.replace(tzinfo=history_date.tzinfo)
+                            elif end_date.tzinfo is not None and history_date.tzinfo is None:
+                                history_date_comp_end = history_date.replace(tzinfo=end_date.tzinfo)
+                            else:
+                                end_date_comp = end_date
+                        
                         # Skip records outside our date range
-                        if (start_date and history_date < start_date) or (end_date and history_date > end_date):
+                        if (start_date_comp and history_date_comp_start < start_date_comp) or (end_date_comp and history_date_comp_end > end_date_comp):
                             continue
                             
                         # Determine fact type (default to update)
