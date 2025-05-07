@@ -161,6 +161,15 @@ class JiraElasticsearchPopulator:
                             "issueKey": {"type": "keyword"},
                             "typeName": {"type": "keyword"},
                             "statusName": {"type": "keyword"},
+                            "summary": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},  # Added summary field
+                            "labels": {"type": "keyword"},  # Added labels field
+                            "components": {  # Added components field
+                                "type": "nested",
+                                "properties": {
+                                    "id": {"type": "keyword"},
+                                    "name": {"type": "keyword"}
+                                }
+                            },
                             "projectKey": {"type": "keyword"},
                             "projectName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                             "authorUserName": {"type": "keyword"},
@@ -397,6 +406,7 @@ class JiraElasticsearchPopulator:
         doc = {
             "historyId": history_record['historyId'],
             "historyDate": history_record['historyDate'].isoformat(),
+            "@timestamp": history_record['historyDate'].isoformat(),  # Add @timestamp field for Kibana
             "factType": history_record['factType'],
             "issue": {
                 "id": history_record['issueId'],
@@ -417,6 +427,36 @@ class JiraElasticsearchPopulator:
                 "displayName": history_record.get('authorDisplayName')
             }
         }
+        
+        # Add summary field if it exists
+        if history_record.get('summary'):
+            doc["summary"] = history_record['summary']
+            
+        # Add labels if they exist
+        if history_record.get('labels'):
+            doc["labels"] = history_record['labels']
+            
+        # Add components if they exist
+        if history_record.get('components'):
+            doc["components"] = history_record['components']
+            
+        # Add parent_issue if it exists
+        if history_record.get('parent_issue'):
+            doc["parent_issue"] = history_record['parent_issue']
+            
+        # Add epic_issue if it exists
+        if history_record.get('epic_issue'):
+            doc["epic_issue"] = history_record['epic_issue']
+        
+        # Add time-based analytics fields if they exist
+        if history_record.get('workingDaysFromCreation') is not None:
+            doc["workingDaysFromCreation"] = history_record['workingDaysFromCreation']
+            
+        if history_record.get('workingDaysInStatus') is not None:
+            doc["workingDaysInStatus"] = history_record['workingDaysInStatus']
+            
+        if history_record.get('workingDaysFromToDo') is not None:
+            doc["workingDaysFromMove"] = history_record['workingDaysFromToDo']
         
         # Add optional fields if they exist
         if history_record.get('assigneeUserName'):
@@ -618,7 +658,7 @@ class JiraElasticsearchPopulator:
         try:
             # Calculate the date range
             end_date = datetime.now()
-            start_date = end_date - timedelta(days=days)
+            start_date = end_date - timedelta(days=30)
             
             # Build the query
             query = {

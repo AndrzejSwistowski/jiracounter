@@ -1,8 +1,12 @@
-"""Utility functions for the Jira Licznik application."""
+"""Utility functions for various operations in the JiraCounter application.
+
+Contains helper functions for date calculations, string manipulations, and other common tasks.
+"""
 
 import logging
 from datetime import datetime, timedelta
 import dateutil.parser
+import pytz
 from typing import Optional, Tuple
 
 # Configure logging
@@ -18,10 +22,13 @@ def calculate_days_since_date(date_str: str) -> int:
     Returns:
         Integer representing the number of days since the given date
     """
+    if not date_str:
+        return None
+        
     try:
         parsed_date = dateutil.parser.parse(date_str)
         # Make sure both datetimes are either offset-aware or offset-naive
-        now = datetime.now()
+        now = datetime.now(pytz.UTC)
         if parsed_date.tzinfo is not None:
             # If parsed_date has timezone info, make sure now has it too
             now = now.astimezone()
@@ -35,6 +42,149 @@ def calculate_days_since_date(date_str: str) -> int:
     except (ValueError, TypeError) as e:
         logger.warning(f"Error parsing date {date_str}: {str(e)}")
         return 0
+
+def calculate_working_days_between(start_date, end_date=None):
+    """Calculate the number of working days (Monday to Friday) between two dates.
+    
+    Args:
+        start_date: Start date (string or datetime)
+        end_date: End date (string or datetime), defaults to now if None
+        
+    Returns:
+        float: Number of working days between the dates
+    """
+    if not start_date:
+        return None
+        
+    try:
+        # Parse the start date if it's a string
+        if isinstance(start_date, str):
+            from dateutil import parser
+            start_obj = parser.parse(start_date)
+        else:
+            start_obj = start_date
+            
+        # Parse or set the end date
+        if end_date:
+            if isinstance(end_date, str):
+                from dateutil import parser
+                end_obj = parser.parse(end_date)
+            else:
+                end_obj = end_date
+        else:
+            end_obj = datetime.now(pytz.UTC)
+            
+        # Make sure both dates have timezone information
+        if start_obj.tzinfo is None:
+            start_obj = start_obj.replace(tzinfo=pytz.UTC)
+            
+        if end_obj.tzinfo is None:
+            end_obj = end_obj.replace(tzinfo=pytz.UTC)
+            
+        # Ensure start_date is before end_date
+        if start_obj > end_obj:
+            return 0
+            
+        # Calculate working days
+        working_days = 0
+        current_date = start_obj.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_date = end_obj.replace(hour=23, minute=59, second=59, microsecond=999999)
+        
+        # Count full working days
+        while current_date < end_date:
+            # Weekday returns 0 (Monday) through 6 (Sunday)
+            if current_date.weekday() < 5:  # Monday to Friday
+                working_days += 1
+            current_date += timedelta(days=1)
+            
+        # For partial days (if start and end are on the same day)
+        if start_obj.date() == end_obj.date() and start_obj.weekday() < 5:
+            # Calculate fraction of the working day
+            work_hours = 8  # Assuming 8-hour workday from 9am to 5pm
+            start_hour = max(9, min(17, start_obj.hour + start_obj.minute/60))
+            end_hour = max(9, min(17, end_obj.hour + end_obj.minute/60))
+            
+            if start_hour < 17 and end_hour > 9:
+                fraction = (min(17, end_hour) - max(9, start_hour)) / work_hours
+                working_days = max(0, fraction)  # Use the fraction instead of adding a full day
+                
+        # For partial start day
+        elif start_obj.weekday() < 5:
+            # Calculate fraction of remaining work day
+            work_hours = 8  # Assuming 8-hour workday
+            start_hour = start_obj.hour + start_obj.minute/60
+            
+            if start_hour < 17:  # Only count if start is before end of workday
+                fraction = (17 - max(9, start_hour)) / work_hours
+                working_days -= (1 - fraction)  # Subtract unused portion of the day
+                
+        # For partial end day
+        if start_obj.date() != end_obj.date() and end_obj.weekday() < 5:
+            # Calculate fraction of end work day
+            work_hours = 8  # Assuming 8-hour workday
+            end_hour = end_obj.hour + end_obj.minute/60
+            
+            if end_hour > 9:  # Only count if end is after start of workday
+                fraction = (min(17, end_hour) - 9) / work_hours
+                working_days -= (1 - fraction)  # Subtract unused portion of the day
+                
+        return round(working_days, 1)  # Round to 1 decimal place for readability
+    except Exception as e:
+        logger.error(f"Error calculating working days between dates: {e}")
+        return None
+
+def find_status_change_date(issue_history, target_status, start_from=None):
+    """Find the date when an issue moved to a specific status.
+    
+    Args:
+        issue_history: List of changelog entries for the issue
+        target_status: The status to look for
+        start_from: Optional datetime to start searching from
+        
+    Returns:
+        datetime: The date when the issue moved to the status, or None if not found
+    """
+    if not issue_history or not target_status:
+        return None
+        
+    # Sort history by date, newest first
+    sorted_history = sorted(issue_history, key=lambda x: x.get('historyDate', ''), reverse=True)
+    
+    for entry in sorted_history:
+        # Skip entries before start_from date if specified
+        if start_from and entry.get('historyDate') < start_from:
+            continue
+            
+        # Look for status change in each change item
+        for change in entry.get('changes', []):
+            if change.get('field') == 'status' and change.get('to') == target_status:
+                return entry.get('historyDate')
+                
+    return None
+
+def find_first_status_change_date(issue_history):
+    """Find the date when an issue had its first status change.
+    
+    Args:
+        issue_history: List of changelog entries for the issue
+        
+    Returns:
+        datetime: The date of the first status change, or None if no status changes found
+    """
+    if not issue_history:
+        return None
+        
+    # Sort history by date, oldest first (to find first move)
+    sorted_history = sorted(issue_history, key=lambda x: x.get('historyDate', ''))
+    
+    # Find the first status change of any kind
+    for entry in sorted_history:
+        for change in entry.get('changes', []):
+            if change.get('field') == 'status':
+                logger.debug(f"Found first status change: {change.get('from')} -> {change.get('to')}")
+                return entry.get('historyDate')
+                
+    return None
 
 def validate_and_format_dates(start_date: str, end_date: str) -> Tuple[str, str]:
     """Validate and format date strings for use in JQL queries.

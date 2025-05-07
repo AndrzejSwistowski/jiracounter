@@ -108,6 +108,57 @@ class JiraService:
         labels = []
         if hasattr(issue.fields, 'labels') and issue.fields.labels:
             labels = issue.fields.labels
+        
+        # Extract parent issue information
+        parent_issue = None
+        if hasattr(issue.fields, 'parent'):
+            parent_issue = {
+                "id": issue.fields.parent.id,
+                "key": issue.fields.parent.key,
+                "summary": getattr(issue.fields.parent, 'summary', None)
+            }
+        
+        # Extract epic information
+        epic_issue = None
+        epic_link_field = self.field_ids.get('epic_link')
+        if epic_link_field:
+            epic_key = getattr(issue.fields, epic_link_field, None)
+            if epic_key:
+                try:
+                    # Try to get the epic issue
+                    epic = self.jira_client.issue(epic_key)
+                    epic_issue = {
+                        "id": epic.id,
+                        "key": epic.key,
+                        "summary": epic.fields.summary
+                    }
+                except Exception as e:
+                    logger.debug(f"Error retrieving epic issue {epic_key}: {e}")
+        
+        # If no epic found but there is a parent, try to get the parent's epic
+        if not epic_issue and parent_issue:
+            try:
+                # Get parent issue with its epic link
+                parent = self.jira_client.issue(parent_issue["key"])
+                
+                # Check if parent has an epic
+                if epic_link_field and hasattr(parent.fields, epic_link_field):
+                    parent_epic_key = getattr(parent.fields, epic_link_field)
+                    if parent_epic_key:
+                        try:
+                            # Get the parent's epic
+                            parent_epic = self.jira_client.issue(parent_epic_key)
+                            epic_issue = {
+                                "id": parent_epic.id,
+                                "key": parent_epic.key,
+                                "summary": parent_epic.fields.summary,
+                                "inherited": True  # Mark as inherited from parent
+                            }
+                            logger.debug(f"Issue {issue.key} inherited epic {parent_epic_key} from parent {parent_issue['key']}")
+                        except Exception as e:
+                            logger.debug(f"Error retrieving parent's epic {parent_epic_key}: {e}")
+            except Exception as e:
+                logger.debug(f"Error retrieving parent issue to check for epic: {e}")
             
         # Extract basic issue data
         issue_data = {
@@ -123,6 +174,8 @@ class JiraService:
             "reporter": issue.fields.reporter.displayName if hasattr(issue.fields, 'reporter') and issue.fields.reporter else None,
             "backet": backet_value,
             "backetKey": backet_key,
+            "parent_issue": parent_issue,
+            "epic_issue": epic_issue
         }
         
         return issue_data
@@ -278,6 +331,16 @@ class JiraService:
             # Fallback to the ID from config if available
             self.field_ids['data_zmiany_statusu'] = config.JIRA_CUSTOM_FIELDS.get('DATA_ZMIANY_STATUSU')
             logger.debug(f"Using fallback ID for 'data zmiany statusu' field: {self.field_ids['data_zmiany_statusu']}")
+            
+        # Look up and cache the Epic Link field ID
+        epic_link_id = self.get_field_id_by_name("Epic Link")
+        if epic_link_id:
+            self.field_ids['epic_link'] = epic_link_id
+            logger.debug(f"Found 'Epic Link' field with ID: {epic_link_id}")
+        else:
+            # Fallback to the ID from config if available
+            self.field_ids['epic_link'] = config.JIRA_CUSTOM_FIELDS.get('EPIC_LINK')
+            logger.debug(f"Using fallback ID for 'Epic Link' field: {self.field_ids['epic_link']}")
     
     def _extract_backet_info(self, issue) -> tuple:
         """Extract backet value and key from the rodzaj_pracy field.
@@ -448,35 +511,69 @@ class JiraService:
                 # Get the issue with expanded changelog
                 issue_with_changelog = jira.issue(issue_key, expand="changelog")
                 
-                # Extract basic issue information
-                issue_type = issue.fields.issuetype.name
-                status_name = issue.fields.status.name
-                project_key = issue.fields.project.key
-                project_name = issue.fields.project.name
+                # Extract basic issue information using the existing method
+                issue_data = self._extract_issue_data(issue_with_changelog)
                 
-                # Extract assignee and reporter information
-                assignee_username = None
-                assignee_display = None
-                if hasattr(issue.fields, 'assignee') and issue.fields.assignee:
-                    assignee_username = issue.fields.assignee.name if hasattr(issue.fields.assignee, 'name') else issue.fields.assignee.accountId
-                    assignee_display = issue.fields.assignee.displayName if hasattr(issue.fields.assignee, 'displayName') else None
+                # Extract fields we need for the history record
+                issue_type = issue_data['type']
+                status_name = issue_data['status']
+                project_key = issue_data['projectKey'] if 'projectKey' in issue_data else issue.fields.project.key
+                project_name = issue_data['projectName'] if 'projectName' in issue_data else issue.fields.project.name
+                summary = issue_data['summary']
+                labels = issue_data['labels']
+                components = issue_data['components']
+                allocation_code = issue_data.get('backetKey')
+                parent_key = issue_data.get('parentKey')
                 
-                reporter_username = None
-                reporter_display = None
-                if hasattr(issue.fields, 'reporter') and issue.fields.reporter:
-                    reporter_username = issue.fields.reporter.name if hasattr(issue.fields.reporter, 'name') else issue.fields.reporter.accountId
-                    reporter_display = issue.fields.reporter.displayName if hasattr(issue.fields.reporter, 'displayName') else None
+                # Process issue's changelog to extract additional time-based information
+                issue_creation_date = dateutil.parser.parse(issue.fields.created)
+                current_date = datetime.now(issue_creation_date.tzinfo)
                 
-                # Extract parent issue key if this is a subtask
-                parent_key = None
-                if hasattr(issue.fields, 'parent'):
-                    parent_key = issue.fields.parent.key
+                # Import utility functions for working days calculations
+                from utils import calculate_working_days_between, find_status_change_date, find_first_status_change_date
                 
-                # Extract allocation information
-                allocation_code = None
-                if hasattr(issue.fields, 'rodzaj_pracy') and issue.fields.rodzaj_pracy:
-                    backet_value, backet_key = self._extract_backet_info(issue)
-                    allocation_code = backet_key
+                # Calculate working days since creation
+                working_days_from_creation = calculate_working_days_between(issue_creation_date, current_date)
+                
+                # Find when the issue entered its current status
+                status_change_date = None
+                status_change_history = []
+                working_days_in_status = None
+                
+                if hasattr(issue_with_changelog, 'changelog') and hasattr(issue_with_changelog.changelog, 'histories'):
+                    histories = list(issue_with_changelog.changelog.histories)
+                    for history in histories:
+                        for item in history.items:
+                            if item.field == 'status' and item.toString == status_name:
+                                status_change_date = dateutil.parser.parse(history.created)
+                                break
+                        if status_change_date:
+                            break
+                
+                    # If we found a status change date, calculate working days in status
+                    if status_change_date:
+                        working_days_in_status = calculate_working_days_between(status_change_date, current_date)
+                    
+                    # Extract all changelog entries for further analysis
+                    for history in histories:
+                        history_date = dateutil.parser.parse(history.created)
+                        changes = []
+                        for item in history.items:
+                            changes.append({
+                                'field': item.field,
+                                'from': item.fromString,
+                                'to': item.toString
+                            })
+                        status_change_history.append({
+                            'historyDate': history_date,
+                            'changes': changes
+                        })
+                
+                # Find when the issue moved out of To Do (or equivalent starting status)
+                todo_exit_date = find_first_status_change_date(status_change_history)
+                working_days_from_todo = None
+                if todo_exit_date:
+                    working_days_from_todo = calculate_working_days_between(todo_exit_date, current_date)
                 
                 # Process creation record
                 created_date = dateutil.parser.parse(issue.fields.created)
@@ -498,17 +595,25 @@ class JiraService:
                     'issueKey': issue_key,
                     'typeName': issue_type,
                     'statusName': 'Open',  # Assume issues start as Open
-                    'assigneeUserName': assignee_username,
-                    'assigneeDisplayName': assignee_display,
-                    'reporterUserName': reporter_username,
-                    'reporterDisplayName': reporter_display,
+                    'assigneeUserName': issue_data['assignee'],
+                    'assigneeDisplayName': issue_data['assignee'],
+                    'reporterUserName': issue_data['reporter'],
+                    'reporterDisplayName': issue_data['reporter'],
                     'allocationCode': allocation_code,
                     'projectKey': project_key,
                     'projectName': project_name,
                     'parentKey': parent_key,
-                    'authorUserName': reporter_username,
-                    'authorDisplayName': reporter_display,
-                    'changes': []
+                    'authorUserName': issue_data['reporter'],
+                    'authorDisplayName': issue_data['reporter'],
+                    'changes': [],
+                    'summary': summary,
+                    'labels': labels,
+                    'components': components,
+                    'parent_issue': issue_data.get('parent_issue'),
+                    'epic_issue': issue_data.get('epic_issue'),
+                    'workingDaysFromCreation': 0,  # Just created, so 0 days
+                    'workingDaysInStatus': 0,      # Just created, so 0 days in status
+                    'workingDaysFromMove': None    # No status change yet
                 }
                 
                 # Only add creation record if it's within our date range
@@ -568,6 +673,28 @@ class JiraService:
                         author_username = history.author.name if hasattr(history.author, 'name') else history.author.accountId
                         author_display = history.author.displayName if hasattr(history.author, 'displayName') else None
                         
+                        # Calculate time-based metrics as of this history point
+                        working_days_from_creation_at_point = calculate_working_days_between(issue_creation_date, history_date)
+                        
+                        # For each history point, determine how long it had been in the current status
+                        status_in_this_history = status_name  # Default to current status
+                        working_days_in_status_at_point = working_days_in_status
+                        
+                        # Check if this history changes the status
+                        for change in changes:
+                            if change['field'] == 'status':
+                                # If this is a status change, find how long it was in the previous status
+                                previous_status_change = find_status_change_date(status_change_history, change['from'], None)
+                                if previous_status_change:
+                                    working_days_in_status_at_point = calculate_working_days_between(previous_status_change, history_date)
+                                status_in_this_history = change['to']
+                                break
+                                
+                        # Calculate working days from first status change at this history point
+                        working_days_from_move_at_point = None
+                        if todo_exit_date and history_date >= todo_exit_date:
+                            working_days_from_move_at_point = calculate_working_days_between(todo_exit_date, history_date)
+                        
                         # Create a history record
                         history_record = {
                             'historyId': int(history.id),
@@ -576,18 +703,26 @@ class JiraService:
                             'issueId': issue.id,
                             'issueKey': issue_key,
                             'typeName': issue_type,
-                            'statusName': status_name,
-                            'assigneeUserName': assignee_username,
-                            'assigneeDisplayName': assignee_display,
-                            'reporterUserName': reporter_username,
-                            'reporterDisplayName': reporter_display,
+                            'statusName': status_in_this_history,
+                            'summary': summary,  
+                            'labels': labels,    
+                            'components': components,  
+                            'assigneeUserName': issue_data['assignee'],
+                            'assigneeDisplayName': issue_data['assignee'],
+                            'reporterUserName': issue_data['reporter'],
+                            'reporterDisplayName': issue_data['reporter'],
                             'allocationCode': allocation_code,
                             'projectKey': project_key,
                             'projectName': project_name,
                             'parentKey': parent_key,
                             'authorUserName': author_username,
                             'authorDisplayName': author_display,
-                            'changes': changes
+                            'changes': changes,
+                            'parent_issue': issue_data.get('parent_issue'),
+                            'epic_issue': issue_data.get('epic_issue'),
+                            'workingDaysFromCreation': working_days_from_creation_at_point,
+                            'workingDaysInStatus': working_days_in_status_at_point,
+                            'workingDaysFromMove': working_days_from_move_at_point
                         }
                         
                         all_history_records.append(history_record)
