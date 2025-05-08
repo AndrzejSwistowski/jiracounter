@@ -83,7 +83,7 @@ class JiraService:
             issue.fields.rodzaj_pracy = getattr(issue.fields, rodzaj_pracy_field, None)
         
         # Extract backet information
-        backet_value, backet_key = self._extract_backet_info(issue)
+        allocation_value, allocation_code = self._extract_backet_info(issue)
         
         # Extract status change date if available
         status_change_date = None
@@ -174,8 +174,8 @@ class JiraService:
             "components": components,
             "labels": labels,
             "reporter": issue.fields.reporter.displayName if hasattr(issue.fields, 'reporter') and issue.fields.reporter else None,
-            "backet": backet_value,
-            "backetKey": backet_key,
+            "backet": allocation_value,
+            "allocation_code": allocation_code,
             "parent_issue": parent_issue,
             "epic_issue": epic_issue,
             "updated": issue.fields.updated,
@@ -435,7 +435,7 @@ class JiraService:
                 summary = issue_data['summary']
                 labels = issue_data['labels']
                 components = issue_data['components']
-                allocation_code = issue_data.get('backetKey')
+                allocation_code = issue_data.get('allocation_code')
                 parent_key = issue_data.get('parentKey')
                 
                 # Process issue's changelog to extract additional time-based information
@@ -691,26 +691,26 @@ class JiraService:
             issue: Jira issue object
             
         Returns:
-            tuple: (backet_value, backet_key)
+            tuple: (allocation_value, allocation_code)
         """
-        backet_value = None
-        backet_key = None
+        allocation_value = None
+        allocation_code = None
         
         if hasattr(issue.fields, 'rodzaj_pracy') and issue.fields.rodzaj_pracy:
             # Check if rodzaj_pracy is a CustomFieldOption object
             if hasattr(issue.fields.rodzaj_pracy, 'value'):
-                backet_value = issue.fields.rodzaj_pracy.value
+                allocation_value = issue.fields.rodzaj_pracy.value
             elif isinstance(issue.fields.rodzaj_pracy, str):
-                backet_value = issue.fields.rodzaj_pracy
+                allocation_value = issue.fields.rodzaj_pracy
                 
             # Try to extract the key if it has the format "Something [KEY]"
-            if backet_value and '[' in backet_value and ']' in backet_value:
+            if allocation_value and '[' in allocation_value and ']' in allocation_value:
                 try:
-                    backet_key = backet_value.split('[')[1].split(']')[0]
+                    allocation_code = allocation_value.split('[')[1].split(']')[0]
                 except (IndexError, AttributeError):
-                    logger.debug(f"Could not extract backet key from value: {backet_value}")
+                    logger.debug(f"Could not extract backet key from value: {allocation_value}")
         
-        return backet_value, backet_key
+        return allocation_value, allocation_code
 
 # Usage example
 if __name__ == "__main__":
@@ -721,7 +721,7 @@ if __name__ == "__main__":
         issue = service.get_issue("PFBP-139")
         change_log = service.get_issue_changelog("PFBP-139")
         days_in_status = calculate_days_since_date(issue.get('status_change_date')) if issue.get('status_change_date') else "N/A"
-        print(f"Issue: {issue['key']} - {issue['summary']} {issue['backetKey']} ({issue['status']} - {days_in_status} days in status) - Created: {issue['created_date']} ({issue['days_since_creation']} days ago) - Reporter: {issue['reporter']} - Assignee: {issue['assignee']}")   
+        print(f"Issue: {issue['key']} - {issue['summary']} {issue['allocation_code']} ({issue['status']} - {days_in_status} days in status) - Created: {issue['created_date']} ({issue['days_since_creation']} days ago) - Reporter: {issue['reporter']} - Assignee: {issue['assignee']}")   
         print(f"Connected to Jira as {config.JIRA_USERNAME}")
         
         # Example: Get a sample project

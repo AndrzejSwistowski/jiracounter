@@ -67,7 +67,7 @@ class UpdatedIssuesReport:
                         "reporter": issue_details["reporter"],
                         "assignee": issue_details["assignee"],
                         "projectKey": issue_key.split("-")[0],  # Extract project key from issue key
-                        "backetKey": issue_details.get("backetKey", "Undefined"),  # Add backetKey information
+                        "allocation_code": issue_details.get("allocation_code", "Undefined"),  # Add allocation_code information
                         "status_change_date": issue_details.get("status_change_date", None),
                         "daysInCurrentStatus": calculate_days_since_date(issue_details.get("status_change_date", None)) if issue_details.get("status_change_date") else None
                     }
@@ -174,7 +174,7 @@ if __name__ == "__main__":
                         status_info = f"({issue['status']} - {issue['daysInCurrentStatus']} days)"
                 
                 print(f"  {issue['key']}: [{issue['type']}] {issue['summary']} {status_info} - "
-                      f"Updated: {issue['updatedDate']} - Created: {issue['created_date']} ({issue['days_since_creation']} days ago) [{issue['backetKey']}]")
+                      f"Updated: {issue['updatedDate']} - Created: {issue['created_date']} ({issue['days_since_creation']} days ago) [{issue['allocation_code']}]")
                 
         # If a specific project is requested via command line
         if len(sys.argv) > 3:
@@ -195,7 +195,7 @@ if __name__ == "__main__":
                         status_info = f"({issue['status']} - {issue['daysInCurrentStatus']} days)"
                 
                 print(f"  {issue['key']}: [{issue['type']}] {issue['summary']} {status_info} - "
-                      f"Updated: {issue['updatedDate']} - Created: {issue['created_date']} ({issue['days_since_creation']} days ago) [{issue['backetKey']}]")
+                      f"Updated: {issue['updatedDate']} - Created: {issue['created_date']} ({issue['days_since_creation']} days ago) [{issue['allocation_code']}]")
                 
     except Exception as e:
         print(f"Error: {str(e)}")
