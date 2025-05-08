@@ -4,7 +4,7 @@ Contains helper functions for date calculations, string manipulations, and other
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import dateutil.parser
 import pytz
 from typing import Optional, Tuple
@@ -12,6 +12,34 @@ from typing import Optional, Tuple
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Define Warsaw timezone offset (UTC+1 in winter, UTC+2 in summer)
+# For simplicity, we'll use a fixed offset (UTC+2 for summer time)
+WARSAW_OFFSET = 2  # hours
+DEFAULT_TIMEZONE = timezone(timedelta(hours=WARSAW_OFFSET))
+
+def parse_date_with_timezone(date_str: str) -> datetime:
+    """
+    Parse a date string and ensure it has timezone information.
+    
+    Args:
+        date_str: The date string to parse
+        
+    Returns:
+        datetime: A timezone-aware datetime object
+    """
+    try:
+        parsed_date = dateutil.parser.parse(date_str)
+        # If the parsed date doesn't have timezone info, add the default timezone
+        if parsed_date.tzinfo is None:
+            parsed_date = parsed_date.replace(tzinfo=DEFAULT_TIMEZONE)
+        return parsed_date
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error parsing date '{date_str}': {e}")
+        # Return current time with timezone if parsing fails
+        return datetime.now(DEFAULT_TIMEZONE)
 
 def calculate_days_since_date(date_str: str) -> int:
     """Calculate the number of days between a given date and the current date.

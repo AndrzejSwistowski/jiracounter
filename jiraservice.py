@@ -341,34 +341,6 @@ class JiraService:
             self.field_ids['epic_link'] = config.JIRA_CUSTOM_FIELDS.get('EPIC_LINK')
             logger.debug(f"Using fallback ID for 'Epic Link' field: {self.field_ids['epic_link']}")
     
-    def _extract_backet_info(self, issue) -> tuple:
-        """Extract backet value and key from the rodzaj_pracy field.
-        
-        Args:
-            issue: Jira issue object
-            
-        Returns:
-            tuple: (backet_value, backet_key)
-        """
-        backet_value = None
-        backet_key = None
-        
-        if hasattr(issue.fields, 'rodzaj_pracy') and issue.fields.rodzaj_pracy:
-            # Check if rodzaj_pracy is a CustomFieldOption object
-            if hasattr(issue.fields.rodzaj_pracy, 'value'):
-                backet_value = issue.fields.rodzaj_pracy.value
-            elif isinstance(issue.fields.rodzaj_pracy, str):
-                backet_value = issue.fields.rodzaj_pracy
-                
-            # Try to extract the key if it has the format "Something [KEY]"
-            if backet_value and '[' in backet_value and ']' in backet_value:
-                try:
-                    backet_key = backet_value.split('[')[1].split(']')[0]
-                except (IndexError, AttributeError):
-                    logger.debug(f"Could not extract backet key from value: {backet_value}")
-        
-        return backet_value, backet_key
-
     def get_issue_changelog(self, issue_key: str) -> List[Dict[str, Any]]:
         """Retrieve the changelog for a specific issue.
         
@@ -623,11 +595,12 @@ class JiraService:
                 if hasattr(issue_with_changelog, 'changelog') and hasattr(issue_with_changelog.changelog, 'histories'):
                     for history in issue_with_changelog.changelog.histories:
                         # Parse date with consistent timezone handling
-                        history_date = self._parse_date_with_timezone(history.created)
+                      #  history_date = self._parse_date_with_timezone(history.created)
                         
                         # Skip records outside our date range
-                        if (start_date and history_date < start_date) or (end_date and history_date > end_date):
-                            continue
+                       # if (start_date and history_date < start_date) or (end_date and history_date > end_date):
+                        #    logger.info(f"Skipping history record outside date range: {history_date, start_date, end_date, history}")
+                         #   continue
                             
                         # Determine fact type (default to update)
                         fact_type = 3  # 3 = update
@@ -732,6 +705,34 @@ class JiraService:
             logger.error(f"Error parsing date '{date_str}': {e}")
             # Return current time with timezone if parsing fails
             return datetime.now(DEFAULT_TIMEZONE)
+    
+    def _extract_backet_info(self, issue) -> tuple:
+        """Extract backet value and key from the rodzaj_pracy field.
+        
+        Args:
+            issue: Jira issue object
+            
+        Returns:
+            tuple: (backet_value, backet_key)
+        """
+        backet_value = None
+        backet_key = None
+        
+        if hasattr(issue.fields, 'rodzaj_pracy') and issue.fields.rodzaj_pracy:
+            # Check if rodzaj_pracy is a CustomFieldOption object
+            if hasattr(issue.fields.rodzaj_pracy, 'value'):
+                backet_value = issue.fields.rodzaj_pracy.value
+            elif isinstance(issue.fields.rodzaj_pracy, str):
+                backet_value = issue.fields.rodzaj_pracy
+                
+            # Try to extract the key if it has the format "Something [KEY]"
+            if backet_value and '[' in backet_value and ']' in backet_value:
+                try:
+                    backet_key = backet_value.split('[')[1].split(']')[0]
+                except (IndexError, AttributeError):
+                    logger.debug(f"Could not extract backet key from value: {backet_value}")
+        
+        return backet_value, backet_key
 
 # Usage example
 if __name__ == "__main__":
