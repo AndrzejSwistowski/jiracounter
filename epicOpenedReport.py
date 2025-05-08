@@ -58,7 +58,7 @@ class EpicOpenedReport:
                         "summary": issue_details["summary"],
                         "status": issue_details["status"],
                         "created_date": issue_details["created_date"],
-                        "daysSinceCreation": issue_details["daysSinceCreation"],
+                        "days_since_creation": issue_details["days_since_creation"],
                         "Reporter": issue_details["reporter"],
                         "Assignee": issue_details["assignee"],
                         "status_change_date": issue_details.get("status_change_date", None),
@@ -123,6 +123,6 @@ if __name__ == "__main__":
                 status_info = f"{epic['status']}"
                 if epic.get('daysInCurrentStatus') is not None:
                     status_info += f" - {epic['daysInCurrentStatus']} days in current status"
-                print(f"  {epic['idIssue']}: {epic['summary']} ({status_info}) - Created: {epic['created_date']} ({epic['daysSinceCreation']} days ago) - Reporter: {epic['Reporter']} - Assignee: {epic['Assignee']}")
+                print(f"  {epic['idIssue']}: {epic['summary']} ({status_info}) - Created: {epic['created_date']} ({epic['days_since_creation']} days ago) - Reporter: {epic['Reporter']} - Assignee: {epic['Assignee']}")
     except Exception as e:
         print(f"Error: {str(e)}")

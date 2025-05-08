@@ -181,7 +181,7 @@ class JiraService:
             "updated": issue.fields.updated,
             "created": created_date,
             "created_date": dateutil.parser.parse(created_date).strftime("%Y-%m-%d %H:%M:%S"),
-            "daysSinceCreation": calculate_days_since_date(created_date),
+            "days_since_creation": calculate_days_since_date(created_date),
          
         }
         
@@ -746,7 +746,7 @@ if __name__ == "__main__":
         issue = service.get_issue("PFBP-139")
         change_log = service.get_issue_changelog("PFBP-139")
         days_in_status = calculate_days_since_date(issue.get('status_change_date')) if issue.get('status_change_date') else "N/A"
-        print(f"Issue: {issue['key']} - {issue['summary']} {issue['backetKey']} ({issue['status']} - {days_in_status} days in status) - Created: {issue['created_date']} ({issue['daysSinceCreation']} days ago) - Reporter: {issue['reporter']} - Assignee: {issue['assignee']}")   
+        print(f"Issue: {issue['key']} - {issue['summary']} {issue['backetKey']} ({issue['status']} - {days_in_status} days in status) - Created: {issue['created_date']} ({issue['days_since_creation']} days ago) - Reporter: {issue['reporter']} - Assignee: {issue['assignee']}")   
         print(f"Connected to Jira as {config.JIRA_USERNAME}")
         
         # Example: Get a sample project

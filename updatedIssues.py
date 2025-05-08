@@ -63,7 +63,7 @@ class UpdatedIssuesReport:
                         "created_date": issue_details["created_date"],
                         "updated": issue_details["updated"],
                         "updatedDate": dateutil.parser.parse(issue_details["updated"]).strftime("%Y-%m-%d"),
-                        "daysSinceCreation": issue_details["daysSinceCreation"],
+                        "days_since_creation": issue_details["days_since_creation"],
                         "reporter": issue_details["reporter"],
                         "assignee": issue_details["assignee"],
                         "projectKey": issue_key.split("-")[0],  # Extract project key from issue key
@@ -174,7 +174,7 @@ if __name__ == "__main__":
                         status_info = f"({issue['status']} - {issue['daysInCurrentStatus']} days)"
                 
                 print(f"  {issue['key']}: [{issue['type']}] {issue['summary']} {status_info} - "
-                      f"Updated: {issue['updatedDate']} - Created: {issue['created_date']} ({issue['daysSinceCreation']} days ago) [{issue['backetKey']}]")
+                      f"Updated: {issue['updatedDate']} - Created: {issue['created_date']} ({issue['days_since_creation']} days ago) [{issue['backetKey']}]")
                 
         # If a specific project is requested via command line
         if len(sys.argv) > 3:
@@ -195,7 +195,7 @@ if __name__ == "__main__":
                         status_info = f"({issue['status']} - {issue['daysInCurrentStatus']} days)"
                 
                 print(f"  {issue['key']}: [{issue['type']}] {issue['summary']} {status_info} - "
-                      f"Updated: {issue['updatedDate']} - Created: {issue['created_date']} ({issue['daysSinceCreation']} days ago) [{issue['backetKey']}]")
+                      f"Updated: {issue['updatedDate']} - Created: {issue['created_date']} ({issue['days_since_creation']} days ago) [{issue['backetKey']}]")
                 
     except Exception as e:
         print(f"Error: {str(e)}")
