@@ -394,19 +394,18 @@ class JiraElasticsearchPopulator:
     
     def format_changelog_entry(self, history_record):
         """
-        Formats a history record for insertion into Elasticsearch.
+        Format a history record for insertion into Elasticsearch.
         
         Args:
             history_record: Dictionary containing the issue history data
             
         Returns:
-            Dictionary formatted for Elasticsearch insertion
+            Dict containing the formatted data for Elasticsearch
         """
-        # Create the basic document structure
         doc = {
             "historyId": history_record['historyId'],
-            "historyDate": history_record['historyDate'].isoformat(),
-            "@timestamp": history_record['historyDate'].isoformat(),  # Add @timestamp field for Kibana
+            "historyDate": history_record['historyDate'],
+            "@timestamp": history_record['historyDate'],
             "factType": history_record['factType'],
             "issue": {
                 "id": history_record['issueId'],
@@ -436,8 +435,8 @@ class JiraElasticsearchPopulator:
         if history_record.get('labels'):
             doc["labels"] = history_record['labels']
             
-        # Add components if they exist
-        if history_record.get('components'):
+        # Add components if they exist - ensure it's properly formatted as an array of objects
+        if history_record.get('components') and isinstance(history_record['components'], list):
             doc["components"] = history_record['components']
             
         # Add parent_issue if it exists
@@ -455,7 +454,11 @@ class JiraElasticsearchPopulator:
         if history_record.get('workingDaysInStatus') is not None:
             doc["workingDaysInStatus"] = history_record['workingDaysInStatus']
             
-        if history_record.get('workingDaysFromToDo') is not None:
+        # FIXED: Use workingDaysFromMove as the field name in the document,
+        # but look for either workingDaysFromMove or workingDaysFromToDo in the record
+        if history_record.get('workingDaysFromMove') is not None:
+            doc["workingDaysFromMove"] = history_record['workingDaysFromMove']
+        elif history_record.get('workingDaysFromToDo') is not None:
             doc["workingDaysFromMove"] = history_record['workingDaysFromToDo']
         
         # Add optional fields if they exist
@@ -630,20 +633,31 @@ class JiraElasticsearchPopulator:
             
         logger.info(f"Populating Elasticsearch with JIRA data from {start_date} to {end_date}")
         
-        # Get issue history records from JIRA
-        history_records = self.jira_service.get_issue_history(start_date, end_date, max_issues)
-        
-        # Process records in bulk
-        success_count = 0
-        for i in range(0, len(history_records), bulk_size):
-            batch = history_records[i:i+bulk_size]
-            success_count += self.bulk_insert_issue_history(batch)
-                
-        # Update the last sync date
-        self.update_sync_date(end_date)
-        
-        logger.info(f"Successfully inserted {success_count} out of {len(history_records)} records")
-        return success_count
+        try:
+            # Get issue history records from JIRA
+            history_records = self.jira_service.get_issue_history(start_date, end_date, max_issues)
+            
+            # If we get here, JIRA authentication was successful
+            # Process records in bulk
+            success_count = 0
+            for i in range(0, len(history_records), bulk_size):
+                batch = history_records[i:i+bulk_size]
+                success_count += self.bulk_insert_issue_history(batch)
+                    
+            # Only update the last sync date if we successfully connected to JIRA
+            # and retrieved data (even if we didn't insert any new records)
+            if len(history_records) > 0:
+                self.update_sync_date(end_date)
+                logger.info(f"Successfully inserted {success_count} out of {len(history_records)} records")
+            else:
+                logger.info("No new records found to insert, not updating sync date")
+            
+            return success_count
+            
+        except Exception as e:
+            logger.error(f"Error fetching data from JIRA: {e}")
+            logger.warning("JIRA authorization may have failed. Not updating the sync date.")
+            return 0
 
     def get_database_summary(self, days=30):
         """
