@@ -7,33 +7,44 @@ Usage:
   python populate_es.py [options]
 
 Options:
-  --days DAYS       Number of days of history to fetch (default: 7)
-  --max-issues NUM  Maximum number of issues to process (default: no limit)
-  --agent NAME      Name of the ETL agent (default: "JiraETLAgent")
-  --host HOST       Elasticsearch host (default: from ELASTIC_URL env var or "localhost")
-  --port PORT       Elasticsearch port (default: from ELASTIC_URL env var or 9200)
-  --api-key KEY     Elasticsearch API key (default: from ELASTIC_APIKEY env var)
-  --url URL         Complete Elasticsearch URL (default: from ELASTIC_URL env var)
-  --bulk-size SIZE  Number of records to process in each bulk operation (default: 100)
-  --full-sync       Ignore last sync date and perform a full sync
-  --verbose         Enable verbose logging
+  --days DAYS         Number of days of history to fetch (default: 7)
+  --max-issues NUM    Maximum number of issues to process (default: no limit)
+  --agent NAME        Name of the ETL agent (default: "JiraETLAgent")
+  --host HOST         Elasticsearch host (default: from ELASTIC_URL env var or "localhost")
+  --port PORT         Elasticsearch port (default: from ELASTIC_URL env var or 9200)
+  --api-key KEY       Elasticsearch API key (default: from ELASTIC_APIKEY env var)
+  --url URL           Complete Elasticsearch URL (default: from ELASTIC_URL env var)
+  --bulk-size SIZE    Number of records to process in each bulk operation (default: 100)
+  --full-sync         Ignore last sync date and perform a full sync
+  --recreate-index    Delete and recreate the Elasticsearch index with updated mappings
+  --confirm           Skip confirmation prompt when recreating index
+  --verbose           Enable verbose logging
 """
 
 import logging
 import argparse
 import os
+import sys
 from datetime import datetime, timedelta
 from es_populate import JiraElasticsearchPopulator, ELASTIC_URL, ELASTIC_APIKEY, ES_HOST, ES_PORT, ES_USE_SSL
+from es_populate import INDEX_CHANGELOG, INDEX_SETTINGS
+import requests
 
 def setup_logging(verbose=False):
     """Configure logging for the ETL process."""
     level = logging.DEBUG if verbose else logging.INFO
     
+    # Create logs directory if it doesn't exist
+    os.makedirs('logs', exist_ok=True)
+    
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    log_filename = f"logs/jira_etl_es_{timestamp}.log"
+    
     logging.basicConfig(
         level=level,
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler("jira_etl_es.log"),
+            logging.FileHandler(log_filename),
             logging.StreamHandler()
         ]
     )
@@ -42,12 +53,83 @@ def setup_logging(verbose=False):
     logging.getLogger('urllib3').setLevel(logging.WARNING)
     logging.getLogger('requests').setLevel(logging.WARNING)
     logging.getLogger('elasticsearch').setLevel(logging.WARNING)
+    
+    return logging.getLogger(__name__)
+
+def delete_index(populator, index_name, logger):
+    """Delete an Elasticsearch index."""
+    try:
+        # Build base URL
+        if populator.url:
+            base_url = populator.url.rstrip('/')
+        else:
+            base_url = f'{"https" if populator.use_ssl else "http"}://{populator.host}:{populator.port}'
+            
+        # Prepare headers with API key authentication
+        headers = {"Content-Type": "application/json"}
+        if populator.api_key:
+            headers["Authorization"] = f"ApiKey {populator.api_key}"
+        
+        # Delete the index
+        logger.info(f"Deleting index {index_name}...")
+        delete_response = requests.delete(f"{base_url}/{index_name}", headers=headers)
+        
+        if delete_response.status_code == 200:
+            logger.info(f"Successfully deleted index {index_name}")
+            return True
+        elif delete_response.status_code == 404:
+            logger.info(f"Index {index_name} does not exist, nothing to delete")
+            return True
+        else:
+            logger.error(f"Failed to delete index {index_name}: {delete_response.status_code} - {delete_response.text}")
+            return False
+    except Exception as e:
+        logger.error(f"Error deleting index {index_name}: {e}")
+        return False
+
+def get_last_sync_date_from_settings(populator, logger):
+    """Get the last sync date from the settings index before deleting it."""
+    try:
+        last_sync_date = populator.get_last_sync_date()
+        if last_sync_date:
+            logger.info(f"Retrieved last sync date before index deletion: {last_sync_date}")
+        else:
+            logger.warning("No last sync date found in settings")
+        return last_sync_date
+    except Exception as e:
+        logger.error(f"Error getting last sync date: {e}")
+        return None
+
+def restore_sync_date(populator, last_sync_date, logger):
+    """Restore the last sync date in the settings index."""
+    if last_sync_date:
+        try:
+            populator.update_sync_date(last_sync_date)
+            logger.info(f"Restored last sync date: {last_sync_date}")
+            return True
+        except Exception as e:
+            logger.error(f"Error restoring last sync date: {e}")
+            return False
+    return True  # Nothing to restore
+
+def recreate_indices(populator, logger):
+    """Create the indices with updated mappings."""
+    try:
+        result = populator.create_indices()
+        if result:
+            logger.info("Successfully created indices with updated mappings")
+        else:
+            logger.error("Failed to create indices with updated mappings")
+        return result
+    except Exception as e:
+        logger.error(f"Error creating indices: {e}")
+        return False
 
 def main():
     """Main entry point for the ETL process."""
     parser = argparse.ArgumentParser(description='Populate Elasticsearch with JIRA data')
-    parser.add_argument('--days', type=int, default=7, 
-                        help='Number of days of history to fetch (default: 7)')
+    parser.add_argument('--days', type=int, default=1, 
+                        help='Number of days of history to fetch (default: 1)')
     parser.add_argument('--max-issues', type=int, default=None, 
                         help='Maximum number of issues to process')
     parser.add_argument('--agent', type=str, default='JiraETLAgent', 
@@ -64,14 +146,17 @@ def main():
                         help='Number of records to process in each bulk operation (default: 100)')
     parser.add_argument('--full-sync', action='store_true', 
                         help='Ignore last sync date and perform a full sync')
+    parser.add_argument('--recreate-index', action='store_true',
+                        help='Delete and recreate the Elasticsearch index with updated mappings')
+    parser.add_argument('--confirm', action='store_true',
+                        help='Skip confirmation prompt when recreating index')
     parser.add_argument('--verbose', action='store_true', 
                         help='Enable verbose logging')
     
     args = parser.parse_args()
     
     # Set up logging
-    setup_logging(args.verbose)
-    logger = logging.getLogger(__name__)
+    logger = setup_logging(args.verbose)
     
     logger.info(f"Starting JIRA to Elasticsearch ETL process with agent: {args.agent}")
     
@@ -88,6 +173,37 @@ def main():
     try:
         # Connect to Elasticsearch
         populator.connect()
+        
+        # Handle index recreation if requested
+        if args.recreate_index:
+            # Get confirmation for index deletion if not already provided
+            if not args.confirm:
+                confirmation = input(f"WARNING: This will delete and recreate the '{INDEX_CHANGELOG}' index. "
+                                   f"All data will be lost. Type 'yes' to continue: ")
+                if confirmation.lower() != "yes":
+                    logger.info("Index recreation cancelled by user")
+                    return 0
+            
+            # Backup the last sync date
+            last_sync_date = get_last_sync_date_from_settings(populator, logger)
+            
+            # Delete the changelog index
+            if not delete_index(populator, INDEX_CHANGELOG, logger):
+                logger.error("Failed to delete changelog index, aborting")
+                return 1
+            
+            # Recreate the indices with updated mappings
+            if not recreate_indices(populator, logger):
+                logger.error("Failed to recreate indices, aborting")
+                return 1
+            
+            # Restore the last sync date
+            if not restore_sync_date(populator, last_sync_date, logger):
+                logger.warning("Failed to restore last sync date")
+                
+            # Force full sync when recreating index
+            args.full_sync = True
+            logger.info("Index recreated successfully, proceeding with full sync")
         
         # Determine date range
         end_date = datetime.now()
@@ -136,4 +252,4 @@ def main():
     return 0
 
 if __name__ == "__main__":
-    exit(main())
+    sys.exit(main())

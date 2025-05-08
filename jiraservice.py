@@ -10,12 +10,17 @@ from typing import Optional, Dict, List, Any
 from jira import JIRA
 import config
 import dateutil.parser
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from utils import calculate_days_since_date
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL))
 logger = logging.getLogger(__name__)
+
+# Define Warsaw timezone offset (UTC+1 in winter, UTC+2 in summer)
+# For simplicity, we'll use a fixed offset (UTC+2 for summer time)
+WARSAW_OFFSET = 2  # hours
+DEFAULT_TIMEZONE = timezone(timedelta(hours=WARSAW_OFFSET))
 
 class JiraService:
     """Service class to interact with Jira API."""
@@ -95,14 +100,8 @@ class JiraService:
         components = []
         if hasattr(issue.fields, 'components') and issue.fields.components:
             for component in issue.fields.components:
-                comp_info = {
-                    "id": component.id,
-                    "name": component.name
-                }
-                # Add description if available
-                if hasattr(component, 'description') and component.description:
-                    comp_info["description"] = component.description
-                components.append(comp_info)
+                # Store only the component name as a simple string
+                components.append(component.name)
         
         # Extract labels
         labels = []
@@ -439,6 +438,13 @@ class JiraService:
         """
         jira = self.connect()
         
+        # Ensure dates are timezone-aware
+        if start_date and isinstance(start_date, datetime) and start_date.tzinfo is None:
+            start_date = start_date.replace(tzinfo=DEFAULT_TIMEZONE)
+            
+        if end_date and isinstance(end_date, datetime) and end_date.tzinfo is None:
+            end_date = end_date.replace(tzinfo=DEFAULT_TIMEZONE)
+        
         # Format dates for JQL
         if start_date:
             if isinstance(start_date, datetime):
@@ -447,7 +453,7 @@ class JiraService:
                 start_str = str(start_date)
         else:
             # Default to 7 days ago if no start date provided
-            start_str = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d %H:%M")
+            start_str = (datetime.now(DEFAULT_TIMEZONE) - timedelta(days=7)).strftime("%Y-%m-%d %H:%M")
             
         if end_date:
             if isinstance(end_date, datetime):
@@ -455,7 +461,7 @@ class JiraService:
             else:
                 end_str = str(end_date)
         else:
-            end_str = datetime.now().strftime("%Y-%m-%d %H:%M")
+            end_str = datetime.now(DEFAULT_TIMEZONE).strftime("%Y-%m-%d %H:%M")
             
         logger.info(f"Retrieving issues updated between {start_str} and {end_str}")
         
@@ -526,8 +532,9 @@ class JiraService:
                 parent_key = issue_data.get('parentKey')
                 
                 # Process issue's changelog to extract additional time-based information
-                issue_creation_date = dateutil.parser.parse(issue.fields.created)
-                current_date = datetime.now(issue_creation_date.tzinfo)
+                # Ensure the creation date is parsed with timezone information
+                issue_creation_date = self._parse_date_with_timezone(issue.fields.created)
+                current_date = datetime.now(DEFAULT_TIMEZONE)
                 
                 # Import utility functions for working days calculations
                 from utils import calculate_working_days_between, find_status_change_date, find_first_status_change_date
@@ -545,7 +552,7 @@ class JiraService:
                     for history in histories:
                         for item in history.items:
                             if item.field == 'status' and item.toString == status_name:
-                                status_change_date = dateutil.parser.parse(history.created)
+                                status_change_date = self._parse_date_with_timezone(history.created)
                                 break
                         if status_change_date:
                             break
@@ -556,7 +563,7 @@ class JiraService:
                     
                     # Extract all changelog entries for further analysis
                     for history in histories:
-                        history_date = dateutil.parser.parse(history.created)
+                        history_date = self._parse_date_with_timezone(history.created)
                         changes = []
                         for item in history.items:
                             changes.append({
@@ -576,20 +583,12 @@ class JiraService:
                     working_days_from_todo = calculate_working_days_between(todo_exit_date, current_date)
                 
                 # Process creation record
-                created_date = dateutil.parser.parse(issue.fields.created)
-                
-                # Ensure both dates are timezone-aware or naive for comparison
-                if start_date and start_date.tzinfo is None and created_date.tzinfo is not None:
-                    # Make start_date timezone-aware by assigning the same timezone as created_date
-                    start_date = start_date.replace(tzinfo=created_date.tzinfo)
-                elif start_date and start_date.tzinfo is not None and created_date.tzinfo is None:
-                    # Make created_date timezone-aware by assigning the same timezone as start_date
-                    created_date = created_date.replace(tzinfo=start_date.tzinfo)
+                created_date = self._parse_date_with_timezone(issue.fields.created)
                 
                 # Create a history record for the issue creation
                 creation_record = {
                     'historyId': int(f"{issue.id}00000"),  # Use a synthetic ID for creation
-                    'historyDate': created_date,
+                    'historyDate': created_date.isoformat(),  # Store as ISO8601 format with timezone
                     'factType': 0,  # 0 = create
                     'issueId': issue.id,
                     'issueKey': issue_key,
@@ -623,35 +622,11 @@ class JiraService:
                 # Process changelog entries
                 if hasattr(issue_with_changelog, 'changelog') and hasattr(issue_with_changelog.changelog, 'histories'):
                     for history in issue_with_changelog.changelog.histories:
-                        # Make sure dates have consistent timezone info for comparison
-                        history_date = dateutil.parser.parse(history.created)
-                        
-                        # Default variable initializations
-                        start_date_comp = None
-                        end_date_comp = None
-                        history_date_comp_start = history_date
-                        history_date_comp_end = history_date
-                        
-                        # Handle timezone differences for comparison with start_date
-                        if start_date:
-                            if start_date.tzinfo is None and history_date.tzinfo is not None:
-                                start_date_comp = start_date.replace(tzinfo=history_date.tzinfo)
-                            elif start_date.tzinfo is not None and history_date.tzinfo is None:
-                                history_date_comp_start = history_date.replace(tzinfo=start_date.tzinfo)
-                            else:
-                                start_date_comp = start_date
-                            
-                        # Handle timezone differences for comparison with end_date
-                        if end_date:
-                            if end_date.tzinfo is None and history_date.tzinfo is not None:
-                                end_date_comp = end_date.replace(tzinfo=history_date.tzinfo)
-                            elif end_date.tzinfo is not None and history_date.tzinfo is None:
-                                history_date_comp_end = history_date.replace(tzinfo=end_date.tzinfo)
-                            else:
-                                end_date_comp = end_date
+                        # Parse date with consistent timezone handling
+                        history_date = self._parse_date_with_timezone(history.created)
                         
                         # Skip records outside our date range
-                        if (start_date_comp and history_date_comp_start < start_date_comp) or (end_date_comp and history_date_comp_end > end_date_comp):
+                        if (start_date and history_date < start_date) or (end_date and history_date > end_date):
                             continue
                             
                         # Determine fact type (default to update)
@@ -698,7 +673,7 @@ class JiraService:
                         # Create a history record
                         history_record = {
                             'historyId': int(history.id),
-                            'historyDate': history_date,
+                            'historyDate': history_date.isoformat(),  # Store as ISO8601 format with timezone
                             'factType': fact_type,
                             'issueId': issue.id,
                             'issueKey': issue_key,
@@ -736,6 +711,27 @@ class JiraService:
         except Exception as e:
             logger.error(f"Error retrieving issue history: {str(e)}")
             raise
+            
+    def _parse_date_with_timezone(self, date_str: str) -> datetime:
+        """
+        Parse a date string and ensure it has timezone information.
+        
+        Args:
+            date_str: The date string to parse
+            
+        Returns:
+            datetime: A timezone-aware datetime object
+        """
+        try:
+            parsed_date = dateutil.parser.parse(date_str)
+            # If the parsed date doesn't have timezone info, add the default timezone
+            if parsed_date.tzinfo is None:
+                parsed_date = parsed_date.replace(tzinfo=DEFAULT_TIMEZONE)
+            return parsed_date
+        except Exception as e:
+            logger.error(f"Error parsing date '{date_str}': {e}")
+            # Return current time with timezone if parsing fails
+            return datetime.now(DEFAULT_TIMEZONE)
 
 # Usage example
 if __name__ == "__main__":

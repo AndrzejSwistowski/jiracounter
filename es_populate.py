@@ -9,12 +9,13 @@ and analysis capabilities.
 import logging
 import os
 from typing import Dict, List, Any, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import json
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
-from jiraservice import JiraService
+from jiraservice import JiraService, DEFAULT_TIMEZONE
 import config
+import dateutil.parser
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, "INFO"))
@@ -45,6 +46,9 @@ if ELASTIC_URL:
 # Index names
 INDEX_CHANGELOG = "jira-changelog"
 INDEX_SETTINGS = "jira-settings"
+
+# Default timezone (will use system timezone if not specified)
+DEFAULT_TIMEZONE = timezone.utc
 
 class JiraElasticsearchPopulator:
     """
@@ -163,13 +167,7 @@ class JiraElasticsearchPopulator:
                             "statusName": {"type": "keyword"},
                             "summary": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},  # Added summary field
                             "labels": {"type": "keyword"},  # Added labels field
-                            "components": {  # Added components field
-                                "type": "nested",
-                                "properties": {
-                                    "id": {"type": "keyword"},
-                                    "name": {"type": "keyword"}
-                                }
-                            },
+                            "components": {"type": "keyword"},  # Store components as simple keywords
                             "projectKey": {"type": "keyword"},
                             "projectName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                             "authorUserName": {"type": "keyword"},
@@ -325,7 +323,7 @@ class JiraElasticsearchPopulator:
             
             if result["hits"]["total"]["value"] > 0:
                 # Return the last_sync_date value
-                return datetime.fromisoformat(result["hits"]["hits"][0]["_source"]["last_sync_date"])
+                return datetime.fromisoformat(result["hits"]["hits"][0]["_source"]["last_sync_date"]).astimezone(DEFAULT_TIMEZONE)
             else:
                 # If no parameters found, try to get the last imported issue date
                 query = {
@@ -342,7 +340,7 @@ class JiraElasticsearchPopulator:
                 result = self.es.search(index=INDEX_CHANGELOG, body=query)
                 
                 if result["hits"]["total"]["value"] > 0:
-                    return datetime.fromisoformat(result["hits"]["hits"][0]["_source"]["historyDate"])
+                    return datetime.fromisoformat(result["hits"]["hits"][0]["_source"]["historyDate"]).astimezone(DEFAULT_TIMEZONE)
                 
                 # If still no date, return None
                 return None
@@ -435,9 +433,67 @@ class JiraElasticsearchPopulator:
         if history_record.get('labels'):
             doc["labels"] = history_record['labels']
             
-        # Add components if they exist - ensure it's properly formatted as an array of objects
-        if history_record.get('components') and isinstance(history_record['components'], list):
-            doc["components"] = history_record['components']
+        # Add components if they exist - simplify to store only component names as strings
+        if history_record.get('components'):
+            try:
+                # Extract just the component names
+                component_names = []
+                
+                # Case 1: List of components (could be dicts or strings)
+                if isinstance(history_record['components'], list):
+                    for comp in history_record['components']:
+                        if isinstance(comp, dict) and 'name' in comp:
+                            # Extract just the name from component objects
+                            component_names.append(comp['name'])
+                        elif isinstance(comp, str):
+                            # Already a string
+                            component_names.append(comp)
+                        elif hasattr(comp, '__str__'):
+                            # Try to extract name from string representation
+                            comp_str = str(comp)
+                            if 'name=' in comp_str:
+                                try:
+                                    name_val = comp_str.split('name=')[1].split(',')[0].strip()
+                                    if name_val.endswith('}'):
+                                        name_val = name_val[:-1]
+                                    component_names.append(name_val)
+                                except Exception:
+                                    # If parsing fails, use the whole string
+                                    component_names.append(comp_str)
+                            else:
+                                component_names.append(comp_str)
+                
+                # Case 2: Single component as dict or string
+                elif isinstance(history_record['components'], dict):
+                    if 'name' in history_record['components']:
+                        component_names.append(history_record['components']['name'])
+                    else:
+                        # If no name field, convert the whole dict to string
+                        component_names.append(str(history_record['components']))
+                elif isinstance(history_record['components'], str):
+                    # Parse string representation if needed
+                    comp_str = history_record['components']
+                    if 'name=' in comp_str:
+                        try:
+                            name_val = comp_str.split('name=')[1].split(',')[0].strip()
+                            if name_val.endswith('}'):
+                                name_val = name_val[:-1]
+                            component_names.append(name_val)
+                        except Exception:
+                            # If parsing fails, use the whole string
+                            component_names.append(comp_str)
+                    else:
+                        component_names.append(comp_str)
+                
+                # Store the array of component names
+                if component_names:
+                    doc["components"] = component_names
+                    logger.debug(f"Added {len(component_names)} components: {component_names}")
+                
+            except Exception as e:
+                # If all else fails, log the error but don't add the components field
+                logger.error(f"Error processing components for {history_record.get('issueKey')}: {e}")
+                logger.debug(f"Problematic components data: {history_record.get('components')}")
             
         # Add parent_issue if it exists
         if history_record.get('parent_issue'):
@@ -582,7 +638,7 @@ class JiraElasticsearchPopulator:
                 result = self.es.search(index=INDEX_CHANGELOG, body=query)
                 
                 if result["hits"]["total"]["value"] > 0:
-                    logger.debug(f"Record with historyId {record['historyId']} already exists, skipping")
+                    logger.info(f"Record with historyId {record['historyId']} already exists, skipping")
                     continue
                 
                 # Format the record for Elasticsearch
@@ -591,14 +647,71 @@ class JiraElasticsearchPopulator:
                 # Add the action
                 actions.append({
                     "_index": INDEX_CHANGELOG,
-                    "_source": doc
+                    "_source": doc,
+                    # Add a metadata ID to help with error tracking
+                    "_id": f"{record['issueKey']}_{record['historyId']}"
                 })
             
             # Execute the bulk operation
             if actions:
-                success, failed = bulk(self.es, actions)
-                logger.debug(f"Bulk insert: {success} succeeded, {failed} failed")
-                return success
+                try:
+                    success, errors = bulk(self.es, actions, stats_only=False, raise_on_error=False)
+                    
+                    if errors:
+                        # Log detailed error information for failed documents
+                        for error_item in errors:
+                            op_type = list(error_item.keys())[0]
+                            error_info = error_item[op_type]
+                            
+                            error_reason = "Unknown error"
+                            error_doc_id = "Unknown"
+                            
+                            # Extract error details
+                            if 'error' in error_info:
+                                if isinstance(error_info['error'], dict):
+                                    error_reason = error_info['error'].get('reason', 'Unknown reason')
+                                    error_type = error_info['error'].get('type', 'Unknown type')
+                                    error_reason = f"{error_type}: {error_reason}"
+                                else:
+                                    error_reason = str(error_info['error'])
+                                    
+                            if '_id' in error_info:
+                                error_doc_id = error_info['_id']
+                                
+                            logger.error(f"Failed to index document with ID {error_doc_id}: {error_reason}")
+                            
+                            # Try to find and log the problematic document
+                            for action in actions:
+                                if action.get('_id') == error_doc_id:
+                                    # Log a sanitized version of the document for debugging
+                                    logger.debug(f"Problematic document content (partial): issue={action.get('_source', {}).get('issue', {})}")
+                                    break
+                        
+                        logger.warning(f"Bulk insert: {success} succeeded, {len(errors)} failed")
+                    else:
+                        logger.debug(f"Bulk insert: {success} succeeded, 0 failed")
+                    
+                    return success
+                except Exception as e:
+                    logger.error(f"Error during bulk operation: {e}")
+                    
+                    # Fall back to individual inserts with better error handling
+                    logger.info("Falling back to individual document inserts")
+                    success_count = 0
+                    
+                    for action in actions:
+                        try:
+                            self.es.index(
+                                index=action['_index'],
+                                id=action.get('_id'),
+                                body=action['_source']
+                            )
+                            success_count += 1
+                        except Exception as doc_error:
+                            logger.error(f"Failed to index document {action.get('_id')}: {doc_error}")
+                    
+                    logger.info(f"Individual insert fallback: {success_count} succeeded, {len(actions) - success_count} failed")
+                    return success_count
             else:
                 logger.debug("No new records to insert")
                 return 0
@@ -629,36 +742,50 @@ class JiraElasticsearchPopulator:
         
         # If no end_date provided, use current time
         if not end_date:
-            end_date = datetime.now()
+            end_date = datetime.now().astimezone(DEFAULT_TIMEZONE)
             
         logger.info(f"Populating Elasticsearch with JIRA data from {start_date} to {end_date}")
+        
+        # Flag to track if we successfully connected to JIRA
+        jira_connected = False
+        success_count = 0
         
         try:
             # Get issue history records from JIRA
             history_records = self.jira_service.get_issue_history(start_date, end_date, max_issues)
             
             # If we get here, JIRA authentication was successful
+            jira_connected = True
+            
             # Process records in bulk
-            success_count = 0
             for i in range(0, len(history_records), bulk_size):
                 batch = history_records[i:i+bulk_size]
-                success_count += self.bulk_insert_issue_history(batch)
+                try:
+                    success_count += self.bulk_insert_issue_history(batch)
+                except Exception as e:
+                    logger.error(f"Error inserting batch starting at index {i}: {e}")
+                    # Continue with next batch despite errors
                     
-            # Only update the last sync date if we successfully connected to JIRA
-            # and retrieved data (even if we didn't insert any new records)
-            if len(history_records) > 0:
-                self.update_sync_date(end_date)
-                logger.info(f"Successfully inserted {success_count} out of {len(history_records)} records")
-            else:
-                logger.info("No new records found to insert, not updating sync date")
-            
-            return success_count
+            logger.info(f"Successfully inserted {success_count} out of {len(history_records)} records")
             
         except Exception as e:
             logger.error(f"Error fetching data from JIRA: {e}")
+            # Note: We'll still update the sync date below if jira_connected is True
+        
+        # Update the last sync date if we successfully connected to JIRA,
+        # even if we couldn't insert all records or encountered other errors
+        if jira_connected:
+            try:
+                self.update_sync_date(end_date)
+                logger.info(f"Updated last sync date to {end_date}")
+            except Exception as e:
+                logger.error(f"Error updating sync date: {e}")
+                
+        else:
             logger.warning("JIRA authorization may have failed. Not updating the sync date.")
-            return 0
-
+        
+        return success_count
+    
     def get_database_summary(self, days=30):
         """
         Gets a summary of the data in Elasticsearch.
@@ -671,7 +798,7 @@ class JiraElasticsearchPopulator:
         """
         try:
             # Calculate the date range
-            end_date = datetime.now()
+            end_date = datetime.now().astimezone(DEFAULT_TIMEZONE)
             start_date = end_date - timedelta(days=30)
             
             # Build the query
