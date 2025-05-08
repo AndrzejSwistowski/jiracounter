@@ -210,31 +210,6 @@ class JiraService:
             
             # Extract common issue data (including rodzaj_pracy and backet info)
             issue_data = self._extract_issue_data(issue)
-            
-            
-
-            changelog_entries = []
-            if hasattr(issue, 'changelog') and hasattr(issue.changelog, 'histories'):
-                for history in issue.changelog.histories:
-                    author = history.author.displayName if hasattr(history.author, 'displayName') else history.author.name
-                    created = history.created
-                    changes = []
-                    for item in history.items:
-                        changes.append({
-                            'field': item.field,
-                            'fieldtype': item.fieldtype if hasattr(item, 'fieldtype') else None,
-                            'from': item.fromString,
-                            'to': item.toString
-                        })
-                    
-                    changelog_entries.append({
-                        'id': history.id,  # Adding history ID to identify each change
-                        'author': author,
-                        'created': created,
-                        'created_date': dateutil.parser.parse(created).strftime("%Y-%m-%d %H:%M:%S"),
-                        'changes': changes
-                    })
-           							
 
             return issue_data
         except ConnectionError as e:
@@ -299,32 +274,7 @@ class JiraService:
             logger.error(f"Error searching issues with query {jql_query}: {str(e)}")
             raise
             
-    def get_field_id_by_name(self, field_name: str) -> Optional[str]:
-        """Find the custom field ID by its visible name.
-        
-        Args:
-            field_name: The visible name of the field in Jira
-            
-        Returns:
-            Optional[str]: The field ID if found, None otherwise
-        """
-        if not self.connected or not self.jira_client:
-            self.connect()
-            
-        try:
-            fields = self.jira_client.fields()
-            for field in fields:
-                if field['name'].lower() == field_name.lower():
-                    logger.debug(f"Found field '{field_name}' with ID: {field['id']}")
-                    return field['id']
-            
-            logger.warning(f"Field '{field_name}' not found in Jira")
-            return None
-        except Exception as e:
-            logger.error(f"Error finding field ID for '{field_name}': {str(e)}")
-            return None
-    
-    # Moving _cache_field_ids method deeper in the class
+    # Moving get_field_id_by_name method after its usage in other methods
     
     def get_issue_changelog(self, issue_key: str) -> List[Dict[str, Any]]:
         """Retrieve the changelog for a specific issue.
@@ -708,6 +658,31 @@ class JiraService:
             # Fallback to the ID from config if available
             self.field_ids['epic_link'] = config.JIRA_CUSTOM_FIELDS.get('EPIC_LINK')
             logger.debug(f"Using fallback ID for 'Epic Link' field: {self.field_ids['epic_link']}")
+    
+    def get_field_id_by_name(self, field_name: str) -> Optional[str]:
+        """Find the custom field ID by its visible name.
+        
+        Args:
+            field_name: The visible name of the field in Jira
+            
+        Returns:
+            Optional[str]: The field ID if found, None otherwise
+        """
+        if not self.connected or not self.jira_client:
+            self.connect()
+            
+        try:
+            fields = self.jira_client.fields()
+            for field in fields:
+                if field['name'].lower() == field_name.lower():
+                    logger.debug(f"Found field '{field_name}' with ID: {field['id']}")
+                    return field['id']
+            
+            logger.warning(f"Field '{field_name}' not found in Jira")
+            return None
+        except Exception as e:
+            logger.error(f"Error finding field ID for '{field_name}': {str(e)}")
+            return None
     
     def _extract_backet_info(self, issue) -> tuple:
         """Extract backet value and key from the rodzaj_pracy field.
