@@ -57,13 +57,13 @@ class UserOpenedTasks:
                         "summary": issue_details["summary"],
                         "status": issue_details["status"],
                         "type": task.get("type", issue_details.get("type", "Unknown")),  # Try to get from task first, then issue_details
-                        "creationDate": issue_details["creationDate"],
+                        "created_date": issue_details["created_date"],
                         "daysSinceCreation": issue_details["daysSinceCreation"],
                         "reporter": issue_details["reporter"],
                         "assignee": issue_details["assignee"],
                         "backetKey": issue_details.get("backetKey", "Undefined"),  # Default to "Undefined" if not found
-                        "statusChangeDate": issue_details.get("statusChangeDate", None),
-                        "daysInCurrentStatus": calculate_days_since_date(issue_details.get("statusChangeDate", None)) if issue_details.get("statusChangeDate") else None
+                        "status_change_date": issue_details.get("status_change_date", None),
+                        "daysInCurrentStatus": calculate_days_since_date(issue_details.get("status_change_date", None)) if issue_details.get("status_change_date") else None
                     }
                     
                     tasks_with_details.append(task_info)
@@ -183,7 +183,7 @@ if __name__ == "__main__":
                         status_info = f"({task['status']} - {task['daysInCurrentStatus']} days)"
                 
                 print(f"  {task['key']}: [{task['type']}] {task['summary']} {status_info} - "
-                      f"Created {task['creationDate']} ({task['daysSinceCreation']} days ago): [{task['backetKey']}] ")
+                      f"Created {task['created_date']} ({task['daysSinceCreation']} days ago): [{task['backetKey']}] ")
                 
         # If command line arguments are provided, use them to get tasks for a specific user
         import sys
@@ -201,7 +201,7 @@ if __name__ == "__main__":
                         status_info = f"({task['status']} - {task['daysInCurrentStatus']} days)"
                 
                 print(f"  {task['key']}: TaskType:[{task['type']}|'Unknown'] {task['summary']} {status_info} - "
-                      f"Created {task['creationDate']} ({task['daysSinceCreation']} days ago) [{task['backetKey']}]")
+                      f"Created {task['created_date']} ({task['daysSinceCreation']} days ago) [{task['backetKey']}]")
                 
     except Exception as e:
         print(f"Error: {str(e)}")

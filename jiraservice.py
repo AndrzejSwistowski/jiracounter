@@ -11,7 +11,7 @@ from jira import JIRA
 import config
 import dateutil.parser
 from datetime import datetime, timedelta, timezone
-from utils import calculate_days_since_date
+from utils import calculate_days_since_date, parse_date_with_timezone
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL))
@@ -159,6 +159,9 @@ class JiraService:
             except Exception as e:
                 logger.debug(f"Error retrieving parent issue to check for epic: {e}")
             
+        # Add fields specific to get_issue method
+        created_date = issue.fields.created
+        
         # Extract basic issue data
         issue_data = {
             "id": issue.id,
@@ -167,14 +170,19 @@ class JiraService:
             "status": issue.fields.status.name,
             "type": issue.fields.issuetype.name if hasattr(issue.fields, 'issuetype') and issue.fields.issuetype else "Unknown",
             "assignee": issue.fields.assignee.displayName if issue.fields.assignee else None,
-            "statusChangeDate": status_change_date,
+            "status_change_date": status_change_date,
             "components": components,
             "labels": labels,
             "reporter": issue.fields.reporter.displayName if hasattr(issue.fields, 'reporter') and issue.fields.reporter else None,
             "backet": backet_value,
             "backetKey": backet_key,
             "parent_issue": parent_issue,
-            "epic_issue": epic_issue
+            "epic_issue": epic_issue,
+            "updated": issue.fields.updated,
+            "created": created_date,
+            "created_date": dateutil.parser.parse(created_date).strftime("%Y-%m-%d %H:%M:%S"),
+            "daysSinceCreation": calculate_days_since_date(created_date),
+         
         }
         
         return issue_data
@@ -203,16 +211,31 @@ class JiraService:
             # Extract common issue data (including rodzaj_pracy and backet info)
             issue_data = self._extract_issue_data(issue)
             
-            # Add fields specific to get_issue method
-            created_date = issue.fields.created
             
-            issue_data.update({
-                "created": created_date,
-                "creationDate": dateutil.parser.parse(created_date).strftime("%Y-%m-%d"),
-                "daysSinceCreation": calculate_days_since_date(created_date),
-                "updated": issue.fields.updated,
-            })
+
+            changelog_entries = []
+            if hasattr(issue, 'changelog') and hasattr(issue.changelog, 'histories'):
+                for history in issue.changelog.histories:
+                    author = history.author.displayName if hasattr(history.author, 'displayName') else history.author.name
+                    created = history.created
+                    changes = []
+                    for item in history.items:
+                        changes.append({
+                            'field': item.field,
+                            'fieldtype': item.fieldtype if hasattr(item, 'fieldtype') else None,
+                            'from': item.fromString,
+                            'to': item.toString
+                        })
                     
+                    changelog_entries.append({
+                        'id': history.id,  # Adding history ID to identify each change
+                        'author': author,
+                        'created': created,
+                        'created_date': dateutil.parser.parse(created).strftime("%Y-%m-%d %H:%M:%S"),
+                        'changes': changes
+                    })
+           							
+
             return issue_data
         except ConnectionError as e:
             logger.error(f"Connection error retrieving issue {issue_key}: {str(e)}")
@@ -221,25 +244,25 @@ class JiraService:
             logger.error(f"Error retrieving issue {issue_key}: {str(e)}")
             raise
 
-    def search_issues(self, jql_query: str) -> List[Dict[str, Any]]:
+    def search_issues(self, jql_query: str, max_issues=None) -> List[Dict[str, Any]]:
         """Search for issues using JQL with automatic pagination.
         
         Args:
             jql_query: JQL query string
+            max_issues: Maximum number of issues to process
             
         Returns:
-            List of issues matching the query (up to 1000 results)
+            List of issues matching the query
         """
         jira = self.connect()
         all_issues = []
-        max_allowed_results = 1000
         
         try:
             # JIRA API typically limits each request to 100 items
             page_size = 100
             start_at = 0
             
-            while len(all_issues) < max_allowed_results:
+            while True:
                 # Fetch the current page of results
                 logger.debug(f"Fetching issues starting at {start_at} with page size {page_size}")
                 issues_page = jira.search_issues(
@@ -265,9 +288,9 @@ class JiraService:
                 # Update the starting point for the next iteration
                 start_at += len(issues_page)
                 
-                # Check if we've reached the maximum allowed total
-                if len(all_issues) >= max_allowed_results:
-                    logger.warning(f"Reached maximum result limit of {max_allowed_results} records. Some results may be omitted.")
+                # Check if we've reached the user-specified maximum
+                if max_issues and len(all_issues) >= max_issues:
+                    logger.info(f"Reached maximum issue limit of {max_issues}.")
                     break
                 
             return all_issues
@@ -301,45 +324,7 @@ class JiraService:
             logger.error(f"Error finding field ID for '{field_name}': {str(e)}")
             return None
     
-    def _cache_field_ids(self) -> None:
-        """Look up and cache custom field IDs for use in Jira operations.
-        
-        This function populates self.field_ids with the IDs of custom fields
-        that are needed for various operations.
-        """
-        if not self.connected or not self.jira_client:
-            logger.warning("Cannot cache field IDs without a connection. Connect first.")
-            return
-            
-        # Look up and cache the "rodzaj pracy" field ID
-        rodzaj_pracy_id = self.get_field_id_by_name("rodzaj pracy")
-        if rodzaj_pracy_id:
-            self.field_ids['rodzaj_pracy'] = rodzaj_pracy_id
-            logger.debug(f"Found 'rodzaj pracy' field with ID: {rodzaj_pracy_id}")
-        else:
-            # Fallback to the ID from config if available
-            self.field_ids['rodzaj_pracy'] = config.JIRA_CUSTOM_FIELDS.get('RODZAJ_PRACY')
-            logger.debug(f"Using fallback ID for 'rodzaj pracy' field: {self.field_ids['rodzaj_pracy']}")
-            
-        # Look up and cache the "data zmiany statusu" field ID
-        data_zmiany_statusu_id = self.get_field_id_by_name("data zmiany statusu")
-        if data_zmiany_statusu_id:
-            self.field_ids['data_zmiany_statusu'] = data_zmiany_statusu_id
-            logger.debug(f"Found 'data zmiany statusu' field with ID: {data_zmiany_statusu_id}")
-        else:
-            # Fallback to the ID from config if available
-            self.field_ids['data_zmiany_statusu'] = config.JIRA_CUSTOM_FIELDS.get('DATA_ZMIANY_STATUSU')
-            logger.debug(f"Using fallback ID for 'data zmiany statusu' field: {self.field_ids['data_zmiany_statusu']}")
-            
-        # Look up and cache the Epic Link field ID
-        epic_link_id = self.get_field_id_by_name("Epic Link")
-        if epic_link_id:
-            self.field_ids['epic_link'] = epic_link_id
-            logger.debug(f"Found 'Epic Link' field with ID: {epic_link_id}")
-        else:
-            # Fallback to the ID from config if available
-            self.field_ids['epic_link'] = config.JIRA_CUSTOM_FIELDS.get('EPIC_LINK')
-            logger.debug(f"Using fallback ID for 'Epic Link' field: {self.field_ids['epic_link']}")
+    # Moving _cache_field_ids method deeper in the class
     
     def get_issue_changelog(self, issue_key: str) -> List[Dict[str, Any]]:
         """Retrieve the changelog for a specific issue.
@@ -420,20 +405,20 @@ class JiraService:
         # Format dates for JQL
         if start_date:
             if isinstance(start_date, datetime):
-                start_str = start_date.strftime("%Y-%m-%d %H:%M")
+                start_str = start_date.strftime("%Y-%m-%d %H:%M:%S")
             else:
                 start_str = str(start_date)
         else:
             # Default to 7 days ago if no start date provided
-            start_str = (datetime.now(DEFAULT_TIMEZONE) - timedelta(days=7)).strftime("%Y-%m-%d %H:%M")
+            start_str = (datetime.now(DEFAULT_TIMEZONE) - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
             
         if end_date:
             if isinstance(end_date, datetime):
-                end_str = end_date.strftime("%Y-%m-%d %H:%M")
+                end_str = end_date.strftime("%Y-%m-%d %H:%M:%S")
             else:
                 end_str = str(end_date)
         else:
-            end_str = datetime.now(DEFAULT_TIMEZONE).strftime("%Y-%m-%d %H:%M")
+            end_str = datetime.now(DEFAULT_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S")
             
         logger.info(f"Retrieving issues updated between {start_str} and {end_str}")
         
@@ -505,7 +490,7 @@ class JiraService:
                 
                 # Process issue's changelog to extract additional time-based information
                 # Ensure the creation date is parsed with timezone information
-                issue_creation_date = self._parse_date_with_timezone(issue.fields.created)
+                issue_creation_date = parse_date_with_timezone(issue.fields.created)
                 current_date = datetime.now(DEFAULT_TIMEZONE)
                 
                 # Import utility functions for working days calculations
@@ -524,7 +509,7 @@ class JiraService:
                     for history in histories:
                         for item in history.items:
                             if item.field == 'status' and item.toString == status_name:
-                                status_change_date = self._parse_date_with_timezone(history.created)
+                                status_change_date = parse_date_with_timezone(history.created)
                                 break
                         if status_change_date:
                             break
@@ -535,7 +520,7 @@ class JiraService:
                     
                     # Extract all changelog entries for further analysis
                     for history in histories:
-                        history_date = self._parse_date_with_timezone(history.created)
+                        history_date = parse_date_with_timezone(history.created)
                         changes = []
                         for item in history.items:
                             changes.append({
@@ -555,7 +540,7 @@ class JiraService:
                     working_days_from_todo = calculate_working_days_between(todo_exit_date, current_date)
                 
                 # Process creation record
-                created_date = self._parse_date_with_timezone(issue.fields.created)
+                created_date = parse_date_with_timezone(issue.fields.created)
                 
                 # Create a history record for the issue creation
                 creation_record = {
@@ -594,13 +579,12 @@ class JiraService:
                 # Process changelog entries
                 if hasattr(issue_with_changelog, 'changelog') and hasattr(issue_with_changelog.changelog, 'histories'):
                     for history in issue_with_changelog.changelog.histories:
-                        # Parse date with consistent timezone handling
-                      #  history_date = self._parse_date_with_timezone(history.created)
+                        history_date = parse_date_with_timezone(history.created)
                         
                         # Skip records outside our date range
-                       # if (start_date and history_date < start_date) or (end_date and history_date > end_date):
-                        #    logger.info(f"Skipping history record outside date range: {history_date, start_date, end_date, history}")
-                         #   continue
+                        if (start_date and history_date < start_date) or (end_date and history_date > end_date):
+                            logger.info(f"Skipping history record outside date range: {history_date, start_date, end_date, history}")
+                            continue
                             
                         # Determine fact type (default to update)
                         fact_type = 3  # 3 = update
@@ -684,27 +668,46 @@ class JiraService:
         except Exception as e:
             logger.error(f"Error retrieving issue history: {str(e)}")
             raise
-            
-    def _parse_date_with_timezone(self, date_str: str) -> datetime:
-        """
-        Parse a date string and ensure it has timezone information.
+    
+    def _cache_field_ids(self) -> None:
+        """Look up and cache custom field IDs for use in Jira operations.
         
-        Args:
-            date_str: The date string to parse
-            
-        Returns:
-            datetime: A timezone-aware datetime object
+        This function populates self.field_ids with the IDs of custom fields
+        that are needed for various operations.
         """
-        try:
-            parsed_date = dateutil.parser.parse(date_str)
-            # If the parsed date doesn't have timezone info, add the default timezone
-            if parsed_date.tzinfo is None:
-                parsed_date = parsed_date.replace(tzinfo=DEFAULT_TIMEZONE)
-            return parsed_date
-        except Exception as e:
-            logger.error(f"Error parsing date '{date_str}': {e}")
-            # Return current time with timezone if parsing fails
-            return datetime.now(DEFAULT_TIMEZONE)
+        if not self.connected or not self.jira_client:
+            logger.warning("Cannot cache field IDs without a connection. Connect first.")
+            return
+            
+        # Look up and cache the "rodzaj pracy" field ID
+        rodzaj_pracy_id = self.get_field_id_by_name("rodzaj pracy")
+        if rodzaj_pracy_id:
+            self.field_ids['rodzaj_pracy'] = rodzaj_pracy_id
+            logger.debug(f"Found 'rodzaj pracy' field with ID: {rodzaj_pracy_id}")
+        else:
+            # Fallback to the ID from config if available
+            self.field_ids['rodzaj_pracy'] = config.JIRA_CUSTOM_FIELDS.get('RODZAJ_PRACY')
+            logger.debug(f"Using fallback ID for 'rodzaj pracy' field: {self.field_ids['rodzaj_pracy']}")
+            
+        # Look up and cache the "data zmiany statusu" field ID
+        data_zmiany_statusu_id = self.get_field_id_by_name("data zmiany statusu")
+        if data_zmiany_statusu_id:
+            self.field_ids['data_zmiany_statusu'] = data_zmiany_statusu_id
+            logger.debug(f"Found 'data zmiany statusu' field with ID: {data_zmiany_statusu_id}")
+        else:
+            # Fallback to the ID from config if available
+            self.field_ids['data_zmiany_statusu'] = config.JIRA_CUSTOM_FIELDS.get('DATA_ZMIANY_STATUSU')
+            logger.debug(f"Using fallback ID for 'data zmiany statusu' field: {self.field_ids['data_zmiany_statusu']}")
+            
+        # Look up and cache the Epic Link field ID
+        epic_link_id = self.get_field_id_by_name("Epic Link")
+        if epic_link_id:
+            self.field_ids['epic_link'] = epic_link_id
+            logger.debug(f"Found 'Epic Link' field with ID: {epic_link_id}")
+        else:
+            # Fallback to the ID from config if available
+            self.field_ids['epic_link'] = config.JIRA_CUSTOM_FIELDS.get('EPIC_LINK')
+            logger.debug(f"Using fallback ID for 'Epic Link' field: {self.field_ids['epic_link']}")
     
     def _extract_backet_info(self, issue) -> tuple:
         """Extract backet value and key from the rodzaj_pracy field.
@@ -742,8 +745,8 @@ if __name__ == "__main__":
 
         issue = service.get_issue("PFBP-139")
         change_log = service.get_issue_changelog("PFBP-139")
-        days_in_status = calculate_days_since_date(issue.get('statusChangeDate')) if issue.get('statusChangeDate') else "N/A"
-        print(f"Issue: {issue['key']} - {issue['summary']} {issue['backetKey']} ({issue['status']} - {days_in_status} days in status) - Created: {issue['creationDate']} ({issue['daysSinceCreation']} days ago) - Reporter: {issue['reporter']} - Assignee: {issue['assignee']}")   
+        days_in_status = calculate_days_since_date(issue.get('status_change_date')) if issue.get('status_change_date') else "N/A"
+        print(f"Issue: {issue['key']} - {issue['summary']} {issue['backetKey']} ({issue['status']} - {days_in_status} days in status) - Created: {issue['created_date']} ({issue['daysSinceCreation']} days ago) - Reporter: {issue['reporter']} - Assignee: {issue['assignee']}")   
         print(f"Connected to Jira as {config.JIRA_USERNAME}")
         
         # Example: Get a sample project

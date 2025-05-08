@@ -60,7 +60,7 @@ class UpdatedIssuesReport:
                         "summary": issue_details["summary"],
                         "status": issue_details["status"],
                         "type": issue_details.get("type", "Unknown"),
-                        "creationDate": issue_details["creationDate"],
+                        "created_date": issue_details["created_date"],
                         "updated": issue_details["updated"],
                         "updatedDate": dateutil.parser.parse(issue_details["updated"]).strftime("%Y-%m-%d"),
                         "daysSinceCreation": issue_details["daysSinceCreation"],
@@ -68,8 +68,8 @@ class UpdatedIssuesReport:
                         "assignee": issue_details["assignee"],
                         "projectKey": issue_key.split("-")[0],  # Extract project key from issue key
                         "backetKey": issue_details.get("backetKey", "Undefined"),  # Add backetKey information
-                        "statusChangeDate": issue_details.get("statusChangeDate", None),
-                        "daysInCurrentStatus": calculate_days_since_date(issue_details.get("statusChangeDate", None)) if issue_details.get("statusChangeDate") else None
+                        "status_change_date": issue_details.get("status_change_date", None),
+                        "daysInCurrentStatus": calculate_days_since_date(issue_details.get("status_change_date", None)) if issue_details.get("status_change_date") else None
                     }
                     
                     issues_with_details.append(issue_info)
@@ -174,7 +174,7 @@ if __name__ == "__main__":
                         status_info = f"({issue['status']} - {issue['daysInCurrentStatus']} days)"
                 
                 print(f"  {issue['key']}: [{issue['type']}] {issue['summary']} {status_info} - "
-                      f"Updated: {issue['updatedDate']} - Created: {issue['creationDate']} ({issue['daysSinceCreation']} days ago) [{issue['backetKey']}]")
+                      f"Updated: {issue['updatedDate']} - Created: {issue['created_date']} ({issue['daysSinceCreation']} days ago) [{issue['backetKey']}]")
                 
         # If a specific project is requested via command line
         if len(sys.argv) > 3:
@@ -195,7 +195,7 @@ if __name__ == "__main__":
                         status_info = f"({issue['status']} - {issue['daysInCurrentStatus']} days)"
                 
                 print(f"  {issue['key']}: [{issue['type']}] {issue['summary']} {status_info} - "
-                      f"Updated: {issue['updatedDate']} - Created: {issue['creationDate']} ({issue['daysSinceCreation']} days ago) [{issue['backetKey']}]")
+                      f"Updated: {issue['updatedDate']} - Created: {issue['created_date']} ({issue['daysSinceCreation']} days ago) [{issue['backetKey']}]")
                 
     except Exception as e:
         print(f"Error: {str(e)}")
