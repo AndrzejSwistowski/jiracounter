@@ -10,17 +10,12 @@ from typing import Optional, Dict, List, Any
 from jira import JIRA
 import config
 import dateutil.parser
-from datetime import datetime, timedelta, timezone
-from utils import calculate_days_since_date, parse_date_with_timezone
+from datetime import datetime, timedelta
+from utils import calculate_days_since_date, parse_date_with_timezone, APP_TIMEZONE, format_date_for_jql
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL))
 logger = logging.getLogger(__name__)
-
-# Define Warsaw timezone offset (UTC+1 in winter, UTC+2 in summer)
-# For simplicity, we'll use a fixed offset (UTC+2 for summer time)
-WARSAW_OFFSET = 2  # hours
-DEFAULT_TIMEZONE = timezone(timedelta(hours=WARSAW_OFFSET))
 
 class JiraService:
     """Service class to interact with Jira API."""
@@ -345,30 +340,29 @@ class JiraService:
         """
         jira = self.connect()
         
-        # Ensure dates are timezone-aware
-        if start_date and isinstance(start_date, datetime) and start_date.tzinfo is None:
-            start_date = start_date.replace(tzinfo=DEFAULT_TIMEZONE)
-            
-        if end_date and isinstance(end_date, datetime) and end_date.tzinfo is None:
-            end_date = end_date.replace(tzinfo=DEFAULT_TIMEZONE)
-        
-        # Format dates for JQL
+        # Format dates for JQL consistently using utils function
         if start_date:
-            if isinstance(start_date, datetime):
-                start_str = start_date.strftime("%Y-%m-%d %H:%M:%S")
-            else:
-                start_str = str(start_date)
+            if isinstance(start_date, str):
+                start_date = parse_date_with_timezone(start_date)
+            elif start_date.tzinfo is None:
+                start_date = start_date.replace(tzinfo=APP_TIMEZONE)
+            
+            start_str = format_date_for_jql(start_date)
         else:
             # Default to 7 days ago if no start date provided
-            start_str = (datetime.now(DEFAULT_TIMEZONE) - timedelta(days=7)).strftime("%Y-%m-%d %H:%M:%S")
+            start_date = datetime.now(APP_TIMEZONE) - timedelta(days=7)
+            start_str = format_date_for_jql(start_date)
             
         if end_date:
-            if isinstance(end_date, datetime):
-                end_str = end_date.strftime("%Y-%m-%d %H:%M:%S")
-            else:
-                end_str = str(end_date)
+            if isinstance(end_date, str):
+                end_date = parse_date_with_timezone(end_date)
+            elif end_date.tzinfo is None:
+                end_date = end_date.replace(tzinfo=APP_TIMEZONE)
+                
+            end_str = format_date_for_jql(end_date)
         else:
-            end_str = datetime.now(DEFAULT_TIMEZONE).strftime("%Y-%m-%d %H:%M:%S")
+            end_date = datetime.now(APP_TIMEZONE)
+            end_str = format_date_for_jql(end_date)
             
         logger.info(f"Retrieving issues updated between {start_str} and {end_str}")
         
@@ -441,7 +435,7 @@ class JiraService:
                 # Process issue's changelog to extract additional time-based information
                 # Ensure the creation date is parsed with timezone information
                 issue_creation_date = parse_date_with_timezone(issue.fields.created)
-                current_date = datetime.now(DEFAULT_TIMEZONE)
+                current_date = datetime.now(APP_TIMEZONE)
                 
                 # Import utility functions for working days calculations
                 from utils import calculate_working_days_between, find_status_change_date, find_first_status_change_date

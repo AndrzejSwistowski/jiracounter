@@ -9,11 +9,12 @@ and analysis capabilities.
 import logging
 import os
 from typing import Dict, List, Any, Optional
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 import json
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
-from jiraservice import JiraService, DEFAULT_TIMEZONE
+from jiraservice import JiraService
+from utils import APP_TIMEZONE, parse_date_with_timezone
 import config
 import dateutil.parser
 
@@ -46,9 +47,6 @@ if ELASTIC_URL:
 # Index names
 INDEX_CHANGELOG = "jira-changelog"
 INDEX_SETTINGS = "jira-settings"
-
-# Default timezone (will use system timezone if not specified)
-DEFAULT_TIMEZONE = timezone.utc
 
 class JiraElasticsearchPopulator:
     """
@@ -323,7 +321,7 @@ class JiraElasticsearchPopulator:
             
             if result["hits"]["total"]["value"] > 0:
                 # Return the last_sync_date value
-                return datetime.fromisoformat(result["hits"]["hits"][0]["_source"]["last_sync_date"]).astimezone(DEFAULT_TIMEZONE)
+                return datetime.fromisoformat(result["hits"]["hits"][0]["_source"]["last_sync_date"]).astimezone(APP_TIMEZONE)
             else:
                 # If no parameters found, try to get the last imported issue date
                 query = {
@@ -340,7 +338,7 @@ class JiraElasticsearchPopulator:
                 result = self.es.search(index=INDEX_CHANGELOG, body=query)
                 
                 if result["hits"]["total"]["value"] > 0:
-                    return datetime.fromisoformat(result["hits"]["hits"][0]["_source"]["historyDate"]).astimezone(DEFAULT_TIMEZONE)
+                    return datetime.fromisoformat(result["hits"]["hits"][0]["_source"]["historyDate"]).astimezone(APP_TIMEZONE)
                 
                 # If still no date, return None
                 return None
@@ -740,9 +738,9 @@ class JiraElasticsearchPopulator:
         if not start_date:
             start_date = self.get_last_sync_date()
         
-        # If no end_date provided, use current time
+        # If no end_date provided, use current time in UTC
         if not end_date:
-            end_date = datetime.now().astimezone(DEFAULT_TIMEZONE)
+            end_date = datetime.now(APP_TIMEZONE)
             
         logger.info(f"Populating Elasticsearch with JIRA data from {start_date} to {end_date}")
         
@@ -798,7 +796,7 @@ class JiraElasticsearchPopulator:
         """
         try:
             # Calculate the date range
-            end_date = datetime.now().astimezone(DEFAULT_TIMEZONE)
+            end_date = datetime.now(APP_TIMEZONE)
             start_date = end_date - timedelta(days=30)
             
             # Build the query

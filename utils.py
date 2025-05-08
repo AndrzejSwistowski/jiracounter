@@ -13,10 +13,9 @@ from typing import Optional, Tuple
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Define Warsaw timezone offset (UTC+1 in winter, UTC+2 in summer)
-# For simplicity, we'll use a fixed offset (UTC+2 for summer time)
-WARSAW_OFFSET = 2  # hours
-DEFAULT_TIMEZONE = timezone(timedelta(hours=WARSAW_OFFSET))
+# Define a single, application-wide timezone (using UTC as the standard)
+# All internal processing will use UTC, only converting for display/user-facing output
+APP_TIMEZONE = timezone.utc
 
 def parse_date_with_timezone(date_str: str) -> datetime:
     """
@@ -26,20 +25,21 @@ def parse_date_with_timezone(date_str: str) -> datetime:
         date_str: The date string to parse
         
     Returns:
-        datetime: A timezone-aware datetime object
+        datetime: A timezone-aware datetime object in UTC
     """
     try:
         parsed_date = dateutil.parser.parse(date_str)
-        # If the parsed date doesn't have timezone info, add the default timezone
+        # If the parsed date doesn't have timezone info, add UTC
         if parsed_date.tzinfo is None:
-            parsed_date = parsed_date.replace(tzinfo=DEFAULT_TIMEZONE)
+            parsed_date = parsed_date.replace(tzinfo=APP_TIMEZONE)
+        else:
+            # Ensure all dates are in UTC for internal consistency
+            parsed_date = parsed_date.astimezone(APP_TIMEZONE)
         return parsed_date
     except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
         logger.error(f"Error parsing date '{date_str}': {e}")
         # Return current time with timezone if parsing fails
-        return datetime.now(DEFAULT_TIMEZONE)
+        return datetime.now(APP_TIMEZONE)
 
 def calculate_days_since_date(date_str: str) -> int:
     """Calculate the number of days between a given date and the current date.
@@ -54,17 +54,11 @@ def calculate_days_since_date(date_str: str) -> int:
         return None
         
     try:
-        parsed_date = dateutil.parser.parse(date_str)
-        # Make sure both datetimes are either offset-aware or offset-naive
-        now = datetime.now(pytz.UTC)
-        if parsed_date.tzinfo is not None:
-            # If parsed_date has timezone info, make sure now has it too
-            now = now.astimezone()
-        else:
-            # If parsed_date has no timezone, remove it from now if present
-            parsed_date = parsed_date.replace(tzinfo=None)
-            now = now.replace(tzinfo=None)
-            
+        # Parse date and ensure it's in UTC
+        parsed_date = parse_date_with_timezone(date_str)
+        # Get current time in UTC
+        now = datetime.now(APP_TIMEZONE)
+        # Calculate days
         days_since = (now - parsed_date).days
         return days_since
     except (ValueError, TypeError) as e:
@@ -244,3 +238,29 @@ def validate_and_format_dates(start_date: str, end_date: str) -> Tuple[str, str]
     except ValueError as e:
         logger.error(f"Invalid date format: {str(e)}")
         raise ValueError(f"Invalid date format. Use YYYY-MM-DD format: {str(e)}")
+
+def format_date_for_jql(date_obj: datetime) -> str:
+    """Format a datetime object for use in JQL queries.
+    
+    Args:
+        date_obj: A datetime object
+        
+    Returns:
+        String formatted for JQL (YYYY-MM-DD HH:MM:SS)
+    """
+    if not date_obj:
+        return None
+        
+    try:
+        if isinstance(date_obj, str):
+            date_obj = parse_date_with_timezone(date_obj)
+            
+        # Ensure the date is timezone-aware
+        if date_obj.tzinfo is None:
+            date_obj = date_obj.replace(tzinfo=APP_TIMEZONE)
+            
+        # Format for JQL
+        return date_obj.strftime("%Y-%m-%d %H:%M:%S")
+    except Exception as e:
+        logger.error(f"Error formatting date for JQL: {e}")
+        return None
