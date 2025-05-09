@@ -434,7 +434,7 @@ class JiraService:
                 initial_status_found = False
                 
                 # Sort status change history chronologically (oldest first)
-                status_change_history.sort(key=lambda x: x['created'])
+                status_change_history.sort(key=lambda x: x['historyDate'])
                 
                 # First, determine what the initial status was
                 initial_status = 'Open'  # Default assumption
@@ -540,7 +540,7 @@ class JiraService:
                     changelog_entries.append(history_record)
             
             # Sort by history date
-            changelog_entries.sort(key=lambda x: x['created'])
+            changelog_entries.sort(key=lambda x: x['historyDate'])
             
             return changelog_entries
             

@@ -4,6 +4,13 @@ Elasticsearch mappings for JIRA data.
 
 # Changelog index mapping with improved handling of the changes field
 CHANGELOG_MAPPING = {
+    "settings": {
+        "analysis": {
+            "analyzer": {
+                # Polish analyzer removed temporarily until proper support is added
+            }
+        }
+    },
     "mappings": {
         "properties": {
             "historyId": {"type": "keyword"},
@@ -12,36 +19,39 @@ CHANGELOG_MAPPING = {
             "factType": {"type": "integer"},
             "issue": {
                 "properties": {
+										"id": {"type": "keyword"},
                     "key": {"type": "keyword"},
-                    "type ": { "properties": {										
-												"name": {"type": "keyword"}
-										}},
+                    "type": { 
+                        "properties": {
+                            "name": {"type": "keyword"}
+                        }
+                    },
                     "status": {
                         "properties": {
                             "name": {"type": "keyword"},
                             "change_date": {"type": "date"}
                         }
                     },
-										"created_at": {"type": "date"},
+                    "created_at": {"type": "date"}
                 }
             },
             "allocation": {"type": "keyword"},
-						"labels": {"type": "keyword"}, 
-						"components": {"type": "keyword"}, 
+            "labels": {"type": "keyword"}, 
+            "components": {"type": "keyword"}, 
             "summary": {
                 "type": "text", 
                 "analyzer": "standard",
                 "fields": {
                     "keyword": {"type": "keyword"},
-                    "polish": {"type": "text", "analyzer": "polish"}
+                    "english": {"type": "text", "analyzer": "english"}
+                    # Polish field removed temporarily
                 }
             },
-						"labels": {"type": "keyword"}, 
-						"project": {
-								"properties": {
-										"key": {"type": "keyword"}
-								}
-						},
+            "project": {
+                "properties": {
+                    "key": {"type": "keyword"}
+                }
+            },
             "parent_issue": {
                 "properties": {
                     "key": {"type": "keyword"},
@@ -65,7 +75,7 @@ CHANGELOG_MAPPING = {
                 }
             },
             "days_since_creation": {"type": "float"},
-						"todo_exit_date": {"type": "date"},
+            "todo_exit_date": {"type": "date"},
             "changes": {
                 "type": "nested",
                 "properties": {
@@ -79,8 +89,8 @@ CHANGELOG_MAPPING = {
                 "analyzer": "standard",
                 "fields": {
                     "keyword": {"type": "keyword", "ignore_above": 32766},
-                    "english": {"type": "text", "analyzer": "english"},
-                    "polish": {"type": "text", "analyzer": "polish"}
+                    "english": {"type": "text", "analyzer": "english"}
+                    # Polish field removed temporarily
                 }
             },
             "comment_text": {
@@ -88,10 +98,10 @@ CHANGELOG_MAPPING = {
                 "analyzer": "standard",
                 "fields": {
                     "keyword": {"type": "keyword", "ignore_above": 32766},
-                    "english": {"type": "text", "analyzer": "english"},
-                    "polish": {"type": "text", "analyzer": "polish"}
+                    "english": {"type": "text", "analyzer": "english"}
+                    # Polish field removed temporarily
                 }
-            },
+            }
         }
     }
 }

@@ -31,6 +31,7 @@ class ElasticsearchDocumentFormatter:
             "@timestamp": history_record['historyDate'],
             "factType": history_record['factType'],
             "issue": {
+                "id": history_record['issueId'],
                 "key": history_record['issueKey'],
                 "type": {
                     "name": history_record['typeName']
@@ -49,18 +50,19 @@ class ElasticsearchDocumentFormatter:
             }
         }
         
+        # Add allocation field (as keyword according to mapping)
         if history_record.get('allocationCode'):
             doc["allocation"] = history_record['allocationCode']
         
-        # Add summary field if it exists
+        # Add summary field with text analysis according to mapping
         if history_record.get('summary'):
             doc["summary"] = history_record['summary']
             
-        # Add labels if they exist
+        # Add labels as keyword array according to mapping
         if history_record.get('labels'):
             doc["labels"] = history_record['labels']
             
-        # Add components if they exist - simplify to store only component names as strings
+        # Add components as keyword array according to mapping
         if history_record.get('components'):
             component_names = ElasticsearchDocumentFormatter._extract_component_names(
                 history_record.get('components'), 
@@ -70,51 +72,58 @@ class ElasticsearchDocumentFormatter:
                 doc["components"] = component_names
                 logger.debug(f"Added {len(component_names)} components: {component_names}")
             
-        # Add parent_issue if it exists
+        # Add parent_issue with proper structure according to mapping
         if history_record.get('parent_issue'):
-            doc["parent_issue"] = history_record['parent_issue']
-            # Add parentKey to parent_issue if it exists
-            if history_record.get('parentKey'):
-                doc["parent_issue"]["key"] = history_record['parentKey']
+            doc["parent_issue"] = {
+                "key": history_record.get('parentKey') or history_record['parent_issue'].get('key'),
+                "summary": history_record['parent_issue'].get('summary')
+            }
             
-        # Add epic_issue if it exists
+        # Add epic_issue with proper structure according to mapping
         if history_record.get('epic_issue'):
-            doc["epic_issue"] = history_record['epic_issue']
+            doc["epic_issue"] = {
+                "key": history_record['epic_issue'].get('key'),
+                "summary": history_record['epic_issue'].get('summary')
+            }
         
-        # Add time-based analytics fields if they exist
+        # Add reporter with proper structure according to mapping
+        if history_record.get('reporterDisplayName'):
+            doc["reporter"] = {
+                "displayName": history_record['reporterDisplayName']
+            }
+        
+        # Add time-based fields
         if history_record.get('workingDaysFromCreation') is not None:
-            doc["workingDaysFromCreation"] = history_record['workingDaysFromCreation']
+            doc["days_since_creation"] = float(history_record['workingDaysFromCreation'])
+            
+        if history_record.get('todo_exit_date') is not None:
+            doc["todo_exit_date"] = history_record['todo_exit_date']
             
         if history_record.get('workingDaysInStatus') is not None:
-            doc["workingDaysInStatus"] = history_record['workingDaysInStatus']
+            doc["days_in_status"] = float(history_record['workingDaysInStatus'])
             
-        # FIXED: Use working_days_from_move_at_point as the field name in the document,
-        # but look for either working_days_from_move_at_point or workingDaysFromToDo in the record
+        # Add working_days_from_move_at_point field based on available data
         if history_record.get('working_days_from_move_at_point') is not None:
-            doc["working_days_from_move_at_point"] = history_record['working_days_from_move_at_point']
+            doc["working_days_from_move_at_point"] = float(history_record['working_days_from_move_at_point'])
         elif history_record.get('workingDaysFromToDo') is not None:
-            doc["working_days_from_move_at_point"] = history_record['workingDaysFromToDo']
+            doc["working_days_from_move_at_point"] = float(history_record['workingDaysFromToDo'])
         
-        # Add optional fields if they exist
-        if history_record.get('assigneeUserName'):
+        # Add assignee with proper structure according to mapping
+        if history_record.get('assigneeDisplayName'):
             doc["assignee"] = {
-                "displayName": history_record.get('assigneeDisplayName')
+                "displayName": history_record['assigneeDisplayName']
             }
         
-        if history_record.get('reporterUserName'):
-            doc["reporter"] = {
-                "displayName": history_record.get('reporterDisplayName')
-            }
-        
-        # Remove the standalone parentKey field as it's now part of parent_issue
-        
-        # Add changes if available
+        # Add changes as nested objects according to mapping
         if history_record.get('changes'):
             doc["changes"] = history_record['changes']
         
-        # Add status change date if it exists
-        if history_record.get('status_change_date'):
-            doc["issue"]["status"]["change_date"] = history_record['status_change_date']
+        # Add content text fields with comprehensive text analysis
+        if history_record.get('description_text'):
+            doc["description_text"] = history_record['description_text']
+            
+        if history_record.get('comment_text'):
+            doc["comment_text"] = history_record['comment_text']
         
         return doc
     
