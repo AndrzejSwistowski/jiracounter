@@ -62,8 +62,6 @@ def main():
         # Connect to Elasticsearch
         populator.connect()
         
-        # Update the field mapping to ensure aggregations work properly
-        populator.update_field_mapping()
         
         # Calculate the total date range
         end_date = datetime.now()

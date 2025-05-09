@@ -432,6 +432,9 @@ class JiraService:
                 todo_exit_date = None
                 initial_status_found = False
                 
+                # Sort status change history chronologically (oldest first)
+                status_change_history.sort(key=lambda x: x['historyDate'])
+                
                 # First, determine what the initial status was
                 initial_status = 'Open'  # Default assumption
                 # If we have any status changes, check the first one to find the actual initial status

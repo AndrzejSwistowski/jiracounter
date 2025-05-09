@@ -34,7 +34,7 @@ ES_PORT = 9200
 ES_USE_SSL = False
 
 # If ELASTIC_URL is provided, parse it to extract host, port, and protocol
-if ELASTIC_URL:
+if (ELASTIC_URL):
     try:
         from urllib.parse import urlparse
         parsed_url = urlparse(ELASTIC_URL)
@@ -577,6 +577,9 @@ class JiraElasticsearchPopulator:
         """
         Fetches data from JIRA and populates Elasticsearch.
         
+        IMPORTANT REQUIREMENT: If any bulk operation fails, the settings (last sync date)
+        must not be updated to prevent data loss in subsequent runs.
+        
         Args:
             start_date: The date to start fetching from (default: last sync date)
             end_date: The date to fetch up to (default: now)
@@ -601,6 +604,8 @@ class JiraElasticsearchPopulator:
         
         # Flag to track if we successfully connected to JIRA
         jira_connected = False
+        # Flag to track if all bulk operations succeeded
+        all_bulk_operations_succeeded = True
         success_count = 0
         
         try:
@@ -635,8 +640,14 @@ class JiraElasticsearchPopulator:
                 
                 # Process the bulk when it reaches the desired size
                 if current_bulk_size >= bulk_size:
-                    success, failed = self._execute_bulk(bulk_data)
+                    success, failed = self.bulk_insert_issue_history(bulk_data)
                     total_inserted += success
+                    
+                    # Check if there were any failures in this batch
+                    if failed > 0:
+                        all_bulk_operations_succeeded = False
+                        logger.warning(f"Bulk insert operation had {failed} failures")
+                    
                     bulk_data = []
                     current_bulk_size = 0
             
@@ -644,24 +655,33 @@ class JiraElasticsearchPopulator:
             if bulk_data:
                 success, failed = self._execute_bulk(bulk_data)
                 total_inserted += success
+                
+                # Check if there were any failures in the final batch
+                if failed > 0:
+                    all_bulk_operations_succeeded = False
+                    logger.warning(f"Final bulk insert operation had {failed} failures")
             
             logger.info(f"Successfully inserted {total_inserted} out of {len(history_records)} records")
+            success_count = total_inserted
             
         except Exception as e:
             logger.error(f"Error fetching data from JIRA: {e}")
-            # Note: We'll still update the sync date below if jira_connected is True
+            all_bulk_operations_succeeded = False
         
-        # Update the last sync date if we successfully connected to JIRA,
-        # even if we couldn't insert all records or encountered other errors
-        if jira_connected:
+        # Update the last sync date ONLY if:
+        # 1. We successfully connected to JIRA
+        # 2. ALL bulk operations succeeded without any failures
+        if jira_connected and all_bulk_operations_succeeded:
             try:
                 self.update_sync_date(end_date)
                 logger.info(f"Updated last sync date to {end_date}")
             except Exception as e:
                 logger.error(f"Error updating sync date: {e}")
-                
         else:
-            logger.warning("JIRA authorization may have failed. Not updating the sync date.")
+            if not jira_connected:
+                logger.warning("JIRA authorization failed. Not updating the sync date.")
+            elif not all_bulk_operations_succeeded:
+                logger.warning("Some bulk operations failed. Not updating the sync date to prevent data loss.")
         
         return success_count
     
