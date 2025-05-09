@@ -73,4 +73,3 @@ SETTINGS_MAPPING = {
         }
     }
 }
-```

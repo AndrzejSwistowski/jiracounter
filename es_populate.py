@@ -940,6 +940,10 @@ class JiraElasticsearchPopulator:
                     pass  # Keep as is if conversion fails
         
         return es_record
+
+    def _execute_bulk(self, actions):
+        # Method implementation
+        pass
             
 # Example usage
 if __name__ == "__main__":
