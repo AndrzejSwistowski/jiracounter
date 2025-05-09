@@ -45,7 +45,6 @@ class ElasticsearchDocumentFormatter:
                 "name": history_record['projectName']
             },
             "author": {
-                "username": history_record['authorUserName'],
                 "displayName": history_record.get('authorDisplayName')
             }
         }
@@ -93,13 +92,11 @@ class ElasticsearchDocumentFormatter:
         # Add optional fields if they exist
         if history_record.get('assigneeUserName'):
             doc["assignee"] = {
-                "username": history_record['assigneeUserName'],
                 "displayName": history_record.get('assigneeDisplayName')
             }
         
         if history_record.get('reporterUserName'):
             doc["reporter"] = {
-                "username": history_record['reporterUserName'],
                 "displayName": history_record.get('reporterDisplayName')
             }
         

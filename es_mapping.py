@@ -34,13 +34,11 @@ CHANGELOG_MAPPING = {
             },
             "author": {
                 "properties": {
-                    "username": {"type": "keyword"},
                     "displayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
                 }
             },
             "reporter": {
                 "properties": {
-                    "username": {"type": "keyword"},
                     "displayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
                 }
             },
