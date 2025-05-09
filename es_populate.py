@@ -256,17 +256,7 @@ class JiraElasticsearchPopulator:
         """
         return ElasticsearchDocumentFormatter.format_changelog_entry(history_record)
     
-    def _get_allocation_name(self, code):
-        """
-        Get the allocation name from its code.
-        
-        Args:
-            code: The allocation code
-            
-        Returns:
-            str: The allocation name
-        """
-        return ElasticsearchDocumentFormatter._get_allocation_name(code)
+    # Remove the _get_allocation_name method as it's already handled by ElasticsearchDocumentFormatter
     
     def insert_issue_history(self, history_record):
         """
