@@ -110,6 +110,10 @@ class ElasticsearchDocumentFormatter:
         if history_record.get('changes'):
             doc["changes"] = history_record['changes']
         
+        # Add status change date if it exists
+        if history_record.get('status_change_date'):
+            doc["issue"]["status"]["change_date"] = history_record['status_change_date']
+        
         return doc
     
     @staticmethod

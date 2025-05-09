@@ -21,7 +21,8 @@ CHANGELOG_MAPPING = {
                     },
                     "status": {
                         "properties": {
-                            "name": {"type": "keyword"}
+                            "name": {"type": "keyword"},
+                            "change_date": {"type": "date"}
                         }
                     }
                 }
