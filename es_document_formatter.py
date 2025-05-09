@@ -101,10 +101,7 @@ class ElasticsearchDocumentFormatter:
             }
         
         if history_record.get('allocationCode'):
-            doc["allocation"] = {
-                "code": history_record['allocationCode'],
-                "name": ElasticsearchDocumentFormatter._get_allocation_name(history_record['allocationCode'])
-            }
+            doc["allocation"] = history_record['allocationCode']
         
         if history_record.get('parentKey'):
             doc["parentKey"] = history_record['parentKey']

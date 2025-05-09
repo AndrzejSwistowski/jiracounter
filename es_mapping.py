@@ -42,6 +42,7 @@ CHANGELOG_MAPPING = {
                     "displayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
                 }
             },
+            "allocation": {"type": "keyword"},
             "summary": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
             "workingDaysFromCreation": {"type": "float"},
             "changes": {
