@@ -8,7 +8,7 @@ from typing import List, Dict, Any, Optional
 from jiraservice import JiraService
 from users import Users
 import config
-from utils import calculate_days_since_date
+from utils import calculate_days_since_date, format_date_polish
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, "INFO"))
@@ -57,7 +57,7 @@ class UserOpenedTasks:
                         "summary": issue_details["summary"],
                         "status": issue_details["status"],
                         "type": task.get("type", issue_details.get("type", "Unknown")),  # Try to get from task first, then issue_details
-                        "created_date": issue_details["created_date"],
+                        "created": issue_details["created"],
                         "days_since_creation": issue_details["days_since_creation"],
                         "reporter": issue_details["reporter"],
                         "assignee": issue_details["assignee"],
@@ -182,8 +182,11 @@ if __name__ == "__main__":
                     else:
                         status_info = f"({task['status']} - {task['daysInCurrentStatus']} days)"
                 
+                # Format the creation date in Polish
+                created_date_polish = format_date_polish(task['created'])
+                
                 print(f"  {task['key']}: [{task['type']}] {task['summary']} {status_info} - "
-                      f"Created {task['created_date']} ({task['days_since_creation']} days ago): [{task['allocation_code']}] ")
+                      f"Created {created_date_polish} ({task['days_since_creation']} days ago): [{task['allocation_code']}] ")
                 
         # If command line arguments are provided, use them to get tasks for a specific user
         import sys
@@ -200,8 +203,11 @@ if __name__ == "__main__":
                     else:
                         status_info = f"({task['status']} - {task['daysInCurrentStatus']} days)"
                 
+                # Format the creation date in Polish
+                created_date_polish = format_date_polish(task['created'])
+                
                 print(f"  {task['key']}: TaskType:[{task['type']}|'Unknown'] {task['summary']} {status_info} - "
-                      f"Created {task['created_date']} ({task['days_since_creation']} days ago) [{task['allocation_code']}]")
+                      f"Created {created_date_polish} ({task['days_since_creation']} days ago) [{task['allocation_code']}]")
                 
     except Exception as e:
         print(f"Error: {str(e)}")

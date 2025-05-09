@@ -138,7 +138,7 @@ def test_get_issue_changelog(service):
             
             # Display a few recent changelog entries
             for entry in changelog:  # Show first 3 entries
-                print(f"  - History ID: {entry['id']} | Changed by {entry['author']} on {entry['created_date']}")
+                print(f"  - History ID: {entry['id']} | Changed by {entry['author']} on {entry['created']}")
                 
                 # Show the changes in this entry
                 for change in entry['changes']:  # Show first 2 changes per entry

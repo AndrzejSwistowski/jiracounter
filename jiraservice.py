@@ -703,6 +703,7 @@ class JiraService:
         
         return allocation_value, allocation_code
 
+
 # Usage example
 if __name__ == "__main__":
     try:
@@ -712,7 +713,7 @@ if __name__ == "__main__":
         issue = service.get_issue("PFBP-139")
         change_log = service.get_issue_changelog("PFBP-139")
         days_in_status = calculate_days_since_date(issue.get('status_change_date')) if issue.get('status_change_date') else "N/A"
-        print(f"Issue: {issue['key']} - {issue['summary']} {issue['allocation_code']} ({issue['status']} - {days_in_status} days in status) - Created: {issue['created_date']} ({issue['days_since_creation']} days ago) - Reporter: {issue['reporter']} - Assignee: {issue['assignee']}")   
+        print(f"Issue: {issue['key']} - {issue['summary']} {issue['allocation_code']} ({issue['status']} - {days_in_status} days in status) - Created: {issue['created']} ({issue['days_since_creation']} days ago) - Reporter: {issue['reporter']} - Assignee: {issue['assignee']}")   
         print(f"Connected to Jira as {config.JIRA_USERNAME}")
         
         # Example: Get a sample project

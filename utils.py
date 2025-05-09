@@ -264,3 +264,45 @@ def format_date_for_jql(date_obj: datetime) -> str:
     except Exception as e:
         logger.error(f"Error formatting date for JQL: {e}")
         return None
+
+def format_date_polish(date_str: str) -> str:
+    """Format a date string into Polish format (e.g., '24 kwietnia 2025').
+    
+    Args:
+        date_str: The date string to parse and format
+        
+    Returns:
+        String formatted in Polish (day month_name year)
+    """
+    if not date_str:
+        return ""
+        
+    try:
+        # Parse the date
+        parsed_date = parse_date_with_timezone(date_str)
+        
+        # Dictionary of Polish month names
+        polish_months = {
+            1: "stycznia",
+            2: "lutego",
+            3: "marca",
+            4: "kwietnia",
+            5: "maja",
+            6: "czerwca",
+            7: "lipca",
+            8: "sierpnia",
+            9: "września",
+            10: "października",
+            11: "listopada",
+            12: "grudnia"
+        }
+        
+        # Format the date in Polish
+        day = parsed_date.day
+        month = polish_months[parsed_date.month]
+        year = parsed_date.year
+        
+        return f"{day} {month} {year}"
+    except Exception as e:
+        logger.error(f"Error formatting date in Polish: {e}")
+        return date_str

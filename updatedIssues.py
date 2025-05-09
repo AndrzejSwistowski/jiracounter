@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 import dateutil.parser
 from jiraservice import JiraService
 import config
-from utils import calculate_days_since_date, validate_and_format_dates
+from utils import calculate_days_since_date, validate_and_format_dates, format_date_polish
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, "INFO"))
@@ -60,7 +60,7 @@ class UpdatedIssuesReport:
                         "summary": issue_details["summary"],
                         "status": issue_details["status"],
                         "type": issue_details.get("type", "Unknown"),
-                        "created_date": issue_details["created_date"],
+                        "created": issue_details["created"],
                         "updated": issue_details["updated"],
                         "updatedDate": dateutil.parser.parse(issue_details["updated"]).strftime("%Y-%m-%d"),
                         "days_since_creation": issue_details["days_since_creation"],
@@ -173,8 +173,12 @@ if __name__ == "__main__":
                     else:
                         status_info = f"({issue['status']} - {issue['daysInCurrentStatus']} days)"
                 
+                # Format the dates in Polish
+                updated_date_polish = format_date_polish(issue['updated'])
+                created_date_polish = format_date_polish(issue['created'])
+                
                 print(f"  {issue['key']}: [{issue['type']}] {issue['summary']} {status_info} - "
-                      f"Updated: {issue['updatedDate']} - Created: {issue['created_date']} ({issue['days_since_creation']} days ago) [{issue['allocation_code']}]")
+                      f"Updated: {updated_date_polish} - Created: {created_date_polish} ({issue['days_since_creation']} days ago) [{issue['allocation_code']}]")
                 
         # If a specific project is requested via command line
         if len(sys.argv) > 3:
@@ -194,8 +198,12 @@ if __name__ == "__main__":
                     else:
                         status_info = f"({issue['status']} - {issue['daysInCurrentStatus']} days)"
                 
+                # Format the dates in Polish
+                updated_date_polish = format_date_polish(issue['updated'])
+                created_date_polish = format_date_polish(issue['created'])
+                
                 print(f"  {issue['key']}: [{issue['type']}] {issue['summary']} {status_info} - "
-                      f"Updated: {issue['updatedDate']} - Created: {issue['created_date']} ({issue['days_since_creation']} days ago) [{issue['allocation_code']}]")
+                      f"Updated: {updated_date_polish} - Created: {created_date_polish} ({issue['days_since_creation']} days ago) [{issue['allocation_code']}]")
                 
     except Exception as e:
         print(f"Error: {str(e)}")

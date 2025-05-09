@@ -605,7 +605,11 @@ class JiraElasticsearchPopulator:
         
         try:
             # Get issue history records from JIRA
-            history_records = self.jira_service.get_issue_history(start_date, end_date, max_issues)
+            result = self.jira_service.get_issue_history(start_date=start_date, end_date=end_date, max_issues=max_issues)
+            if result is None:
+                issues, history_records = [], []
+            else:
+                issues, history_records = result
             
             # If we get here, JIRA authentication was successful
             jira_connected = True
