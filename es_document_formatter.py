@@ -60,65 +60,13 @@ class ElasticsearchDocumentFormatter:
             
         # Add components if they exist - simplify to store only component names as strings
         if history_record.get('components'):
-            try:
-                # Extract just the component names
-                component_names = []
-                
-                # Case 1: List of components (could be dicts or strings)
-                if isinstance(history_record['components'], list):
-                    for comp in history_record['components']:
-                        if isinstance(comp, dict) and 'name' in comp:
-                            # Extract just the name from component objects
-                            component_names.append(comp['name'])
-                        elif isinstance(comp, str):
-                            # Already a string
-                            component_names.append(comp)
-                        elif hasattr(comp, '__str__'):
-                            # Try to extract name from string representation
-                            comp_str = str(comp)
-                            if 'name=' in comp_str:
-                                try:
-                                    name_val = comp_str.split('name=')[1].split(',')[0].strip()
-                                    if name_val.endswith('}'):
-                                        name_val = name_val[:-1]
-                                    component_names.append(name_val)
-                                except Exception:
-                                    # If parsing fails, use the whole string
-                                    component_names.append(comp_str)
-                            else:
-                                component_names.append(comp_str)
-                
-                # Case 2: Single component as dict or string
-                elif isinstance(history_record['components'], dict):
-                    if 'name' in history_record['components']:
-                        component_names.append(history_record['components']['name'])
-                    else:
-                        # If no name field, convert the whole dict to string
-                        component_names.append(str(history_record['components']))
-                elif isinstance(history_record['components'], str):
-                    # Parse string representation if needed
-                    comp_str = history_record['components']
-                    if 'name=' in comp_str:
-                        try:
-                            name_val = comp_str.split('name=')[1].split(',')[0].strip()
-                            if name_val.endswith('}'):
-                                name_val = name_val[:-1]
-                            component_names.append(name_val)
-                        except Exception:
-                            # If parsing fails, use the whole string
-                            component_names.append(comp_str)
-                    else:
-                        component_names.append(comp_str)
-                
-                # Store the array of component names
-                if component_names:
-                    doc["components"] = component_names
-                    logger.debug(f"Added {len(component_names)} components: {component_names}")
-                
-            except Exception as e:
-                # If all else fails, log the error but don't add the components field
-                logger.error(f"Error processing components for {history_record.get('issueKey')}: {e}")
-                logger.debug(f"Problematic components data: {history_record.get('components')}")
+            component_names = ElasticsearchDocumentFormatter._extract_component_names(
+                history_record.get('components'), 
+                history_record.get('issueKey')
+            )
+            if component_names:
+                doc["components"] = component_names
+                logger.debug(f"Added {len(component_names)} components: {component_names}")
             
         # Add parent_issue if it exists
         if history_record.get('parent_issue'):
@@ -169,6 +117,75 @@ class ElasticsearchDocumentFormatter:
             doc["changes"] = history_record['changes']
         
         return doc
+    
+    @staticmethod
+    def _extract_component_names(components_data, issue_key=None):
+        """
+        Extract component names from various data formats.
+        
+        Args:
+            components_data: Component data from Jira (can be list, dict, or string)
+            issue_key: Optional issue key for logging purposes
+            
+        Returns:
+            list: List of component names as strings
+        """
+        component_names = []
+        
+        try:
+            # Case 1: List of components (could be dicts or strings)
+            if isinstance(components_data, list):
+                for comp in components_data:
+                    if isinstance(comp, dict) and 'name' in comp:
+                        # Extract just the name from component objects
+                        component_names.append(comp['name'])
+                    elif isinstance(comp, str):
+                        # Already a string
+                        component_names.append(comp)
+                    elif hasattr(comp, '__str__'):
+                        # Try to extract name from string representation
+                        comp_str = str(comp)
+                        if 'name=' in comp_str:
+                            try:
+                                name_val = comp_str.split('name=')[1].split(',')[0].strip()
+                                if name_val.endswith('}'):
+                                    name_val = name_val[:-1]
+                                component_names.append(name_val)
+                            except Exception:
+                                # If parsing fails, use the whole string
+                                component_names.append(comp_str)
+                        else:
+                            component_names.append(comp_str)
+            
+            # Case 2: Single component as dict or string
+            elif isinstance(components_data, dict):
+                if 'name' in components_data:
+                    component_names.append(components_data['name'])
+                else:
+                    # If no name field, convert the whole dict to string
+                    component_names.append(str(components_data))
+            elif isinstance(components_data, str):
+                # Parse string representation if needed
+                comp_str = components_data
+                if 'name=' in comp_str:
+                    try:
+                        name_val = comp_str.split('name=')[1].split(',')[0].strip()
+                        if name_val.endswith('}'):
+                            name_val = name_val[:-1]
+                        component_names.append(name_val)
+                    except Exception:
+                        # If parsing fails, use the whole string
+                        component_names.append(comp_str)
+                else:
+                    component_names.append(comp_str)
+            
+            return component_names
+                
+        except Exception as e:
+            # If all else fails, log the error but don't add the components field
+            logger.error(f"Error processing components for {issue_key}: {e}")
+            logger.debug(f"Problematic components data: {components_data}")
+            return []
     
     @staticmethod
     def _get_allocation_name(code):
