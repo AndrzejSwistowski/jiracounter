@@ -28,6 +28,7 @@ import sys
 from datetime import datetime, timedelta
 from es_populate import JiraElasticsearchPopulator, ELASTIC_URL, ELASTIC_APIKEY, ES_HOST, ES_PORT, ES_USE_SSL
 from es_populate import INDEX_CHANGELOG, INDEX_SETTINGS
+from es_mapping import CHANGELOG_MAPPING, SETTINGS_MAPPING
 import requests
 
 def setup_logging(verbose=False):

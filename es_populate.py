@@ -17,6 +17,7 @@ from jiraservice import JiraService
 from utils import APP_TIMEZONE, parse_date_with_timezone
 import config
 import dateutil.parser
+from es_mapping import CHANGELOG_MAPPING, SETTINGS_MAPPING
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, "INFO"))
@@ -130,171 +131,25 @@ class JiraElasticsearchPopulator:
             logger.info("Elasticsearch connection closed")
     
     def create_indices(self):
-        """Creates the necessary indices in Elasticsearch if they don't exist."""
+        """Create the necessary indices with proper mappings."""
         try:
-            # Use the requests library which we know works with your setup
-            import requests
+            # Create changelog index with the improved mapping
+            self.es.indices.create(
+                index=INDEX_CHANGELOG,
+                body=CHANGELOG_MAPPING,
+                ignore=400  # Ignore error if index already exists
+            )
             
-            # Build base URL
-            if self.url:
-                base_url = self.url.rstrip('/')
-            else:
-                base_url = f'{"https" if self.use_ssl else "http"}://{self.host}:{self.port}'
-                
-            # Prepare headers with API key authentication
-            headers = {"Content-Type": "application/json"}
-            if self.api_key:
-                headers["Authorization"] = f"ApiKey {self.api_key}"
+            # Create settings index
+            self.es.indices.create(
+                index=INDEX_SETTINGS,
+                body=SETTINGS_MAPPING,
+                ignore=400  # Ignore error if index already exists
+            )
             
-            # First, check if the changelog index exists
-            check_response = requests.head(f"{base_url}/{INDEX_CHANGELOG}", headers=headers)
-            
-            if check_response.status_code == 404:
-                logger.info(f"Index {INDEX_CHANGELOG} does not exist, creating it")
-                
-                # Define a better mapping for changelog entries with proper field types for aggregations
-                changelog_mapping = {
-                    "mappings": {
-                        "properties": {
-                            "historyId": {"type": "keyword"},
-                            "historyDate": {"type": "date"},
-                            "factType": {"type": "integer"},
-                            "issueId": {"type": "keyword"},  # Use keyword instead of text for aggregations
-                            "issueKey": {"type": "keyword"},
-                            "typeName": {"type": "keyword"},
-                            "statusName": {"type": "keyword"},
-                            "summary": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},  # Added summary field
-                            "labels": {"type": "keyword"},  # Added labels field
-                            "components": {"type": "keyword"},  # Store components as simple keywords
-                            "projectKey": {"type": "keyword"},
-                            "projectName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                            "authorUserName": {"type": "keyword"},
-                            "authorDisplayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                            "issue": {
-                                "properties": {
-                                    "id": {"type": "keyword"},  # Key fix - ensure issue.id is keyword for aggregations
-                                    "key": {"type": "keyword"},
-                                    "type": {
-                                        "properties": {
-                                            "name": {"type": "keyword"}
-                                        }
-                                    },
-                                    "status": {
-                                        "properties": {
-                                            "name": {"type": "keyword"}
-                                        }
-                                    }
-                                }
-                            },
-                            "project": {
-                                "properties": {
-                                    "key": {"type": "keyword"},
-                                    "name": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
-                                }
-                            },
-                            "author": {
-                                "properties": {
-                                    "username": {"type": "keyword"},
-                                    "displayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
-                                }
-                            },
-                            "assignee": {
-                                "properties": {
-                                    "username": {"type": "keyword"},
-                                    "displayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
-                                }
-                            },
-                            "reporter": {
-                                "properties": {
-                                    "username": {"type": "keyword"},
-                                    "displayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
-                                }
-                            },
-                            "allocation": {
-                                "properties": {
-                                    "code": {"type": "keyword"},
-                                    "name": {"type": "keyword"}
-                                }
-                            },
-                            "parentKey": {"type": "keyword"},
-                            "changes": {
-                                "type": "nested",
-                                "properties": {
-                                    "field": {"type": "keyword"},
-                                    "from": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                                    "to": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
-                                }
-                            }
-                        }
-                    },
-                    "settings": {
-                        "number_of_shards": 1,
-                        "number_of_replicas": 0
-                    }
-                }
-                
-                # Create the index using requests
-                create_response = requests.put(
-                    f"{base_url}/{INDEX_CHANGELOG}", 
-                    headers=headers,
-                    json=changelog_mapping
-                )
-                
-                if create_response.status_code >= 200 and create_response.status_code < 300:
-                    logger.info(f"Created {INDEX_CHANGELOG} index successfully")
-                else:
-                    error_detail = create_response.text
-                    logger.error(f"Error creating {INDEX_CHANGELOG} index: {create_response.status_code} - {error_detail}")
-                    return False
-            elif check_response.status_code != 200:
-                logger.error(f"Error checking if {INDEX_CHANGELOG} exists: {check_response.status_code}")
-                return False
-            else:
-                logger.info(f"Index {INDEX_CHANGELOG} already exists")
-            
-            # Check if the settings index exists
-            check_response = requests.head(f"{base_url}/{INDEX_SETTINGS}", headers=headers)
-            
-            if check_response.status_code == 404:
-                logger.info(f"Index {INDEX_SETTINGS} does not exist, creating it")
-                
-                # Define a simpler mapping for settings
-                settings_mapping = {
-                    "mappings": {
-                        "properties": {
-                            "agent_name": {"type": "keyword"},
-                            "last_sync_date": {"type": "date"},
-                            "last_updated": {"type": "date"}
-                        }
-                    },
-                    "settings": {
-                        "number_of_shards": 1,
-                        "number_of_replicas": 0
-                    }
-                }
-                
-                # Create the index using requests
-                create_response = requests.put(
-                    f"{base_url}/{INDEX_SETTINGS}", 
-                    headers=headers,
-                    json=settings_mapping
-                )
-                
-                if create_response.status_code >= 200 and create_response.status_code < 300:
-                    logger.info(f"Created {INDEX_SETTINGS} index successfully")
-                else:
-                    error_detail = create_response.text
-                    logger.error(f"Error creating {INDEX_SETTINGS} index: {create_response.status_code} - {error_detail}")
-                    return False
-            elif check_response.status_code != 200:
-                logger.error(f"Error checking if {INDEX_SETTINGS} exists: {check_response.status_code}")
-                return False
-            else:
-                logger.info(f"Index {INDEX_SETTINGS} already exists")
-                
             return True
         except Exception as e:
-            logger.error(f"Error creating indices: {e}")
+            logging.error(f"Error creating indices: {e}")
             return False
     
     def get_last_sync_date(self):
@@ -917,6 +772,96 @@ class JiraElasticsearchPopulator:
         except Exception as e:
             logger.error(f"Error updating field mapping: {e}")
             return False
+
+    def prepare_changelog_document(self, issue_key, history):
+        """Prepare a document for the changelog index, with improved searchability."""
+        # Get issue summary from Jira if needed
+        issue_summary = ""
+        try:
+            # Try to get summary from Jira service if needed
+            issue_data = self.jira_service.get_issue(issue_key)
+            if issue_data and 'fields' in issue_data and 'summary' in issue_data['fields']:
+                issue_summary = issue_data['fields']['summary']
+        except Exception as e:
+            logger.warning(f"Could not get summary for issue {issue_key}: {e}")
+        
+        # Calculate working days if possible
+        working_days = None
+        try:
+            # Calculate working days between creation and the history date
+            issue_data = self.jira_service.get_issue(issue_key)
+            if issue_data and 'fields' in issue_data and 'created' in issue_data['fields']:
+                created_date = parse_date_with_timezone(issue_data['fields']['created'])
+                history_date = parse_date_with_timezone(history["created"])
+                
+                # Simple calculation (excluding weekends)
+                delta = history_date - created_date
+                working_days = max(0, delta.days - (delta.days // 7) * 2)
+                
+                # If created_date is on weekend, adjust accordingly
+                created_weekday = created_date.weekday()
+                if created_weekday > 4:  # 5=Saturday, 6=Sunday
+                    working_days -= (6 - created_weekday)
+        except Exception as e:
+            logger.warning(f"Could not calculate working days for issue {issue_key}: {e}")
+            
+        doc = {
+            "historyId": history["id"],
+            "historyDate": history["created"],
+            "@timestamp": history["created"],
+            "issueKey": issue_key,
+            "factType": "HISTORY"
+        }
+        
+        # Add summary if available
+        if issue_summary:
+            doc["summary"] = issue_summary
+            
+        # Add working days if calculated
+        if working_days is not None:
+            doc["workingDaysFromCreation"] = working_days
+            
+        # Extract specific fields for better searchability
+        description_text = ""
+        comment_text = ""
+        status_change = ""
+        assignee_change = ""
+        
+        # Process each change item
+        for item in history.get("items", []):
+            change = {
+                "field": item.get("field"),
+                "fieldtype": item.get("fieldtype"),
+                "from": item.get("from"),
+                "fromString": item.get("fromString"),
+                "to": item.get("to"),
+                "toString": item.get("toString")
+            }
+            
+            # Add to changes list
+            doc.setdefault("changes", []).append(change)
+            
+            # Extract specific fields for better searchability
+            if item.get("field") == "description":
+                description_text = item.get("toString", "")
+            elif item.get("field") == "comment":
+                comment_text = item.get("toString", "")
+            elif item.get("field") == "status":
+                status_change = f"{item.get('fromString', '')} → {item.get('toString', '')}"
+            elif item.get("field") == "assignee":
+                assignee_change = f"{item.get('fromString', '')} → {item.get('toString', '')}"
+            
+        # Add extracted fields for better searchability
+        if description_text:
+            doc["description_text"] = description_text
+        if comment_text:
+            doc["comment_text"] = comment_text
+        if status_change:
+            doc["status_changes"] = status_change
+        if assignee_change:
+            doc["assignee_changes"] = assignee_change
+            
+        return doc
             
 # Example usage
 if __name__ == "__main__":

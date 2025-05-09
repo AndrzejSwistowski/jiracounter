@@ -3,15 +3,19 @@ Jira Service module for JiraCounter application.
 
 This module provides functionality to connect to the JIRA server and interact with the Jira API.
 It uses the JIRA API token for authentication, with credentials retrieved from the config module.
+
+All data is returned in ISO8601 format with timezone information.
 """
 
 import logging
 from typing import Optional, Dict, List, Any
 from jira import JIRA
 import config
-import dateutil.parser
 from datetime import datetime, timedelta
-from utils import calculate_days_since_date, parse_date_with_timezone, APP_TIMEZONE, format_date_for_jql
+from time_utils import (
+    to_iso8601, parse_date, calculate_working_days_between, now, format_for_jql,
+    find_status_change_date, find_first_status_change_date, calculate_days_since_date
+)
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL))
@@ -87,7 +91,8 @@ class JiraService:
             status_change_date_raw = getattr(issue.fields, data_zmiany_statusu_field, None)
             if status_change_date_raw:
                 try:
-                    status_change_date = dateutil.parser.parse(status_change_date_raw).strftime("%Y-%m-%d %H:%M:%S")
+                    # Use our utility to ensure ISO8601 format
+                    status_change_date = to_iso8601(status_change_date_raw)
                 except (ValueError, TypeError):
                     logger.debug(f"Could not parse 'data zmiany statusu' date: {status_change_date_raw}")
         
@@ -155,7 +160,7 @@ class JiraService:
                 logger.debug(f"Error retrieving parent issue to check for epic: {e}")
             
         # Add fields specific to get_issue method
-        created_date = issue.fields.created
+        created_date = to_iso8601(issue.fields.created)
         
         # Extract basic issue data
         issue_data = {
@@ -173,11 +178,9 @@ class JiraService:
             "allocation_code": allocation_code,
             "parent_issue": parent_issue,
             "epic_issue": epic_issue,
-            "updated": issue.fields.updated,
+            "updated": to_iso8601(issue.fields.updated),
             "created": created_date,
-            "created_date": dateutil.parser.parse(created_date).strftime("%Y-%m-%d %H:%M:%S"),
-            "days_since_creation": calculate_days_since_date(created_date),
-         
+            "days_since_creation": calculate_working_days_between(parse_date(created_date), now()),
         }
         
         return issue_data
@@ -295,16 +298,13 @@ class JiraService:
             # Get basic issue data
             issue_data = self._extract_issue_data(issue)
             
-            # Import utility functions for working days calculations
-            from utils import calculate_working_days_between, find_status_change_date, find_first_status_change_date
-            
             changelog_entries = []
             status_change_history = []
             
             # Process creation record
-            created_date = parse_date_with_timezone(issue.fields.created)
+            created_date = parse_date(issue.fields.created)
             issue_creation_date = created_date
-            current_date = datetime.now(APP_TIMEZONE)
+            current_date = now()
             
             # Calculate working days since creation
             working_days_from_creation = calculate_working_days_between(issue_creation_date, current_date)
@@ -312,7 +312,7 @@ class JiraService:
             # Create a history record for the issue creation
             creation_record = {
                 'historyId': int(f"{issue.id}00000"),  # Use a synthetic ID for creation
-                'historyDate': created_date.isoformat(),  # Store as ISO8601 format with timezone
+                'historyDate': to_iso8601(created_date),  # Store as ISO8601 format with timezone
                 'factType': 1,  # 1 = create
                 'issueId': issue.id,
                 'issueKey': issue_key,
@@ -338,7 +338,8 @@ class JiraService:
                 'workingDaysInStatus': 0,      # Just created, so 0 days in status
                 'workingDaysFromMove': None,    # No status change yet
                 "status_change_date": issue_data['status_change_date'],
-                "created_date": issue_data['created_date']
+                "created": issue_data['created'],
+                "updated": issue_data['updated']
             }
             
             changelog_entries.append(creation_record)
@@ -356,7 +357,7 @@ class JiraService:
                 for history in histories:
                     for item in history.items:
                         if item.field == 'status' and item.toString == status_name:
-                            status_change_date = parse_date_with_timezone(history.created)
+                            status_change_date = parse_date(history.created)
                             break
                     if status_change_date:
                         break
@@ -367,7 +368,7 @@ class JiraService:
                 
                 # Extract all changelog entries for further analysis
                 for history in histories:
-                    history_date = parse_date_with_timezone(history.created)
+                    history_date = parse_date(history.created)
                     changes = []
                     for item in history.items:
                         changes.append({
@@ -379,7 +380,7 @@ class JiraService:
                         'historyDate': history_date,
                         'changes': changes
                     })
-                
+                    
                 # Set initial todo_exit_date to None (will be populated with first status change)
                 todo_exit_date = None
                 initial_status_found = False
@@ -411,7 +412,7 @@ class JiraService:
                     author = history.author.displayName if hasattr(history.author, 'displayName') else history.author.name
                     author_username = history.author.name if hasattr(history.author, 'name') else history.author.accountId
                     created = history.created
-                    history_date = parse_date_with_timezone(created)
+                    history_date = parse_date(created)
                     changes = []
                     
                     # Determine fact type (default to update)
@@ -452,7 +453,7 @@ class JiraService:
                     
                     history_record = {
                         'historyId': int(history.id),
-                        'historyDate': history_date.isoformat(),
+                        'historyDate': to_iso8601(history_date),
                         'factType': fact_type,
                         'issueId': issue.id,
                         'issueKey': issue_key,
@@ -476,7 +477,10 @@ class JiraService:
                         'epic_issue': issue_data.get('epic_issue'),
                         'workingDaysFromCreation': working_days_from_creation_at_point,
                         'workingDaysInStatus': working_days_in_status_at_point,
-                        'workingDaysFromMove': working_days_from_move_at_point
+                        'workingDaysFromMove': working_days_from_move_at_point,
+                        "status_change_date": issue_data['status_change_date'],
+                        "created": issue_data['created'],
+                        "updated": issue_data['updated']
                     }
                     
                     changelog_entries.append(history_record)
@@ -496,10 +500,6 @@ class JiraService:
     def get_issue_history(self, start_date=None, end_date=None, max_issues=None) -> List[Dict[str, Any]]:
         """Retrieve issue history records for issues updated within a date range.
         
-        This method retrieves issues updated within the specified date range and
-        extracts their changelog entries for storage in a data warehouse or
-        Elasticsearch index.
-        
         Args:
             start_date: The start date for the search (datetime or str)
             end_date: The end date for the search (datetime or str)
@@ -508,33 +508,19 @@ class JiraService:
         Returns:
             List of history records with standardized format
         """
-        # Format dates for JQL consistently using utils function
+        # Format dates for JQL consistently using time_utils function
         if start_date:
-            if isinstance(start_date, str):
-                start_date = parse_date_with_timezone(start_date)
-            elif start_date.tzinfo is None:
-                start_date = start_date.replace(tzinfo=APP_TIMEZONE)
-            
-            # Format to "yyyy-MM-dd HH:mm" instead of including seconds
-            start_str = start_date.strftime("%Y-%m-%d %H:%M")
+            start_str = format_for_jql(start_date)
         else:
             # Default to 7 days ago if no start date provided
-            start_date = datetime.now(APP_TIMEZONE) - timedelta(days=7)
-            # Format to "yyyy-MM-dd HH:mm" instead of including seconds
-            start_str = start_date.strftime("%Y-%m-%d %H:%M")
+            start_date = now() - timedelta(days=7)
+            start_str = format_for_jql(start_date)
             
         if end_date:
-            if isinstance(end_date, str):
-                end_date = parse_date_with_timezone(end_date)
-            elif end_date.tzinfo is None:
-                end_date = end_date.replace(tzinfo=APP_TIMEZONE)
-                
-            # Format to "yyyy-MM-dd HH:mm" instead of including seconds
-            end_str = end_date.strftime("%Y-%m-%d %H:%M")
+            end_str = format_for_jql(end_date)
         else:
-            end_date = datetime.now(APP_TIMEZONE)
-            # Format to "yyyy-MM-dd HH:mm" instead of including seconds
-            end_str = end_date.strftime("%Y-%m-%d %H:%M")
+            end_date = now()
+            end_str = format_for_jql(end_date)
             
         logger.info(f"Retrieving issues updated between {start_str} and {end_str}")
         
