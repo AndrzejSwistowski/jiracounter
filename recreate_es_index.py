@@ -3,6 +3,17 @@
 Script to recreate the Elasticsearch index with the correct mapping.
 This is used to fix issues with the components field and other mapping problems.
 
+During development mode, it's preferable to recreate the entire index from scratch
+rather than using field mapping updates. This approach ensures:
+  - A clean state without potential mapping conflicts
+  - Consistent schema across environments
+  - Avoidance of mapping incompatibilities that can occur with incremental updates
+  - Simpler debugging and testing with known index states
+
+While production systems may require careful incremental mapping updates to avoid
+data loss, development environments benefit from the simplicity and reliability
+of complete index recreation.
+
 Usage:
   python recreate_es_index.py [options]
 

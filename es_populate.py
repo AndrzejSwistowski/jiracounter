@@ -738,67 +738,6 @@ class JiraElasticsearchPopulator:
             logger.error(f"Error getting database summary: {e}")
             return None
 
-    def update_field_mapping(self):
-        """
-        Updates the field mapping in an existing index to enable fielddata for text fields used in aggregations.
-        This allows aggregations on fields that were previously not configured for it.
-        """
-        try:
-            # Use the requests library which we know works with your setup
-            import requests
-            
-            # Build base URL
-            if self.url:
-                base_url = self.url.rstrip('/')
-            else:
-                base_url = f'{"https" if self.use_ssl else "http"}://{self.host}:{self.port}'
-                
-            # Prepare headers with API key authentication
-            headers = {"Content-Type": "application/json"}
-            if self.api_key:
-                headers["Authorization"] = f"ApiKey {self.api_key}"
-            
-            # Update mapping to enable fielddata on issue.id field and other fields used in aggregations
-            mapping_update = {
-                "properties": {
-                    "issue": {
-                        "properties": {
-                            "id": {
-                                "type": "text",
-                                "fielddata": True
-                            }
-                        }
-                    },
-                    "project": {
-                        "properties": {
-                            "key": {
-                                "type": "text",
-                                "fielddata": True
-                            }
-                        }
-                    }
-                }
-            }
-            
-            # Apply the mapping update
-            update_response = requests.put(
-                f"{base_url}/{INDEX_CHANGELOG}/_mapping",
-                headers=headers,
-                json=mapping_update
-            )
-            
-            if update_response.status_code >= 200 and update_response.status_code < 300:
-                logger.info(f"Successfully updated mapping for {INDEX_CHANGELOG} index")
-                return True
-            else:
-                error_detail = update_response.text
-                logger.error(f"Error updating mapping: {update_response.status_code} - {error_detail}")
-                return False
-                
-        except Exception as e:
-            logger.error(f"Error updating field mapping: {e}")
-            return False
-
     def prepare_changelog_document(self, issue_key, history):
         """Prepare a document for the changelog index, with improved searchability."""
         # Get issue summary from Jira if needed
