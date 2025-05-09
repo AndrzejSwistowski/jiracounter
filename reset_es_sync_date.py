@@ -183,6 +183,7 @@ def main():
     parser.add_argument("--delete", action="store_true", help="Delete the settings document instead of updating it")
     parser.add_argument("--agent", type=str, default=AGENT_NAME, help=f"Agent name in settings index (default: {AGENT_NAME})")
     parser.add_argument("--date", type=str, help="Specific date to set (format: YYYY-MM-DDTHH:MM:SS, overrides --days)")
+    parser.add_argument("--yes", action="store_true", help="Skip confirmation prompt")
     
     args = parser.parse_args()
     
@@ -208,16 +209,17 @@ def main():
             logger.info(f"Will reset sync date to specified date: {new_date}")
         
         # Confirm action with the user
-        if args.delete:
-            action = "delete the settings document"
-        else:
-            action = f"reset the sync date to {new_date}"
+        if not args.yes:
+            if args.delete:
+                action = "delete the settings document"
+            else:
+                action = f"reset the sync date to {new_date}"
+                
+            confirm = input(f"Are you sure you want to {action}? (y/n): ")
             
-        confirm = input(f"Are you sure you want to {action}? (y/n): ")
-        
-        if confirm.lower() != 'y':
-            logger.info("Operation cancelled by user")
-            return False
+            if confirm.lower() != 'y':
+                logger.info("Operation cancelled by user")
+                return False
         
         # Reset the sync date
         success = reset_sync_date(es, doc_id, new_date, args.delete, args.agent)

@@ -50,19 +50,50 @@ CHANGELOG_MAPPING = {
                 "type": "nested",
                 "properties": {
                     "field": {"type": "keyword"},
-                    "from": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-                    "to": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
+                    "from": {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 8191}}},
+                    "to": {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 8191}}}
                 }
             },
             # Fields for specific content to make them searchable
-            "description_text": {"type": "text"},
-            "comment_text": {"type": "text"},
+            "description_text": {
+                "type": "text",
+                "analyzer": "standard", 
+                "index_options": "positions",
+                "fields": {
+                    "keyword": {"type": "keyword", "ignore_above": 32766}
+                }
+            },
+            "comment_text": {
+                "type": "text",
+                "analyzer": "standard",
+                "index_options": "positions",
+                "fields": {
+                    "keyword": {"type": "keyword", "ignore_above": 32766}
+                }
+            },
             "status_changes": {"type": "keyword"},
             "assignee_changes": {"type": "keyword"},
             "created": {"type": "date"},
             "updated": {"type": "date"},
             "status_change_date": {"type": "date"}
-        }
+        },
+        "dynamic_templates": [
+            {
+                "text_fields": {
+                    "match_mapping_type": "string",
+                    "mapping": {
+                        "type": "text",
+                        "index_options": "positions",
+                        "fields": {
+                            "keyword": {
+                                "type": "keyword",
+                                "ignore_above": 8191
+                            }
+                        }
+                    }
+                }
+            }
+        ]
     }
 }
 

@@ -293,7 +293,8 @@ class JiraService:
             
         jira = self.connect()
         try:
-            issue = jira.issue(issue_key, expand='changelog')
+            # Expand both changelog and comments
+            issue = jira.issue(issue_key, expand='changelog,comment')
             
             # Get basic issue data
             issue_data = self._extract_issue_data(issue)
@@ -308,6 +309,50 @@ class JiraService:
             
             # Calculate working days since creation
             working_days_from_creation = calculate_working_days_between(issue_creation_date, current_date)
+            
+            # Extract description content if it exists
+            description_text = None
+            if hasattr(issue.fields, 'description') and issue.fields.description:
+                # Handle potentially large description text
+                try:
+                    description_text = issue.fields.description
+                    # If description is very large, truncate it in logs to avoid log bloat
+                    log_desc = description_text[:100] + "..." if len(description_text) > 100 else description_text
+                    logger.debug(f"Found description for issue {issue_key}: {log_desc}")
+                except Exception as e:
+                    logger.warning(f"Error processing description for {issue_key}: {e}")
+            
+            # Extract comments if they exist
+            comment_text = None
+            if hasattr(issue.fields, 'comment') and hasattr(issue.fields.comment, 'comments'):
+                try:
+                    # Combine all comments into a single text field
+                    all_comments = []
+                    for comment in issue.fields.comment.comments:
+                        if hasattr(comment, 'body') and comment.body:
+                            comment_date = to_iso8601(comment.created) if hasattr(comment, 'created') else 'unknown'
+                            author = comment.author.displayName if hasattr(comment, 'author') and hasattr(comment.author, 'displayName') else 'unknown'
+                            comment_str = f"[{comment_date} by {author}] {comment.body}"
+                            all_comments.append(comment_str)
+                    
+                    if all_comments:
+                        comment_text = "\n\n".join(all_comments)
+                        logger.debug(f"Found {len(all_comments)} comments for issue {issue_key}")
+                except Exception as e:
+                    logger.warning(f"Error processing comments for {issue_key}: {e}")
+            
+            # Create changes list for creation record
+            creation_changes = []
+            
+            # Add description as a change item if it exists
+            if description_text:
+                creation_changes.append({
+                    'field': 'description',
+                    'fieldtype': 'jira',
+                    'from': None,
+                    'to': description_text
+                })
+                logger.debug(f"Added initial description to changes for issue {issue_key} (length: {len(description_text)})")
             
             # Create a history record for the issue creation
             creation_record = {
@@ -328,7 +373,7 @@ class JiraService:
                 'parentKey': issue_data.get('parent_issue', {}).get('key') if issue_data.get('parent_issue') else None,
                 'authorUserName': issue_data['reporter'],
                 'authorDisplayName': issue_data['reporter'],
-                'changes': [],
+                'changes': creation_changes,  # Include description as a change if it exists
                 'summary': issue_data['summary'],
                 'labels': issue_data['labels'],
                 'components': issue_data['components'],
@@ -339,7 +384,9 @@ class JiraService:
                 'workingDaysFromMove': None,    # No status change yet
                 "status_change_date": issue_data['status_change_date'],
                 "created": issue_data['created'],
-                "updated": issue_data['updated']
+                "updated": issue_data['updated'],
+                "description_text": description_text,  # Add description text field directly
+                "comment_text": comment_text       # Add comments text field
             }
             
             changelog_entries.append(creation_record)
@@ -480,7 +527,9 @@ class JiraService:
                         'workingDaysFromMove': working_days_from_move_at_point,
                         "status_change_date": issue_data['status_change_date'],
                         "created": issue_data['created'],
-                        "updated": issue_data['updated']
+                        "updated": issue_data['updated'],
+                        "description_text": description_text,  # Add description text to all records
+                        "comment_text": comment_text       # Add comments to all records
                     }
                     
                     changelog_entries.append(history_record)

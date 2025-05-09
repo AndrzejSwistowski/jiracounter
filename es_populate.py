@@ -862,6 +862,33 @@ class JiraElasticsearchPopulator:
             doc["assignee_changes"] = assignee_change
             
         return doc
+
+    def transform_record_for_elasticsearch(self, record):
+        """Transform a JIRA record to the format needed for Elasticsearch."""
+        es_record = record.copy()  # Start with a copy of the original record
+        
+        # Extract description text for indexing
+        description_text = None
+        
+        # Check if there's a direct description_text field
+        if 'description_text' in record:
+            description_text = record['description_text']
+        
+        # If no direct field, check changes for description
+        if not description_text:
+            for change in record.get('changes', []):
+                if change.get('field') == 'description' and change.get('to'):
+                    description_text = change.get('to')
+                    break
+        
+        # Add the extracted description text
+        if description_text:
+            es_record['description_text'] = description_text
+        
+        # Continue with other transformations...
+        # ...existing code...
+        
+        return es_record
             
 # Example usage
 if __name__ == "__main__":
