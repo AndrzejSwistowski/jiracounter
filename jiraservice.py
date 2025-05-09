@@ -292,12 +292,105 @@ class JiraService:
         try:
             issue = jira.issue(issue_key, expand='changelog')
             
+            # Get basic issue data
+            issue_data = self._extract_issue_data(issue)
+            
+            # Import utility functions for working days calculations
+            from utils import calculate_working_days_between, find_status_change_date, find_first_status_change_date
+            
             changelog_entries = []
+            status_change_history = []
+            
+            # Process creation record
+            created_date = parse_date_with_timezone(issue.fields.created)
+            issue_creation_date = created_date
+            current_date = datetime.now(APP_TIMEZONE)
+            
+            # Calculate working days since creation
+            working_days_from_creation = calculate_working_days_between(issue_creation_date, current_date)
+            
+            # Create a history record for the issue creation
+            creation_record = {
+                'historyId': int(f"{issue.id}00000"),  # Use a synthetic ID for creation
+                'historyDate': created_date.isoformat(),  # Store as ISO8601 format with timezone
+                'factType': 1,  # 1 = create
+                'issueId': issue.id,
+                'issueKey': issue_key,
+                'typeName': issue_data['type'],
+                'statusName': 'Open',  # Assume issues start as Open
+                'assigneeUserName': issue_data['assignee'],
+                'assigneeDisplayName': issue_data['assignee'],
+                'reporterUserName': issue_data['reporter'],
+                'reporterDisplayName': issue_data['reporter'],
+                'allocationCode': issue_data.get('allocation_code'),
+                'projectKey': issue.fields.project.key,
+                'projectName': issue.fields.project.name,
+                'parentKey': issue_data.get('parent_issue', {}).get('key') if issue_data.get('parent_issue') else None,
+                'authorUserName': issue_data['reporter'],
+                'authorDisplayName': issue_data['reporter'],
+                'changes': [],
+                'summary': issue_data['summary'],
+                'labels': issue_data['labels'],
+                'components': issue_data['components'],
+                'parent_issue': issue_data.get('parent_issue'),
+                'epic_issue': issue_data.get('epic_issue'),
+                'workingDaysFromCreation': 0,  # Just created, so 0 days
+                'workingDaysInStatus': 0,      # Just created, so 0 days in status
+                'workingDaysFromMove': None    # No status change yet
+            }
+            
+            changelog_entries.append(creation_record)
+            
+            # Extract and process changelog information
             if hasattr(issue, 'changelog') and hasattr(issue.changelog, 'histories'):
-                for history in issue.changelog.histories:
-                    author = history.author.displayName if hasattr(history.author, 'displayName') else history.author.name
-                    created = history.created
+                histories = list(issue.changelog.histories)
+                
+                # Get status information
+                status_name = issue_data['status']
+                
+                # Find when the issue entered its current status
+                status_change_date = None
+                working_days_in_status = None
+                
+                for history in histories:
+                    for item in history.items:
+                        if item.field == 'status' and item.toString == status_name:
+                            status_change_date = parse_date_with_timezone(history.created)
+                            break
+                    if status_change_date:
+                        break
+                
+                # If we found a status change date, calculate working days in status
+                if status_change_date:
+                    working_days_in_status = calculate_working_days_between(status_change_date, current_date)
+                
+                # Extract all changelog entries for further analysis
+                for history in histories:
+                    history_date = parse_date_with_timezone(history.created)
                     changes = []
+                    for item in history.items:
+                        changes.append({
+                            'field': item.field,
+                            'from': item.fromString,
+                            'to': item.toString
+                        })
+                    status_change_history.append({
+                        'historyDate': history_date,
+                        'changes': changes
+                    })
+                
+                
+                # Process each changelog history
+                for history in histories:
+                    author = history.author.displayName if hasattr(history.author, 'displayName') else history.author.name
+                    author_username = history.author.name if hasattr(history.author, 'name') else history.author.accountId
+                    created = history.created
+                    history_date = parse_date_with_timezone(created)
+                    changes = []
+                    
+                    # Determine fact type (default to update)
+                    fact_type = 3  # 3 = update
+                    
                     for item in history.items:
                         changes.append({
                             'field': item.field,
@@ -305,15 +398,66 @@ class JiraService:
                             'from': item.fromString,
                             'to': item.toString
                         })
+                        
+                        if item.field == 'status':
+                            fact_type = 2  # 2 = transition
                     
-                    changelog_entries.append({
-                        'id': history.id,  # Adding history ID to identify each change
-                        'author': author,
-                        'created': created,
-                        'created_date': dateutil.parser.parse(created).strftime("%Y-%m-%d %H:%M:%S"),
-                        'changes': changes
-                    })
-                
+                    # Calculate time-based metrics as of this history point
+                    working_days_from_creation_at_point = calculate_working_days_between(issue_creation_date, history_date)
+                    
+                    # For each history point, determine how long it had been in the current status
+                    status_in_this_history = status_name  # Default to current status
+                    working_days_in_status_at_point = working_days_in_status
+                    
+                    # Check if this history changes the status
+                    for change in changes:
+                        if change['field'] == 'status':
+                            # If this is a status change, find how long it was in the previous status
+                            previous_status_change = find_status_change_date(status_change_history, change['from'], None)
+                            if previous_status_change:
+                                working_days_in_status_at_point = calculate_working_days_between(previous_status_change, history_date)
+                            status_in_this_history = change['to']
+                            break
+                            
+                    # Calculate working days from first status change at this history point
+                    working_days_from_move_at_point = None
+                    if todo_exit_date and history_date >= todo_exit_date:
+                        working_days_from_move_at_point = calculate_working_days_between(todo_exit_date, history_date)
+                    
+                    history_record = {
+                        'historyId': int(history.id),
+                        'historyDate': history_date.isoformat(),
+                        'factType': fact_type,
+                        'issueId': issue.id,
+                        'issueKey': issue_key,
+                        'typeName': issue_data['type'],
+                        'statusName': status_in_this_history,
+                        'assigneeUserName': issue_data['assignee'],
+                        'assigneeDisplayName': issue_data['assignee'],
+                        'reporterUserName': issue_data['reporter'],
+                        'reporterDisplayName': issue_data['reporter'],
+                        'allocationCode': issue_data.get('allocation_code'),
+                        'projectKey': issue.fields.project.key,
+                        'projectName': issue.fields.project.name,
+                        'parentKey': issue_data.get('parent_issue', {}).get('key') if issue_data.get('parent_issue') else None,
+                        'authorUserName': author_username,
+                        'authorDisplayName': author,
+                        'changes': changes,
+                        'summary': issue_data['summary'],
+                        'labels': issue_data['labels'],
+                        'components': issue_data['components'],
+                        'parent_issue': issue_data.get('parent_issue'),
+                        'epic_issue': issue_data.get('epic_issue'),
+                        'workingDaysFromCreation': working_days_from_creation_at_point,
+                        'workingDaysInStatus': working_days_in_status_at_point,
+                        'workingDaysFromMove': working_days_from_move_at_point
+                    }
+                    
+                    changelog_entries.append(history_record)
+            
+            # Sort by history date
+            changelog_entries.sort(key=lambda x: x['historyDate'])
+            
             return changelog_entries
             
         except ConnectionError as e:
@@ -338,8 +482,6 @@ class JiraService:
         Returns:
             List of history records with standardized format
         """
-        jira = self.connect()
-        
         # Format dates for JQL consistently using utils function
         if start_date:
             if isinstance(start_date, str):
@@ -370,238 +512,28 @@ class JiraService:
         jql = f'updated >= "{start_str}" AND updated <= "{end_str}" ORDER BY updated ASC'
         
         try:
-            # Get all issues updated in the date range
-            all_issues = []
-            
-            # JIRA API typically limits each request to 100 items
-            page_size = 100
-            start_at = 0
-            
-            while True:
-                # Fetch the current page of results
-                logger.debug(f"Fetching issues starting at {start_at} with page size {page_size}")
-                issues_page = jira.search_issues(
-                    jql, 
-                    startAt=start_at, 
-                    maxResults=page_size,
-                    fields="key,issuetype,status,project,summary,assignee,reporter,created,updated"
-                )
-                
-                # If no more results, break the loop
-                if len(issues_page) == 0:
-                    break
-                    
-                # Add the issues to our list
-                all_issues.extend(issues_page)
-                
-                # If we got fewer results than requested, there are no more results
-                if len(issues_page) < page_size:
-                    break
-                    
-                # Update the starting point for the next iteration
-                start_at += len(issues_page)
-                
-                # Check if we've reached the maximum allowed total
-                if max_issues and len(all_issues) >= max_issues:
-                    logger.info(f"Reached maximum issue limit of {max_issues}.")
-                    break
-            
-            logger.info(f"Found {len(all_issues)} issues updated in the specified date range")
+            # Use search_issues method to get issues instead of direct connection
+            issues = self.search_issues(jql, max_issues=max_issues)
+            logger.info(f"Found {len(issues)} issues updated in the specified date range")
             
             # Process each issue to extract history records
             all_history_records = []
             
-            for issue in all_issues:
-                issue_key = issue.key
+            for issue_data in issues:
+                issue_key = issue_data['key']
                 logger.debug(f"Processing changelog for issue {issue_key}")
                 
-                # Get the issue with expanded changelog
-                issue_with_changelog = jira.issue(issue_key, expand="changelog")
+                # Get detailed changelog using the enhanced get_issue_changelog method
+                issue_history = self.get_issue_changelog(issue_key)
                 
-                # Extract basic issue information using the existing method
-                issue_data = self._extract_issue_data(issue_with_changelog)
+                # Don't filter history records by date - include all history
+                # This ensures we don't miss any records that might have been 
+                # updated during processing or that belong to a previous period
+                # The consumer of this data can handle deduplication as needed
+                all_history_records.extend(issue_history)
                 
-                # Extract fields we need for the history record
-                issue_type = issue_data['type']
-                status_name = issue_data['status']
-                project_key = issue_data['projectKey'] if 'projectKey' in issue_data else issue.fields.project.key
-                project_name = issue_data['projectName'] if 'projectName' in issue_data else issue.fields.project.name
-                summary = issue_data['summary']
-                labels = issue_data['labels']
-                components = issue_data['components']
-                allocation_code = issue_data.get('allocation_code')
-                parent_key = issue_data.get('parentKey')
-                
-                # Process issue's changelog to extract additional time-based information
-                # Ensure the creation date is parsed with timezone information
-                issue_creation_date = parse_date_with_timezone(issue.fields.created)
-                current_date = datetime.now(APP_TIMEZONE)
-                
-                # Import utility functions for working days calculations
-                from utils import calculate_working_days_between, find_status_change_date, find_first_status_change_date
-                
-                # Calculate working days since creation
-                working_days_from_creation = calculate_working_days_between(issue_creation_date, current_date)
-                
-                # Find when the issue entered its current status
-                status_change_date = None
-                status_change_history = []
-                working_days_in_status = None
-                
-                if hasattr(issue_with_changelog, 'changelog') and hasattr(issue_with_changelog.changelog, 'histories'):
-                    histories = list(issue_with_changelog.changelog.histories)
-                    for history in histories:
-                        for item in history.items:
-                            if item.field == 'status' and item.toString == status_name:
-                                status_change_date = parse_date_with_timezone(history.created)
-                                break
-                        if status_change_date:
-                            break
-                
-                    # If we found a status change date, calculate working days in status
-                    if status_change_date:
-                        working_days_in_status = calculate_working_days_between(status_change_date, current_date)
-                    
-                    # Extract all changelog entries for further analysis
-                    for history in histories:
-                        history_date = parse_date_with_timezone(history.created)
-                        changes = []
-                        for item in history.items:
-                            changes.append({
-                                'field': item.field,
-                                'from': item.fromString,
-                                'to': item.toString
-                            })
-                        status_change_history.append({
-                            'historyDate': history_date,
-                            'changes': changes
-                        })
-                
-                # Find when the issue moved out of To Do (or equivalent starting status)
-                todo_exit_date = find_first_status_change_date(status_change_history)
-                working_days_from_todo = None
-                if todo_exit_date:
-                    working_days_from_todo = calculate_working_days_between(todo_exit_date, current_date)
-                
-                # Process creation record
-                created_date = parse_date_with_timezone(issue.fields.created)
-                
-                # Create a history record for the issue creation
-                creation_record = {
-                    'historyId': int(f"{issue.id}00000"),  # Use a synthetic ID for creation
-                    'historyDate': created_date.isoformat(),  # Store as ISO8601 format with timezone
-                    'factType': 0,  # 0 = create
-                    'issueId': issue.id,
-                    'issueKey': issue_key,
-                    'typeName': issue_type,
-                    'statusName': 'Open',  # Assume issues start as Open
-                    'assigneeUserName': issue_data['assignee'],
-                    'assigneeDisplayName': issue_data['assignee'],
-                    'reporterUserName': issue_data['reporter'],
-                    'reporterDisplayName': issue_data['reporter'],
-                    'allocationCode': allocation_code,
-                    'projectKey': project_key,
-                    'projectName': project_name,
-                    'parentKey': parent_key,
-                    'authorUserName': issue_data['reporter'],
-                    'authorDisplayName': issue_data['reporter'],
-                    'changes': [],
-                    'summary': summary,
-                    'labels': labels,
-                    'components': components,
-                    'parent_issue': issue_data.get('parent_issue'),
-                    'epic_issue': issue_data.get('epic_issue'),
-                    'workingDaysFromCreation': 0,  # Just created, so 0 days
-                    'workingDaysInStatus': 0,      # Just created, so 0 days in status
-                    'workingDaysFromMove': None    # No status change yet
-                }
-                
-                # Only add creation record if it's within our date range
-                if start_date is None or created_date >= start_date:
-                    all_history_records.append(creation_record)
-                
-                # Process changelog entries
-                if hasattr(issue_with_changelog, 'changelog') and hasattr(issue_with_changelog.changelog, 'histories'):
-                    for history in issue_with_changelog.changelog.histories:
-                        history_date = parse_date_with_timezone(history.created)
-                        
-                        # Skip records outside our date range
-                        if (start_date and history_date < start_date) or (end_date and history_date > end_date):
-                            logger.info(f"Skipping history record outside date range: {history_date, start_date, end_date, history}")
-                            continue
-                            
-                        # Determine fact type (default to update)
-                        fact_type = 3  # 3 = update
-                        
-                        # Check if this is a status change
-                        changes = []
-                        for item in history.items:
-                            changes.append({
-                                'field': item.field,
-                                'from': item.fromString,
-                                'to': item.toString
-                            })
-                            
-                            if item.field == 'status':
-                                fact_type = 2  # 2 = transition
-                        
-                        # Get author information
-                        author_username = history.author.name if hasattr(history.author, 'name') else history.author.accountId
-                        author_display = history.author.displayName if hasattr(history.author, 'displayName') else None
-                        
-                        # Calculate time-based metrics as of this history point
-                        working_days_from_creation_at_point = calculate_working_days_between(issue_creation_date, history_date)
-                        
-                        # For each history point, determine how long it had been in the current status
-                        status_in_this_history = status_name  # Default to current status
-                        working_days_in_status_at_point = working_days_in_status
-                        
-                        # Check if this history changes the status
-                        for change in changes:
-                            if change['field'] == 'status':
-                                # If this is a status change, find how long it was in the previous status
-                                previous_status_change = find_status_change_date(status_change_history, change['from'], None)
-                                if previous_status_change:
-                                    working_days_in_status_at_point = calculate_working_days_between(previous_status_change, history_date)
-                                status_in_this_history = change['to']
-                                break
-                                
-                        # Calculate working days from first status change at this history point
-                        working_days_from_move_at_point = None
-                        if todo_exit_date and history_date >= todo_exit_date:
-                            working_days_from_move_at_point = calculate_working_days_between(todo_exit_date, history_date)
-                        
-                        # Create a history record
-                        history_record = {
-                            'historyId': int(history.id),
-                            'historyDate': history_date.isoformat(),  # Store as ISO8601 format with timezone
-                            'factType': fact_type,
-                            'issueId': issue.id,
-                            'issueKey': issue_key,
-                            'typeName': issue_type,
-                            'statusName': status_in_this_history,
-                            'summary': summary,  
-                            'labels': labels,    
-                            'components': components,  
-                            'assigneeUserName': issue_data['assignee'],
-                            'assigneeDisplayName': issue_data['assignee'],
-                            'reporterUserName': issue_data['reporter'],
-                            'reporterDisplayName': issue_data['reporter'],
-                            'allocationCode': allocation_code,
-                            'projectKey': project_key,
-                            'projectName': project_name,
-                            'parentKey': parent_key,
-                            'authorUserName': author_username,
-                            'authorDisplayName': author_display,
-                            'changes': changes,
-                            'parent_issue': issue_data.get('parent_issue'),
-                            'epic_issue': issue_data.get('epic_issue'),
-                            'workingDaysFromCreation': working_days_from_creation_at_point,
-                            'workingDaysInStatus': working_days_in_status_at_point,
-                            'workingDaysFromMove': working_days_from_move_at_point
-                        }
-                        
-                        all_history_records.append(history_record)
+                # Log the number of history records found for this issue
+                logger.debug(f"Found {len(issue_history)} history records for issue {issue_key}")
             
             # Sort by history date
             all_history_records.sort(key=lambda x: x['historyDate'])
