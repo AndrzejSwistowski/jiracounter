@@ -382,9 +382,9 @@ class JiraService:
                 'workingDaysFromCreation': 0,  # Just created, so 0 days
                 'workingDaysInStatus': 0,      # Just created, so 0 days in status
                 'workingDaysFromMove': None,    # No status change yet
-                "status_change_date": issue_data['status_change_date'],
-                "created": issue_data['created'],
-                "updated": issue_data['updated'],
+                "status_change_date": to_iso8601(issue_data['status_change_date']) if issue_data['status_change_date'] else None,
+                "created": to_iso8601(issue_data['created']) if issue_data['created'] else None,
+                "updated": to_iso8601(issue_data['updated']) if issue_data['updated'] else None,
                 "description_text": description_text,  # Add description text field directly
                 "comment_text": comment_text       # Add comments text field
             }
@@ -525,9 +525,9 @@ class JiraService:
                         'workingDaysFromCreation': working_days_from_creation_at_point,
                         'workingDaysInStatus': working_days_in_status_at_point,
                         'workingDaysFromMove': working_days_from_move_at_point,
-                        "status_change_date": issue_data['status_change_date'],
-                        "created": issue_data['created'],
-                        "updated": issue_data['updated'],
+                        "status_change_date": to_iso8601(issue_data['status_change_date']) if issue_data['status_change_date'] else None,
+                        "created": to_iso8601(issue_data['created']) if issue_data['created'] else None,
+                        "updated": to_iso8601(issue_data['updated']) if issue_data['updated'] else None,
                         "description_text": description_text,  # Add description text to all records
                         "comment_text": comment_text       # Add comments to all records
                     }

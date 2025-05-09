@@ -50,54 +50,20 @@ CHANGELOG_MAPPING = {
                 "type": "nested",
                 "properties": {
                     "field": {"type": "keyword"},
-                    "from": {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 8191}}},
-                    "to": {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 8191}}}
+                    "from": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                    "to": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
                 }
             },
-            # Fields for specific content to make them searchable
-            "description_text": {
-                "type": "text",
-                "analyzer": "standard", 
-                "index_options": "positions",
-                "fields": {
-                    "keyword": {"type": "keyword", "ignore_above": 32766}
-                }
-            },
-            "comment_text": {
-                "type": "text",
-                "analyzer": "standard",
-                "index_options": "positions",
-                "fields": {
-                    "keyword": {"type": "keyword", "ignore_above": 32766}
-                }
-            },
-            "status_changes": {"type": "keyword"},
-            "assignee_changes": {"type": "keyword"},
-            "created": {"type": "date"},
-            "updated": {"type": "date"},
-            "status_change_date": {"type": "date"}
-        },
-        "dynamic_templates": [
-            {
-                "text_fields": {
-                    "match_mapping_type": "string",
-                    "mapping": {
-                        "type": "text",
-                        "index_options": "positions",
-                        "fields": {
-                            "keyword": {
-                                "type": "keyword",
-                                "ignore_above": 8191
-                            }
-                        }
-                    }
-                }
-            }
-        ]
+            # Add specific fields for common changes to make them easily searchable
+            "description_text": {"type": "text"},  # Extracted description text
+            "comment_text": {"type": "text"},      # Extracted comment text
+            "status_change": {"type": "keyword"},  # Status transitions
+            "assignee_change": {"type": "keyword"} # Assignee changes
+        }
     }
 }
 
-# Settings index mapping
+# Settings index mapping (same as original)
 SETTINGS_MAPPING = {
     "mappings": {
         "properties": {
@@ -107,3 +73,4 @@ SETTINGS_MAPPING = {
         }
     }
 }
+```

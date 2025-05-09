@@ -611,15 +611,37 @@ class JiraElasticsearchPopulator:
             jira_connected = True
             
             # Process records in bulk
-            for i in range(0, len(history_records), bulk_size):
-                batch = history_records[i:i+bulk_size]
-                try:
-                    success_count += self.bulk_insert_issue_history(batch)
-                except Exception as e:
-                    logger.error(f"Error inserting batch starting at index {i}: {e}")
-                    # Continue with next batch despite errors
-                    
-            logger.info(f"Successfully inserted {success_count} out of {len(history_records)} records")
+            bulk_data = []
+            current_bulk_size = 0
+            total_inserted = 0
+            
+            for record in history_records:
+                # Transform the record to Elasticsearch format
+                es_record = self.transform_record_for_elasticsearch(record)
+                
+                # Add to bulk operation
+                bulk_data.append({
+                    "index": {
+                        "_index": INDEX_CHANGELOG,
+                        "_id": str(es_record['historyId'])
+                    }
+                })
+                bulk_data.append(es_record)
+                current_bulk_size += 1
+                
+                # Process the bulk when it reaches the desired size
+                if current_bulk_size >= bulk_size:
+                    success, failed = self._execute_bulk(bulk_data)
+                    total_inserted += success
+                    bulk_data = []
+                    current_bulk_size = 0
+            
+            # Process any remaining records
+            if bulk_data:
+                success, failed = self._execute_bulk(bulk_data)
+                total_inserted += success
+            
+            logger.info(f"Successfully inserted {total_inserted} out of {len(history_records)} records")
             
         except Exception as e:
             logger.error(f"Error fetching data from JIRA: {e}")
@@ -867,26 +889,55 @@ class JiraElasticsearchPopulator:
         """Transform a JIRA record to the format needed for Elasticsearch."""
         es_record = record.copy()  # Start with a copy of the original record
         
-        # Extract description text for indexing
-        description_text = None
+        # Add timestamp field for Elasticsearch
+        es_record['@timestamp'] = es_record.get('historyDate')
         
-        # Check if there's a direct description_text field
-        if 'description_text' in record:
-            description_text = record['description_text']
+        # Process description_text field - ensure it's properly set
+        if 'description_text' not in es_record or not es_record['description_text']:
+            # Check changes collection for description
+            if 'changes' in es_record:
+                for change in es_record['changes']:
+                    if change.get('field') == 'description' and change.get('to'):
+                        es_record['description_text'] = change.get('to')
+                        break
         
-        # If no direct field, check changes for description
-        if not description_text:
-            for change in record.get('changes', []):
-                if change.get('field') == 'description' and change.get('to'):
-                    description_text = change.get('to')
-                    break
+        # Process comment_text field
+        # Keep as is, already set by the JiraService
         
-        # Add the extracted description text
-        if description_text:
-            es_record['description_text'] = description_text
+        # Process status change information
+        if 'changes' in es_record:
+            status_changes = []
+            for change in es_record['changes']:
+                if change.get('field') == 'status':
+                    status_from = change.get('from', '')
+                    status_to = change.get('to', '')
+                    status_changes.append(f"{status_from} → {status_to}")
+            
+            if status_changes:
+                es_record['status_change'] = status_changes
         
-        # Continue with other transformations...
-        # ...existing code...
+        # Process assignee change information
+        if 'changes' in es_record:
+            assignee_changes = []
+            for change in es_record['changes']:
+                if change.get('field') == 'assignee':
+                    assignee_from = change.get('from', '')
+                    assignee_to = change.get('to', '')
+                    assignee_changes.append(f"{assignee_from} → {assignee_to}")
+            
+            if assignee_changes:
+                es_record['assignee_change'] = assignee_changes
+        
+        # Ensure date fields are properly formatted
+        for date_field in ['status_change_date', 'created', 'updated']:
+            if date_field in es_record and es_record[date_field]:
+                # Make sure it's properly formatted as ISO8601
+                try:
+                    if not isinstance(es_record[date_field], str):
+                        # Convert datetime object to string if needed
+                        es_record[date_field] = es_record[date_field].isoformat()
+                except:
+                    pass  # Keep as is if conversion fails
         
         return es_record
             

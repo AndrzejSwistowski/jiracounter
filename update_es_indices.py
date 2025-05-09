@@ -52,6 +52,58 @@ def delete_index(url, headers, index_name, logger):
         logger.error(f"Error deleting index {index_name}: {e}")
         return False
 
+def verify_field_mappings(es, url, headers, index_name, logger):
+    """Verify key fields in the mapping and sample data."""
+    try:
+        # Check the mapping
+        mapping_response = requests.get(f"{url}/{index_name}/_mapping", headers=headers)
+        if mapping_response.status_code != 200:
+            logger.warning(f"Could not get mapping for {index_name}: {mapping_response.status_code}")
+            return False
+            
+        # Get a sample document to verify data
+        sample_query = {
+            "size": 1,
+            "query": {"match_all": {}}
+        }
+        
+        sample_response = requests.post(
+            f"{url}/{index_name}/_search", 
+            headers=headers,
+            json=sample_query
+        )
+        
+        if sample_response.status_code != 200:
+            logger.warning(f"Could not get sample data from {index_name}: {sample_response.status_code}")
+            return False
+            
+        sample_data = sample_response.json()
+        if sample_data["hits"]["total"]["value"] == 0:
+            logger.warning(f"No documents found in {index_name}")
+            return False
+            
+        # Get the first document
+        doc = sample_data["hits"]["hits"][0]["_source"]
+        
+        # Log the content of key fields
+        fields_to_check = ["description_text", "comment_text", "status_change_date", "created", "updated"]
+        logger.info("Sample document field verification:")
+        
+        for field in fields_to_check:
+            if field in doc:
+                value = doc[field]
+                if value:
+                    logger.info(f"  ✓ Field '{field}' has value: {value[:50]}..." if isinstance(value, str) and len(value) > 50 else f"  ✓ Field '{field}' has value: {value}")
+                else:
+                    logger.warning(f"  ✗ Field '{field}' exists but is empty")
+            else:
+                logger.warning(f"  ✗ Field '{field}' is missing from document")
+                
+        return True
+    except Exception as e:
+        logger.error(f"Error verifying field mappings: {e}")
+        return False
+
 def main():
     """Main entry point for updating Elasticsearch indices."""
     parser = argparse.ArgumentParser(description='Update Elasticsearch indices for JIRA data')
@@ -139,6 +191,11 @@ def main():
         )
         
         logger.info(f"Data population completed. Inserted {count} records")
+        
+        # Verify field mappings and data
+        if count > 0:
+            logger.info("Verifying field mappings and data...")
+            verify_field_mappings(es, url, headers, INDEX_CHANGELOG, logger)
         
         # Get and log database summary
         summary = populator.get_database_summary()
