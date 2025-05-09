@@ -422,42 +422,25 @@ class JiraElasticsearchPopulator:
         """
         Inserts an issue history record into Elasticsearch.
         
+        This method is deprecated and will be removed in the future.
+        Use bulk_insert_issue_history instead for better performance.
+        
         Args:
             history_record: Dictionary containing the issue history data
             
         Returns:
             bool: True if successful, False otherwise
         """
-        try:
-            # Make sure indices exist
-            self.create_indices()
-            
-            # Format the record for Elasticsearch
-            doc = self.format_changelog_entry(history_record)
-            
-            # Check if this record already exists
-            query = {
-                "query": {
-                    "term": {
-                        "historyId": history_record['historyId']
-                    }
-                }
-            }
-            
-            result = self.es.search(index=INDEX_CHANGELOG, body=query)
-            
-            if result["hits"]["total"]["value"] > 0:
-                logger.debug(f"Record with historyId {history_record['historyId']} already exists, skipping")
-                return True
-                
-            # Insert the record
-            self.es.index(index=INDEX_CHANGELOG, body=doc)
-            logger.debug(f"Inserted history record for {history_record['issueKey']} with ID {history_record['historyId']}")
-            return True
-            
-        except Exception as e:
-            logger.error(f"Error inserting issue history: {e}")
-            return False
+        import warnings
+        warnings.warn(
+            "insert_issue_history is deprecated. Use bulk_insert_issue_history instead.", 
+            DeprecationWarning, 
+            stacklevel=2
+        )
+        
+        # Call bulk_insert_issue_history with a single record
+        result = self.bulk_insert_issue_history([history_record])
+        return result > 0
     
     def bulk_insert_issue_history(self, history_records):
         """
@@ -577,8 +560,12 @@ class JiraElasticsearchPopulator:
         """
         Fetches data from JIRA and populates Elasticsearch.
         
-        IMPORTANT REQUIREMENT: If any bulk operation fails, the settings (last sync date)
-        must not be updated to prevent data loss in subsequent runs.
+        IMPORTANT REQUIREMENT: 
+        1. If any bulk operation fails, the function should save the last successfully 
+           processed history date as the sync date (rather than the requested end_date).
+        2. If no records were successfully processed, the function should exit without 
+           updating the sync date.
+        3. Early exit is required after a bulk operation failure to prevent further processing.
         
         Args:
             start_date: The date to start fetching from (default: last sync date)
@@ -624,9 +611,22 @@ class JiraElasticsearchPopulator:
             current_bulk_size = 0
             total_inserted = 0
             
+            # Track the last successfully processed history date
+            last_successful_date = None
+            
             for record in history_records:
                 # Transform the record to Elasticsearch format
                 es_record = self.transform_record_for_elasticsearch(record)
+                
+                # Keep track of the latest history date we're processing
+                if es_record.get('historyDate'):
+                    try:
+                        record_date = datetime.fromisoformat(es_record['historyDate']) if isinstance(es_record['historyDate'], str) else es_record['historyDate']
+                        # Only update if this is actually a valid date
+                        if isinstance(record_date, datetime):
+                            last_successful_date = record_date
+                    except (ValueError, TypeError):
+                        logger.debug(f"Could not parse historyDate: {es_record.get('historyDate')}")
                 
                 # Add to bulk operation
                 bulk_data.append({
@@ -647,12 +647,13 @@ class JiraElasticsearchPopulator:
                     if failed > 0:
                         all_bulk_operations_succeeded = False
                         logger.warning(f"Bulk insert operation had {failed} failures")
+                        break  # Early exit on failure
                     
                     bulk_data = []
                     current_bulk_size = 0
             
             # Process any remaining records
-            if bulk_data:
+            if bulk_data and all_bulk_operations_succeeded:
                 success, failed = self._execute_bulk(bulk_data)
                 total_inserted += success
                 
@@ -668,20 +669,29 @@ class JiraElasticsearchPopulator:
             logger.error(f"Error fetching data from JIRA: {e}")
             all_bulk_operations_succeeded = False
         
-        # Update the last sync date ONLY if:
-        # 1. We successfully connected to JIRA
-        # 2. ALL bulk operations succeeded without any failures
-        if jira_connected and all_bulk_operations_succeeded:
+        # Early exit if nothing was processed successfully
+        if success_count == 0:
+            logger.warning("No records were processed successfully. Exiting without updating sync date.")
+            return 0
+            
+        # Determine what date to use for the sync
+        if jira_connected:
             try:
-                self.update_sync_date(end_date)
-                logger.info(f"Updated last sync date to {end_date}")
+                if all_bulk_operations_succeeded:
+                    # Use the end_date if all operations succeeded
+                    self.update_sync_date(end_date)
+                    logger.info(f"Updated last sync date to {end_date}")
+                else:
+                    # Use the last successful history date if any operation failed
+                    if last_successful_date:
+                        self.update_sync_date(last_successful_date)
+                        logger.info(f"Bulk operations had failures. Updated last sync date to last successful record date: {last_successful_date}")
+                    else:
+                        logger.warning("Could not determine last successful date. Not updating the sync date.")
             except Exception as e:
                 logger.error(f"Error updating sync date: {e}")
         else:
-            if not jira_connected:
-                logger.warning("JIRA authorization failed. Not updating the sync date.")
-            elif not all_bulk_operations_succeeded:
-                logger.warning("Some bulk operations failed. Not updating the sync date to prevent data loss.")
+            logger.warning("JIRA authorization failed. Not updating the sync date.")
         
         return success_count
     
