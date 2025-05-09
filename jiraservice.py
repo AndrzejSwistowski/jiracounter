@@ -336,7 +336,9 @@ class JiraService:
                 'epic_issue': issue_data.get('epic_issue'),
                 'workingDaysFromCreation': 0,  # Just created, so 0 days
                 'workingDaysInStatus': 0,      # Just created, so 0 days in status
-                'workingDaysFromMove': None    # No status change yet
+                'workingDaysFromMove': None,    # No status change yet
+                "status_change_date": issue_data['status_change_date'],
+                "created_date": issue_data['created_date']
             }
             
             changelog_entries.append(creation_record)
@@ -348,7 +350,6 @@ class JiraService:
                 # Get status information
                 status_name = issue_data['status']
                 
-                # Find when the issue entered its current status
                 status_change_date = None
                 working_days_in_status = None
                 
@@ -379,6 +380,31 @@ class JiraService:
                         'changes': changes
                     })
                 
+                # Set initial todo_exit_date to None (will be populated with first status change)
+                todo_exit_date = None
+                initial_status_found = False
+                
+                # First, determine what the initial status was
+                initial_status = 'Open'  # Default assumption
+                # If we have any status changes, check the first one to find the actual initial status
+                for history_item in status_change_history:
+                    for change in history_item['changes']:
+                        if change['field'] == 'status':
+                            initial_status = change['from']
+                            initial_status_found = True
+                            break
+                    if initial_status_found:
+                        break
+                
+                # Now find the first status change from this initial status
+                for history_item in status_change_history:
+                    for change in history_item['changes']:
+                        if change['field'] == 'status' and change['from'] == initial_status:
+                            todo_exit_date = history_item['historyDate']
+                            logger.debug(f"Issue {issue_key} first status change from '{initial_status}' on {todo_exit_date}")
+                            break
+                    if todo_exit_date:
+                        break
                 
                 # Process each changelog history
                 for history in histories:
@@ -489,11 +515,13 @@ class JiraService:
             elif start_date.tzinfo is None:
                 start_date = start_date.replace(tzinfo=APP_TIMEZONE)
             
-            start_str = format_date_for_jql(start_date)
+            # Format to "yyyy-MM-dd HH:mm" instead of including seconds
+            start_str = start_date.strftime("%Y-%m-%d %H:%M")
         else:
             # Default to 7 days ago if no start date provided
             start_date = datetime.now(APP_TIMEZONE) - timedelta(days=7)
-            start_str = format_date_for_jql(start_date)
+            # Format to "yyyy-MM-dd HH:mm" instead of including seconds
+            start_str = start_date.strftime("%Y-%m-%d %H:%M")
             
         if end_date:
             if isinstance(end_date, str):
@@ -501,10 +529,12 @@ class JiraService:
             elif end_date.tzinfo is None:
                 end_date = end_date.replace(tzinfo=APP_TIMEZONE)
                 
-            end_str = format_date_for_jql(end_date)
+            # Format to "yyyy-MM-dd HH:mm" instead of including seconds
+            end_str = end_date.strftime("%Y-%m-%d %H:%M")
         else:
             end_date = datetime.now(APP_TIMEZONE)
-            end_str = format_date_for_jql(end_date)
+            # Format to "yyyy-MM-dd HH:mm" instead of including seconds
+            end_str = end_date.strftime("%Y-%m-%d %H:%M")
             
         logger.info(f"Retrieving issues updated between {start_str} and {end_str}")
         
