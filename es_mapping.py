@@ -12,25 +12,46 @@ CHANGELOG_MAPPING = {
             "factType": {"type": "integer"},
             "issue": {
                 "properties": {
-                    "id": {"type": "keyword"},
                     "key": {"type": "keyword"},
-                    "type": {
-                        "properties": {
-                            "name": {"type": "keyword"}
-                        }
-                    },
+                    "type ": { "properties": {										
+												"name": {"type": "keyword"}
+										}},
                     "status": {
                         "properties": {
                             "name": {"type": "keyword"},
                             "change_date": {"type": "date"}
                         }
-                    }
+                    },
+										"created_at": {"type": "date"},
                 }
             },
-            "project": {
+            "allocation": {"type": "keyword"},
+						"labels": {"type": "keyword"}, 
+						"components": {"type": "keyword"}, 
+            "summary": {
+                "type": "text", 
+                "analyzer": "standard",
+                "fields": {
+                    "keyword": {"type": "keyword"},
+                    "polish": {"type": "text", "analyzer": "polish"}
+                }
+            },
+						"labels": {"type": "keyword"}, 
+						"project": {
+								"properties": {
+										"key": {"type": "keyword"}
+								}
+						},
+            "parent_issue": {
                 "properties": {
                     "key": {"type": "keyword"},
-                    "name": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
+                    "summary": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
+                }
+            },
+            "epic_issue": {
+                "properties": {
+                    "key": {"type": "keyword"},
+                    "summary": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
                 }
             },
             "author": {
@@ -43,22 +64,34 @@ CHANGELOG_MAPPING = {
                     "displayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
                 }
             },
-            "allocation": {"type": "keyword"},
-            "summary": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-            "workingDaysFromCreation": {"type": "float"},
+            "days_since_creation": {"type": "float"},
+						"todo_exit_date": {"type": "date"},
             "changes": {
                 "type": "nested",
                 "properties": {
                     "field": {"type": "keyword"},
-                    "from": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
                     "to": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
                 }
             },
-            # Add specific fields for common changes to make them easily searchable
-            "description_text": {"type": "text"},  # Extracted description text
-            "comment_text": {"type": "text"},      # Extracted comment text
-            "status_change": {"type": "keyword"},  # Status transitions
-            "assignee_change": {"type": "keyword"} # Assignee changes
+            # Content fields with comprehensive text analysis for searching
+            "description_text": {
+                "type": "text",
+                "analyzer": "standard",
+                "fields": {
+                    "keyword": {"type": "keyword", "ignore_above": 32766},
+                    "english": {"type": "text", "analyzer": "english"},
+                    "polish": {"type": "text", "analyzer": "polish"}
+                }
+            },
+            "comment_text": {
+                "type": "text", 
+                "analyzer": "standard",
+                "fields": {
+                    "keyword": {"type": "keyword", "ignore_above": 32766},
+                    "english": {"type": "text", "analyzer": "english"},
+                    "polish": {"type": "text", "analyzer": "polish"}
+                }
+            },
         }
     }
 }

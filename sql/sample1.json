@@ -1,6 +1,6 @@
 {
 	"_index": "jira-changelog",
-	"_id": "BAI-17_39239",
+	"_id": "BAI-17_39239", 
 	"_version": 1,
 	"_source": {
 		"historyId": 39239,

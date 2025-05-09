@@ -31,23 +31,26 @@ class ElasticsearchDocumentFormatter:
             "@timestamp": history_record['historyDate'],
             "factType": history_record['factType'],
             "issue": {
-                "id": history_record['issueId'],
                 "key": history_record['issueKey'],
                 "type": {
                     "name": history_record['typeName']
                 },
                 "status": {
-                    "name": history_record['statusName']
-                }
+                    "name": history_record['statusName'],
+                    "change_date": history_record.get('status_change_date')
+                },
+                "created_at": history_record.get('created')
             },
             "project": {
                 "key": history_record['projectKey'],
-                "name": history_record['projectName']
             },
             "author": {
                 "displayName": history_record.get('authorDisplayName')
             }
         }
+        
+        if history_record.get('allocationCode'):
+            doc["allocation"] = history_record['allocationCode']
         
         # Add summary field if it exists
         if history_record.get('summary'):
@@ -70,6 +73,9 @@ class ElasticsearchDocumentFormatter:
         # Add parent_issue if it exists
         if history_record.get('parent_issue'):
             doc["parent_issue"] = history_record['parent_issue']
+            # Add parentKey to parent_issue if it exists
+            if history_record.get('parentKey'):
+                doc["parent_issue"]["key"] = history_record['parentKey']
             
         # Add epic_issue if it exists
         if history_record.get('epic_issue'):
@@ -82,12 +88,12 @@ class ElasticsearchDocumentFormatter:
         if history_record.get('workingDaysInStatus') is not None:
             doc["workingDaysInStatus"] = history_record['workingDaysInStatus']
             
-        # FIXED: Use workingDaysFromMove as the field name in the document,
-        # but look for either workingDaysFromMove or workingDaysFromToDo in the record
-        if history_record.get('workingDaysFromMove') is not None:
-            doc["workingDaysFromMove"] = history_record['workingDaysFromMove']
+        # FIXED: Use working_days_from_move_at_point as the field name in the document,
+        # but look for either working_days_from_move_at_point or workingDaysFromToDo in the record
+        if history_record.get('working_days_from_move_at_point') is not None:
+            doc["working_days_from_move_at_point"] = history_record['working_days_from_move_at_point']
         elif history_record.get('workingDaysFromToDo') is not None:
-            doc["workingDaysFromMove"] = history_record['workingDaysFromToDo']
+            doc["working_days_from_move_at_point"] = history_record['workingDaysFromToDo']
         
         # Add optional fields if they exist
         if history_record.get('assigneeUserName'):
@@ -100,11 +106,7 @@ class ElasticsearchDocumentFormatter:
                 "displayName": history_record.get('reporterDisplayName')
             }
         
-        if history_record.get('allocationCode'):
-            doc["allocation"] = history_record['allocationCode']
-        
-        if history_record.get('parentKey'):
-            doc["parentKey"] = history_record['parentKey']
+        # Remove the standalone parentKey field as it's now part of parent_issue
         
         # Add changes if available
         if history_record.get('changes'):

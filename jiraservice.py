@@ -381,7 +381,8 @@ class JiraService:
                 'epic_issue': issue_data.get('epic_issue'),
                 'workingDaysFromCreation': 0,  # Just created, so 0 days
                 'workingDaysInStatus': 0,      # Just created, so 0 days in status
-                'workingDaysFromMove': None,    # No status change yet
+                'working_days_from_move_at_point': None,    # No status change yet
+                'todo_exit_date': None,
                 "status_change_date": to_iso8601(issue_data['status_change_date']) if issue_data['status_change_date'] else None,
                 "created": to_iso8601(issue_data['created']) if issue_data['created'] else None,
                 "updated": to_iso8601(issue_data['updated']) if issue_data['updated'] else None,
@@ -527,7 +528,8 @@ class JiraService:
                         'epic_issue': issue_data.get('epic_issue'),
                         'workingDaysFromCreation': working_days_from_creation_at_point,
                         'workingDaysInStatus': working_days_in_status_at_point,
-                        'workingDaysFromMove': working_days_from_move_at_point,
+                        'working_days_from_move_at_point': working_days_from_move_at_point,
+                        'todo_exit_date': to_iso8601(todo_exit_date) if todo_exit_date else None,
                         "status_change_date": to_iso8601(issue_data['status_change_date']) if issue_data['status_change_date'] else None,
                         "created": to_iso8601(issue_data['created']) if issue_data['created'] else None,
                         "updated": to_iso8601(issue_data['updated']) if issue_data['updated'] else None,

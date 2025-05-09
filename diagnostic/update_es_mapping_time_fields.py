@@ -2,7 +2,7 @@
 Update Elasticsearch mapping to add aggregated time-based fields:
 - workingDaysFromCreation: Number of working days since issue was created
 - workingDaysInStatus: Number of working days issue has been in current status
-- workingDaysFromMove: Number of working days since issue had its first status change
+- working_days_from_move_at_point: Number of working days since issue had its first status change
 
 This script will:
 1. Connect to Elasticsearch
@@ -141,7 +141,7 @@ def create_new_index(url, headers):
                     # New aggregated time-based fields
                     "workingDaysFromCreation": {"type": "float"},  # Working days since issue was created
                     "workingDaysInStatus": {"type": "float"},  # Working days in current status
-                    "workingDaysFromMove": {"type": "float"},  # Working days since first status change
+                    "working_days_from_move_at_point": {"type": "float"},  # Working days since first status change
                     
                     "issue": {
                         "properties": {
