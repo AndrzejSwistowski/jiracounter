@@ -65,6 +65,14 @@ JiraCounter is a Python application designed to interact with Jira API to retrie
 - Provide usage examples
 - Include installation and setup instructions
 
+### 7. Code Quality
+- Follow established coding principles including DRY (Don't Repeat Yourself)
+- Apply Tell Don't Ask principle to ensure proper encapsulation
+- Organize code with implementation functions below the functions that call them
+- Include comprehensive docstrings for all modules, classes, and functions
+- Implement appropriate error handling with meaningful error messages
+- Write unit tests for core functionality with at least 70% code coverage
+
 ## Dependencies
 Required Python packages are specified in the `requirements.txt` file and include:
 - jira - For Jira API integration

@@ -508,13 +508,14 @@ class JiraService:
         Returns:
             Dict containing the standardized issue details
         """
-        # Set rodzaj_pracy field if available
+        # Get rodzaj_pracy value directly without modifying the issue object
+        rodzaj_pracy_value = None
         rodzaj_pracy_field = self.field_ids.get('rodzaj_pracy')
         if rodzaj_pracy_field:
-            issue.fields.rodzaj_pracy = getattr(issue.fields, rodzaj_pracy_field, None)
+            rodzaj_pracy_value = getattr(issue.fields, rodzaj_pracy_field, None)
         
-        # Extract backet information
-        allocation_value, allocation_code = self._extract_backet_info(issue)
+        # Extract backet information using the extracted rodzaj_pracy value
+        allocation_value, allocation_code = self._extract_backet_info(rodzaj_pracy_value)
         
         # Extract status change date if available
         status_change_date = None
@@ -682,11 +683,11 @@ class JiraService:
             logger.error(f"Error finding field ID for '{field_name}': {str(e)}")
             return None
     
-    def _extract_backet_info(self, issue) -> tuple:
+    def _extract_backet_info(self, rodzaj_pracy_value=None) -> tuple:
         """Extract backet value and key from the rodzaj_pracy field.
         
         Args:
-            issue: Jira issue object
+            rodzaj_pracy_value: The value of the rodzaj_pracy field
             
         Returns:
             tuple: (allocation_value, allocation_code)
@@ -694,19 +695,20 @@ class JiraService:
         allocation_value = None
         allocation_code = None
         
-        if hasattr(issue.fields, 'rodzaj_pracy') and issue.fields.rodzaj_pracy:
+        # Use the provided rodzaj_pracy_value if available
+        if rodzaj_pracy_value is not None:
             # Check if rodzaj_pracy is a CustomFieldOption object
-            if hasattr(issue.fields.rodzaj_pracy, 'value'):
-                allocation_value = issue.fields.rodzaj_pracy.value
-            elif isinstance(issue.fields.rodzaj_pracy, str):
-                allocation_value = issue.fields.rodzaj_pracy
-                
-            # Try to extract the key if it has the format "Something [KEY]"
-            if allocation_value and '[' in allocation_value and ']' in allocation_value:
-                try:
-                    allocation_code = allocation_value.split('[')[1].split(']')[0]
-                except (IndexError, AttributeError):
-                    logger.debug(f"Could not extract backet key from value: {allocation_value}")
+            if hasattr(rodzaj_pracy_value, 'value'):
+                allocation_value = rodzaj_pracy_value.value
+            elif isinstance(rodzaj_pracy_value, str):
+                allocation_value = rodzaj_pracy_value
+        
+        # Try to extract the key if allocation_value is valid and has the format "Something [KEY]"
+        if allocation_value and '[' in allocation_value and ']' in allocation_value:
+            try:
+                allocation_code = allocation_value.split('[')[1].split(']')[0]
+            except (IndexError, AttributeError):
+                logger.debug(f"Could not extract backet key from value: {allocation_value}")
         
         return allocation_value, allocation_code
 
