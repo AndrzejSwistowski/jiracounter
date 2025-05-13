@@ -554,6 +554,7 @@ class JiraService:
         # Extract epic information using field manager
         epic_issue = None
         epic_key = self.field_manager.get_field_value(issue, 'epic_link')
+				
         if epic_key:
             try:
                 # Try to get the epic issue

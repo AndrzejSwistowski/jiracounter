@@ -25,11 +25,16 @@ import logging
 import argparse
 import os
 import sys
+import time
 from datetime import datetime, timedelta
 from es_populate import JiraElasticsearchPopulator, ELASTIC_URL, ELASTIC_APIKEY, ES_HOST, ES_PORT, ES_USE_SSL
 from es_populate import INDEX_CHANGELOG, INDEX_SETTINGS
 from es_mapping import CHANGELOG_MAPPING, SETTINGS_MAPPING
 import requests
+
+# Track progress globally
+progress_count = 0
+start_time = None
 
 def setup_logging(verbose=False):
     """Configure logging for the ETL process."""
@@ -55,7 +60,45 @@ def setup_logging(verbose=False):
     logging.getLogger('requests').setLevel(logging.WARNING)
     logging.getLogger('elasticsearch').setLevel(logging.WARNING)
     
-    return logging.getLogger(__name__)
+    logger = logging.getLogger(__name__)
+    logger.info(f"Log file: {log_filename}")
+    
+    return logger
+
+def log_progress(logger, current, total=None, interval=30):
+    """Log progress at regular intervals to prevent log file from growing too large."""
+    global progress_count, start_time
+    
+    progress_count += current
+    
+    # Only initialize start_time on first call
+    if start_time is None:
+        start_time = time.time()
+        
+    current_time = time.time()
+    elapsed = current_time - start_time
+    
+    # Calculate items per second
+    rate = progress_count / elapsed if elapsed > 0 else 0
+    
+    # Format as HH:MM:SS
+    elapsed_str = time.strftime('%H:%M:%S', time.gmtime(elapsed))
+    
+    # Log with percentage if total is known
+    if total:
+        percentage = (progress_count / total) * 100
+        logger.info(f"Progress: {progress_count}/{total} ({percentage:.1f}%) | Rate: {rate:.2f} items/sec | Elapsed: {elapsed_str}")
+    else:
+        logger.info(f"Progress: {progress_count} items | Rate: {rate:.2f} items/sec | Elapsed: {elapsed_str}")
+    
+    # Estimate remaining time if total is known
+    if total and rate > 0:
+        remaining_items = total - progress_count
+        estimated_seconds = remaining_items / rate
+        remaining_str = time.strftime('%H:%M:%S', time.gmtime(estimated_seconds))
+        logger.info(f"Estimated time remaining: {remaining_str}")
+        
+    return progress_count
 
 def delete_index(populator, index_name, logger):
     """Delete an Elasticsearch index."""
@@ -205,8 +248,7 @@ def main():
             # Force full sync when recreating index
             args.full_sync = True
             logger.info("Index recreated successfully, proceeding with full sync")
-        
-        # Determine date range
+          # Determine date range
         end_date = datetime.now()
         
         if args.full_sync:
@@ -224,7 +266,21 @@ def main():
             else:
                 logger.info(f"Performing incremental sync from last sync date: {start_date}")
         
-        # Populate Elasticsearch
+        # Estimate total records for progress tracking
+        try:
+            # Make a preliminary query to estimate record count
+            logger.info("Estimating total records to process...")
+            estimate = populator.jira_service.estimate_record_count(start_date, end_date, args.max_issues)
+            if estimate and estimate > 0:
+                logger.info(f"Estimated {estimate} records to process")
+            else:
+                logger.info("Could not estimate record count, will show progress without percentages")
+                estimate = None
+        except Exception as e:
+            logger.warning(f"Error estimating record count: {e}")
+            estimate = None
+          # Populate Elasticsearch
+        logger.info(f"Starting ETL process from {start_date} to {end_date}")
         count = populator.populate_from_jira(
             start_date=start_date,
             end_date=end_date,
