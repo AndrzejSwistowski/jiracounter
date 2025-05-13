@@ -16,6 +16,7 @@ from time_utils import (
     to_iso8601, parse_date, calculate_working_days_between, now, format_for_jql,
     find_status_change_date, find_first_status_change_date, calculate_days_since_date
 )
+from jira_field_manager import JiraFieldManager
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL))
@@ -28,7 +29,12 @@ class JiraService:
         """Initialize the Jira service."""
         self.jira_client = None
         self.connected = False
-        self.field_ids = {}
+        self.field_manager = JiraFieldManager()
+        
+    @property
+    def field_ids(self):
+        """Get the field_ids from the field manager."""
+        return self.field_manager.field_ids
     
     def connect(self) -> JIRA:
         """Connect to the Jira server using credentials from config.
@@ -58,7 +64,7 @@ class JiraService:
             logger.info("Successfully connected to Jira")
             
             # Cache custom field IDs after successful connection
-            self._cache_field_ids()
+            self.field_manager.cache_field_ids(self.jira_client)
                 
             return self.jira_client
             
@@ -508,26 +514,21 @@ class JiraService:
         Returns:
             Dict containing the standardized issue details
         """
-        # Get rodzaj_pracy value directly without modifying the issue object
-        rodzaj_pracy_value = None
-        rodzaj_pracy_field = self.field_ids.get('rodzaj_pracy')
-        if rodzaj_pracy_field:
-            rodzaj_pracy_value = getattr(issue.fields, rodzaj_pracy_field, None)
+        # Get rodzaj_pracy value using field manager
+        rodzaj_pracy_value = self.field_manager.get_field_value(issue, 'rodzaj_pracy')
         
         # Extract backet information using the extracted rodzaj_pracy value
         allocation_value, allocation_code = self._extract_backet_info(rodzaj_pracy_value)
         
         # Extract status change date if available
         status_change_date = None
-        data_zmiany_statusu_field = self.field_ids.get('data_zmiany_statusu')
-        if data_zmiany_statusu_field:
-            status_change_date_raw = getattr(issue.fields, data_zmiany_statusu_field, None)
-            if status_change_date_raw:
-                try:
-                    # Use our utility to ensure ISO8601 format
-                    status_change_date = to_iso8601(status_change_date_raw)
-                except (ValueError, TypeError):
-                    logger.debug(f"Could not parse 'data zmiany statusu' date: {status_change_date_raw}")
+        data_zmiany_statusu_value = self.field_manager.get_field_value(issue, 'data_zmiany_statusu')
+        if data_zmiany_statusu_value:
+            try:
+                # Use our utility to ensure ISO8601 format
+                status_change_date = to_iso8601(data_zmiany_statusu_value)
+            except (ValueError, TypeError):
+                logger.debug(f"Could not parse 'data zmiany statusu' date: {data_zmiany_statusu_value}")
         
         # Extract component information
         components = []
@@ -550,22 +551,20 @@ class JiraService:
                 "summary": issue.fields.summary
             }
         
-        # Extract epic information
+        # Extract epic information using field manager
         epic_issue = None
-        epic_link_field = self.field_ids.get('epic_link')
-        if epic_link_field:
-            epic_key = getattr(issue.fields, epic_link_field, None)
-            if epic_key:
-                try:
-                    # Try to get the epic issue
-                    epic = self.jira_client.issue(epic_key)
-                    epic_issue = {
-                        "id": epic.id,
-                        "key": epic.key,
-                        "summary": epic.fields.summary
-                    }
-                except Exception as e:
-                    logger.debug(f"Error retrieving epic issue {epic_key}: {e}")
+        epic_key = self.field_manager.get_field_value(issue, 'epic_link')
+        if epic_key:
+            try:
+                # Try to get the epic issue
+                epic = self.jira_client.issue(epic_key)
+                epic_issue = {
+                    "id": epic.id,
+                    "key": epic.key,
+                    "summary": epic.fields.summary
+                }
+            except Exception as e:
+                logger.debug(f"Error retrieving epic issue {epic_key}: {e}")
         
         # If no epic found but there is a parent, try to get the parent's epic
         if not epic_issue and parent_issue:
@@ -573,22 +572,21 @@ class JiraService:
                 # Get parent issue with its epic link
                 parent = self.jira_client.issue(parent_issue["key"])
                 
-                # Check if parent has an epic
-                if epic_link_field and hasattr(parent.fields, epic_link_field):
-                    parent_epic_key = getattr(parent.fields, epic_link_field)
-                    if parent_epic_key:
-                        try:
-                            # Get the parent's epic
-                            parent_epic = self.jira_client.issue(parent_epic_key)
-                            epic_issue = {
-                                "id": parent_epic.id,
-                                "key": parent_epic.key,
-                                "summary": parent_epic.fields.summary,
-                                "inherited": True  # Mark as inherited from parent
-                            }
-                            logger.debug(f"Issue {issue.key} inherited epic {parent_epic_key} from parent {parent_issue['key']}")
-                        except Exception as e:
-                            logger.debug(f"Error retrieving parent's epic {parent_epic_key}: {e}")
+                # Check if parent has an epic using field manager
+                parent_epic_key = self.field_manager.get_field_value(parent, 'epic_link')
+                if parent_epic_key:
+                    try:
+                        # Get the parent's epic
+                        parent_epic = self.jira_client.issue(parent_epic_key)
+                        epic_issue = {
+                            "id": parent_epic.id,
+                            "key": parent_epic.key,
+                            "summary": parent_epic.fields.summary,
+                            "inherited": True  # Mark as inherited from parent
+                        }
+                        logger.debug(f"Issue {issue.key} inherited epic {parent_epic_key} from parent {parent_issue['key']}")
+                    except Exception as e:
+                        logger.debug(f"Error retrieving parent's epic {parent_epic_key}: {e}")
             except Exception as e:
                 logger.debug(f"Error retrieving parent issue to check for epic: {e}")
             
@@ -618,18 +616,27 @@ class JiraService:
         
         return issue_data
 
-    def _cache_field_ids(self) -> None:
+    def _cache_field_ids(self, jira_client=None) -> None:
         """Look up and cache custom field IDs for use in Jira operations.
         
         This function populates self.field_ids with the IDs of custom fields
         that are needed for various operations.
+        
+        Args:
+            jira_client: Optional Jira client to use for the operation. If not provided,
+                        will use self.jira_client if available or connect first.
         """
-        if not self.connected or not self.jira_client:
-            logger.warning("Cannot cache field IDs without a connection. Connect first.")
-            return
+        # Use provided client, or existing client, or establish a new connection
+        client = jira_client or self.jira_client
+        if not client:
+            if not self.connected:
+                logger.warning("Cannot cache field IDs without a connection. Connect first.")
+                return
+            else:
+                client = self.connect()
             
         # Look up and cache the "rodzaj pracy" field ID
-        rodzaj_pracy_id = self.get_field_id_by_name("rodzaj pracy")
+        rodzaj_pracy_id = self.get_field_id_by_name("rodzaj pracy", client)
         if rodzaj_pracy_id:
             self.field_ids['rodzaj_pracy'] = rodzaj_pracy_id
             logger.debug(f"Found 'rodzaj pracy' field with ID: {rodzaj_pracy_id}")
@@ -639,7 +646,7 @@ class JiraService:
             logger.debug(f"Using fallback ID for 'rodzaj pracy' field: {self.field_ids['rodzaj_pracy']}")
             
         # Look up and cache the "data zmiany statusu" field ID
-        data_zmiany_statusu_id = self.get_field_id_by_name("data zmiany statusu")
+        data_zmiany_statusu_id = self.get_field_id_by_name("data zmiany statusu", client)
         if data_zmiany_statusu_id:
             self.field_ids['data_zmiany_statusu'] = data_zmiany_statusu_id
             logger.debug(f"Found 'data zmiany statusu' field with ID: {data_zmiany_statusu_id}")
@@ -649,7 +656,7 @@ class JiraService:
             logger.debug(f"Using fallback ID for 'data zmiany statusu' field: {self.field_ids['data_zmiany_statusu']}")
             
         # Look up and cache the Epic Link field ID
-        epic_link_id = self.get_field_id_by_name("Epic Link")
+        epic_link_id = self.get_field_id_by_name("Epic Link", client)
         if epic_link_id:
             self.field_ids['epic_link'] = epic_link_id
             logger.debug(f"Found 'Epic Link' field with ID: {epic_link_id}")
@@ -658,20 +665,28 @@ class JiraService:
             self.field_ids['epic_link'] = config.JIRA_CUSTOM_FIELDS.get('EPIC_LINK')
             logger.debug(f"Using fallback ID for 'Epic Link' field: {self.field_ids['epic_link']}")
     
-    def get_field_id_by_name(self, field_name: str) -> Optional[str]:
+    def get_field_id_by_name(self, field_name: str, jira_client=None) -> Optional[str]:
         """Find the custom field ID by its visible name.
         
         Args:
             field_name: The visible name of the field in Jira
+            jira_client: Optional Jira client to use for the operation. If not provided,
+                        will use self.jira_client if available or connect first.
             
         Returns:
             Optional[str]: The field ID if found, None otherwise
         """
-        if not self.connected or not self.jira_client:
-            self.connect()
+        # Use provided client, or existing client, or establish a new connection
+        client = jira_client or self.jira_client
+        if not client:
+            if not self.connected:
+                client = self.connect()
+            else:
+                logger.warning("No Jira client available. Connect first.")
+                return None
             
         try:
-            fields = self.jira_client.fields()
+            fields = client.fields()
             for field in fields:
                 if field['name'].lower() == field_name.lower():
                     logger.debug(f"Found field '{field_name}' with ID: {field['id']}")
