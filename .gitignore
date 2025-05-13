@@ -45,3 +45,6 @@ data/*.json
 
 # Windows specific
 Thumbs.db
+
+# Python test output files
+report

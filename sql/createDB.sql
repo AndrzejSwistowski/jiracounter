@@ -126,7 +126,11 @@ GO
 
 -- Procedure: GetOrInsertProject
 -- Purpose: Retrieves ProjectId for a given project key/name, or inserts if not exists
-CREATE OR ALTER PROCEDURE warehouse.GetOrInsertProject
+IF OBJECT_ID('warehouse.GetOrInsertProject', 'P') IS NOT NULL
+    DROP PROCEDURE warehouse.GetOrInsertProject;
+GO
+
+CREATE PROCEDURE warehouse.GetOrInsertProject
     @ProjectKey NVARCHAR(50),
     @ProjectName NVARCHAR(100),
     @ProjectId INT OUTPUT
@@ -150,7 +154,11 @@ GO
 
 -- Procedure: GetOrInsertIssueType
 -- Purpose: Retrieves TypeId for a given issue type, or inserts if not exists
-CREATE OR ALTER PROCEDURE warehouse.GetOrInsertIssueType
+IF OBJECT_ID('warehouse.GetOrInsertIssueType', 'P') IS NOT NULL
+    DROP PROCEDURE warehouse.GetOrInsertIssueType;
+GO
+
+CREATE PROCEDURE warehouse.GetOrInsertIssueType
     @TypeName NVARCHAR(50),
     @TypeId INT OUTPUT
 AS
@@ -173,7 +181,11 @@ GO
 
 -- Procedure: GetOrInsertStatus
 -- Purpose: Retrieves StatusId for a given status name, or inserts if not exists
-CREATE OR ALTER PROCEDURE warehouse.GetOrInsertStatus
+IF OBJECT_ID('warehouse.GetOrInsertStatus', 'P') IS NOT NULL
+    DROP PROCEDURE warehouse.GetOrInsertStatus;
+GO
+
+CREATE PROCEDURE warehouse.GetOrInsertStatus
     @StatusName NVARCHAR(50),
     @StatusId INT OUTPUT
 AS
@@ -196,7 +208,11 @@ GO
 
 -- Procedure: GetOrInsertUser
 -- Purpose: Retrieves UserId for a given username, or inserts if not exists
-CREATE OR ALTER PROCEDURE warehouse.GetOrInsertUser
+IF OBJECT_ID('warehouse.GetOrInsertUser', 'P') IS NOT NULL
+    DROP PROCEDURE warehouse.GetOrInsertUser;
+GO
+
+CREATE PROCEDURE warehouse.GetOrInsertUser
     @UserName NVARCHAR(100),
     @DisplayName NVARCHAR(100) = NULL,
     @UserId INT OUTPUT
@@ -227,7 +243,11 @@ GO
 
 -- Procedure: GetOrInsertAllocation
 -- Purpose: Retrieves AllocationId for a given allocation code, or returns the default if invalid
-CREATE OR ALTER PROCEDURE warehouse.GetOrInsertAllocation
+IF OBJECT_ID('warehouse.GetOrInsertAllocation', 'P') IS NOT NULL
+    DROP PROCEDURE warehouse.GetOrInsertAllocation;
+GO
+
+CREATE PROCEDURE warehouse.GetOrInsertAllocation
     @AllocationCode CHAR(4),
     @AllocationId INT OUTPUT
 AS
@@ -260,7 +280,11 @@ GO
 
 -- Procedure: GetOrInsertIssueKey
 -- Purpose: Retrieves KeyId for a given issue key, or inserts if not exists
-CREATE OR ALTER PROCEDURE warehouse.GetOrInsertIssueKey
+IF OBJECT_ID('warehouse.GetOrInsertIssueKey', 'P') IS NOT NULL
+    DROP PROCEDURE warehouse.GetOrInsertIssueKey;
+GO
+
+CREATE PROCEDURE warehouse.GetOrInsertIssueKey
     @IssueKey NVARCHAR(50),
     @KeyId INT OUTPUT
 AS
@@ -283,7 +307,11 @@ GO
 
 -- Procedure: InsertIssueHistory
 -- Purpose: Inserts a new issue history record, handling all dimension lookups
-CREATE OR ALTER PROCEDURE warehouse.InsertIssueHistory
+IF OBJECT_ID('warehouse.InsertIssueHistory', 'P') IS NOT NULL
+    DROP PROCEDURE warehouse.InsertIssueHistory;
+GO
+
+CREATE PROCEDURE warehouse.InsertIssueHistory
     @HistoryId INT,
     @HistoryDate DATETIME,
     @FactType INT,
@@ -345,7 +373,11 @@ GO
 
 -- Procedure: UpdateETLParameters
 -- Purpose: Updates the ETL process tracking parameters
-CREATE OR ALTER PROCEDURE warehouse.UpdateETLParameters
+IF OBJECT_ID('warehouse.UpdateETLParameters', 'P') IS NOT NULL
+    DROP PROCEDURE warehouse.UpdateETLParameters;
+GO
+
+CREATE PROCEDURE warehouse.UpdateETLParameters
     @AgentName NVARCHAR(50),
     @ReadApiDateTo DATETIME
 AS
@@ -369,7 +401,11 @@ GO
 
 -- Procedure: GetETLParameters
 -- Purpose: Retrieves the ETL process tracking parameters for a specific agent
-CREATE OR ALTER PROCEDURE warehouse.GetETLParameters
+IF OBJECT_ID('warehouse.GetETLParameters', 'P') IS NOT NULL
+    DROP PROCEDURE warehouse.GetETLParameters;
+GO
+
+CREATE PROCEDURE warehouse.GetETLParameters
     @AgentName NVARCHAR(50)
 AS
 BEGIN
@@ -383,7 +419,11 @@ GO
 
 -- Procedure: GetLastImportedIssueDate
 -- Purpose: Returns the date of the last imported issue history record
-CREATE OR ALTER PROCEDURE warehouse.GetLastImportedIssueDate
+IF OBJECT_ID('warehouse.GetLastImportedIssueDate', 'P') IS NOT NULL
+    DROP PROCEDURE warehouse.GetLastImportedIssueDate;
+GO
+
+CREATE PROCEDURE warehouse.GetLastImportedIssueDate
 AS
 BEGIN
     SET NOCOUNT ON;
@@ -396,7 +436,11 @@ GO
 
 -- Procedure: GetIssueHistorySummary
 -- Purpose: Retrieves summary statistics about issue history
-CREATE OR ALTER PROCEDURE warehouse.GetIssueHistorySummary
+IF OBJECT_ID('warehouse.GetIssueHistorySummary', 'P') IS NOT NULL
+    DROP PROCEDURE warehouse.GetIssueHistorySummary;
+GO
+
+CREATE PROCEDURE warehouse.GetIssueHistorySummary
     @StartDate DATETIME = NULL,
     @EndDate DATETIME = NULL
 AS
