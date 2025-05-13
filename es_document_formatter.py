@@ -38,7 +38,7 @@ class ElasticsearchDocumentFormatter:
                 },
                 "status": {
                     "name": history_record['statusName'],
-                    "change_date": history_record.get('status_change_date') or history_record['statusChangeDate']
+                    "change_date": history_record.get('status_change_date') 
                 },
                 "created_at": history_record.get('created')
             },
