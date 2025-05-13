@@ -554,7 +554,7 @@ class JiraService:
         # Extract epic information using field manager
         epic_issue = None
         epic_key = self.field_manager.get_field_value(issue, 'epic_link')
-				
+
         if epic_key:
             try:
                 # Try to get the epic issue
@@ -617,54 +617,8 @@ class JiraService:
         
         return issue_data
 
-    def _cache_field_ids(self, jira_client=None) -> None:
-        """Look up and cache custom field IDs for use in Jira operations.
-        
-        This function populates self.field_ids with the IDs of custom fields
-        that are needed for various operations.
-        
-        Args:
-            jira_client: Optional Jira client to use for the operation. If not provided,
-                        will use self.jira_client if available or connect first.
-        """
-        # Use provided client, or existing client, or establish a new connection
-        client = jira_client or self.jira_client
-        if not client:
-            if not self.connected:
-                logger.warning("Cannot cache field IDs without a connection. Connect first.")
-                return
-            else:
-                client = self.connect()
-            
-        # Look up and cache the "rodzaj pracy" field ID
-        rodzaj_pracy_id = self.get_field_id_by_name("rodzaj pracy", client)
-        if rodzaj_pracy_id:
-            self.field_ids['rodzaj_pracy'] = rodzaj_pracy_id
-            logger.debug(f"Found 'rodzaj pracy' field with ID: {rodzaj_pracy_id}")
-        else:
-            # Fallback to the ID from config if available
-            self.field_ids['rodzaj_pracy'] = config.JIRA_CUSTOM_FIELDS.get('RODZAJ_PRACY')
-            logger.debug(f"Using fallback ID for 'rodzaj pracy' field: {self.field_ids['rodzaj_pracy']}")
-            
-        # Look up and cache the "data zmiany statusu" field ID
-        data_zmiany_statusu_id = self.get_field_id_by_name("data zmiany statusu", client)
-        if data_zmiany_statusu_id:
-            self.field_ids['data_zmiany_statusu'] = data_zmiany_statusu_id
-            logger.debug(f"Found 'data zmiany statusu' field with ID: {data_zmiany_statusu_id}")
-        else:
-            # Fallback to the ID from config if available
-            self.field_ids['data_zmiany_statusu'] = config.JIRA_CUSTOM_FIELDS.get('DATA_ZMIANY_STATUSU')
-            logger.debug(f"Using fallback ID for 'data zmiany statusu' field: {self.field_ids['data_zmiany_statusu']}")
-            
-        # Look up and cache the Epic Link field ID
-        epic_link_id = self.get_field_id_by_name("Epic Link", client)
-        if epic_link_id:
-            self.field_ids['epic_link'] = epic_link_id
-            logger.debug(f"Found 'Epic Link' field with ID: {epic_link_id}")
-        else:
-            # Fallback to the ID from config if available
-            self.field_ids['epic_link'] = config.JIRA_CUSTOM_FIELDS.get('EPIC_LINK')
-            logger.debug(f"Using fallback ID for 'Epic Link' field: {self.field_ids['epic_link']}")
+    # The _cache_field_ids method has been removed as this functionality
+    # is now handled by the JiraFieldManager class
     
     def get_field_id_by_name(self, field_name: str, jira_client=None) -> Optional[str]:
         """Find the custom field ID by its visible name.
