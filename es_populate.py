@@ -302,92 +302,50 @@ class JiraElasticsearchPopulator:
             # Prepare the bulk operation
             actions = []
             for record in history_records:
-                # Check if this record already exists
-                query = {
-                    "query": {
-                        "term": {
-                            "historyId": record['historyId']
-                        }
-                    }
-                }
-                
-                result = self.es.search(index=INDEX_CHANGELOG, body=query)
-                
-                if result["hits"]["total"]["value"] > 0:
-                    logger.info(f"Record with historyId {record['historyId']} already exists, skipping")
+                try:
+                    # Check if historyId exists and is valid
+                    if 'historyId' not in record:
+                        logger.warning(f"Record missing historyId, skipping: {record.get('issueKey', 'unknown')}")
+                        continue
+                        
+                    # Format the record for Elasticsearch
+                    doc = self.format_changelog_entry(record)
+                    
+                    # Generate a unique ID for the document
+                    doc_id = f"{record.get('issueKey', 'unknown')}_{record['historyId']}"
+                    
+                    # Add the action
+                    actions.append({
+                        "_index": INDEX_CHANGELOG,
+                        "_id": doc_id,
+                        "_source": doc
+                    })
+                except Exception as e:
+                    logger.error(f"Error processing record: {e}")
+                    logger.debug(f"Problematic record: {record.get('historyId', 'unknown')} for issue {record.get('issueKey', 'unknown')}")
                     continue
-                
-                # Format the record for Elasticsearch
-                doc = self.format_changelog_entry(record)
-                
-                # Add the action
-                actions.append({
-                    "_index": INDEX_CHANGELOG,
-                    "_source": doc,
-                    # Add a metadata ID to help with error tracking
-                    "_id": f"{record['issueKey']}_{record['historyId']}"
-                })
             
             # Execute the bulk operation
             if actions:
                 try:
-                    success, errors = bulk(self.es, actions, stats_only=False, raise_on_error=False)
+                    success_count = 0
+                    failed_count = 0
                     
-                    if errors:
-                        # Log detailed error information for failed documents
-                        for error_item in errors:
-                            op_type = list(error_item.keys())[0]
-                            error_info = error_item[op_type]
-                            
-                            error_reason = "Unknown error"
-                            error_doc_id = "Unknown"
-                            
-                            # Extract error details
-                            if 'error' in error_info:
-                                if isinstance(error_info['error'], dict):
-                                    error_reason = error_info['error'].get('reason', 'Unknown reason')
-                                    error_type = error_info['error'].get('type', 'Unknown type')
-                                    error_reason = f"{error_type}: {error_reason}"
-                                else:
-                                    error_reason = str(error_info['error'])
-                                    
-                            if '_id' in error_info:
-                                error_doc_id = error_info['_id']
-                                
-                            logger.error(f"Failed to index document with ID {error_doc_id}: {error_reason}")
-                            
-                            # Try to find and log the problematic document
-                            for action in actions:
-                                if action.get('_id') == error_doc_id:
-                                    # Log a sanitized version of the document for debugging
-                                    logger.debug(f"Problematic document content (partial): issue={action.get('_source', {}).get('issue', {})}")
-                                    break
-                        
-                        logger.warning(f"Bulk insert: {success} succeeded, {len(errors)} failed")
+                    # Use the bulk helper from elasticsearch library
+                    success, errors = bulk(self.es, actions, stats_only=True, raise_on_error=False)
+                    
+                    success_count = success
+                    failed_count = len(actions) - success if success <= len(actions) else 0
+                    
+                    if failed_count > 0:
+                        logger.warning(f"Bulk insert: {success_count} succeeded, {failed_count} failed")
                     else:
-                        logger.debug(f"Bulk insert: {success} succeeded, 0 failed")
+                        logger.debug(f"Bulk insert: {success_count} succeeded")
                     
-                    return success
+                    return success_count
                 except Exception as e:
                     logger.error(f"Error during bulk operation: {e}")
-                    
-                    # Fall back to individual inserts with better error handling
-                    logger.info("Falling back to individual document inserts")
-                    success_count = 0
-                    
-                    for action in actions:
-                        try:
-                            self.es.index(
-                                index=action['_index'],
-                                id=action.get('_id'),
-                                body=action['_source']
-                            )
-                            success_count += 1
-                        except Exception as doc_error:
-                            logger.error(f"Failed to index document {action.get('_id')}: {doc_error}")
-                    
-                    logger.info(f"Individual insert fallback: {success_count} succeeded, {len(actions) - success_count} failed")
-                    return success_count
+                    return 0
             else:
                 logger.debug("No new records to insert")
                 return 0
@@ -395,7 +353,7 @@ class JiraElasticsearchPopulator:
         except Exception as e:
             logger.error(f"Error in bulk insert: {e}")
             return 0
-    
+
     def populate_from_jira(self, start_date=None, end_date=None, max_issues=None, bulk_size=100):
         """
         Fetches data from JIRA and populates Elasticsearch.
@@ -448,59 +406,34 @@ class JiraElasticsearchPopulator:
             
             # Process records in bulk
             bulk_data = []
-            current_bulk_size = 0
+            current_bulk_idx = 0
             total_inserted = 0
             
             # Track the last successfully processed history date
             last_successful_date = None
             
-            for record in history_records:
-                # Transform the record to Elasticsearch format
-                es_record = self.transform_record_for_elasticsearch(record)
+            # Process records in batches
+            for i in range(0, len(history_records), bulk_size):
+                batch = history_records[i:i+bulk_size]
+                inserted_count = self.bulk_insert_issue_history(batch)
+                total_inserted += inserted_count
                 
-                # Keep track of the latest history date we're processing
-                if es_record.get('historyDate'):
-                    try:
-                        record_date = datetime.fromisoformat(es_record['historyDate']) if isinstance(es_record['historyDate'], str) else es_record['historyDate']
-                        # Only update if this is actually a valid date
-                        if isinstance(record_date, datetime):
-                            last_successful_date = record_date
-                    except (ValueError, TypeError):
-                        logger.debug(f"Could not parse historyDate: {es_record.get('historyDate')}")
-                
-                # Add to bulk operation
-                bulk_data.append({
-                    "index": {
-                        "_index": INDEX_CHANGELOG,
-                        "_id": str(es_record['historyId'])
-                    }
-                })
-                bulk_data.append(es_record)
-                current_bulk_size += 1
-                
-                # Process the bulk when it reaches the desired size
-                if current_bulk_size >= bulk_size:
-                    success, failed = self.bulk_insert_issue_history(bulk_data)
-                    total_inserted += success
-                    
-                    # Check if there were any failures in this batch
-                    if failed > 0:
-                        all_bulk_operations_succeeded = False
-                        logger.warning(f"Bulk insert operation had {failed} failures")
-                        break  # Early exit on failure
-                    
-                    bulk_data = []
-                    current_bulk_size = 0
-            
-            # Process any remaining records
-            if bulk_data and all_bulk_operations_succeeded:
-                success, failed = self._execute_bulk(bulk_data)
-                total_inserted += success
-                
-                # Check if there were any failures in the final batch
-                if failed > 0:
+                # If nothing was inserted in this batch, there might be an issue
+                if inserted_count == 0 and len(batch) > 0:
                     all_bulk_operations_succeeded = False
-                    logger.warning(f"Final bulk insert operation had {failed} failures")
+                    logger.warning(f"Batch insert failed - 0 records inserted out of {len(batch)}")
+                    break
+                
+                # Update the last successful date if records were inserted
+                if inserted_count > 0 and batch:
+                    last_record = batch[-1]
+                    if last_record.get('historyDate'):
+                        try:
+                            record_date = datetime.fromisoformat(last_record['historyDate']) if isinstance(last_record['historyDate'], str) else last_record['historyDate']
+                            if isinstance(record_date, datetime):
+                                last_successful_date = record_date
+                        except (ValueError, TypeError):
+                            logger.debug(f"Could not parse historyDate: {last_record.get('historyDate')}")
             
             logger.info(f"Successfully inserted {total_inserted} out of {len(history_records)} records")
             success_count = total_inserted

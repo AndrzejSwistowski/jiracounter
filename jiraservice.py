@@ -114,7 +114,7 @@ class JiraService:
             parent_issue = {
                 "id": issue.fields.parent.id,
                 "key": issue.fields.parent.key,
-                "summary": getattr(issue.fields.parent, 'summary', None)
+                "summary": issue.fields.summary
             }
         
         # Extract epic information
@@ -294,7 +294,7 @@ class JiraService:
         jira = self.connect()
         try:
             # Expand both changelog and comments
-            issue = jira.issue(issue_key, expand='changelog,comment')
+            issue = jira.issue(issue_key, expand='changelog,comment,parent')
             
             # Get basic issue data
             issue_data = self._extract_issue_data(issue)
@@ -378,6 +378,7 @@ class JiraService:
                 'labels': issue_data['labels'],
                 'components': issue_data['components'],
                 'parent_issue': issue_data.get('parent_issue'),
+                'parent_summary': issue_data.get('parent_issue', {}).get('summary') if issue_data.get('parent_issue') else None,        
                 'epic_issue': issue_data.get('epic_issue'),
                 'workingDaysFromCreation': 0,  # Just created, so 0 days
                 'workingDaysInStatus': 0,      # Just created, so 0 days in status
@@ -525,6 +526,7 @@ class JiraService:
                         'labels': issue_data['labels'],
                         'components': issue_data['components'],
                         'parent_issue': issue_data.get('parent_issue'),
+                        'parent_summary': issue_data.get('parent_issue', {}).get('summary') if issue_data.get('parent_issue') else None,        
                         'epic_issue': issue_data.get('epic_issue'),
                         'workingDaysFromCreation': working_days_from_creation_at_point,
                         'workingDaysInStatus': working_days_in_status_at_point,

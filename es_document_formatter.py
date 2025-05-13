@@ -31,14 +31,14 @@ class ElasticsearchDocumentFormatter:
             "@timestamp": history_record['historyDate'],
             "factType": history_record['factType'],
             "issue": {
-                "id": history_record['issueId'],
+                
                 "key": history_record['issueKey'],
                 "type": {
                     "name": history_record['typeName']
                 },
                 "status": {
                     "name": history_record['statusName'],
-                    "change_date": history_record.get('status_change_date')
+                    "change_date": history_record.get('status_change_date') or history_record['statusChangeDate']
                 },
                 "created_at": history_record.get('created')
             },
@@ -76,7 +76,7 @@ class ElasticsearchDocumentFormatter:
         if history_record.get('parent_issue'):
             doc["parent_issue"] = {
                 "key": history_record.get('parentKey') or history_record['parent_issue'].get('key'),
-                "summary": history_record['parent_issue'].get('summary')
+                "summary":history_record.get('parent_summary') or history_record['parent_issue'].get('summary')
             }
             
         # Add epic_issue with proper structure according to mapping
