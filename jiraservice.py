@@ -67,124 +67,8 @@ class JiraService:
             self.connected = False
             raise ConnectionError(f"Could not connect to Jira: {str(e)}")
     
-    def _extract_issue_data(self, issue) -> Dict[str, Any]:
-        """Extract common issue data into a standardized dictionary.
-        
-        Args:
-            issue: Jira issue object
-            
-        Returns:
-            Dict containing the standardized issue details
-        """
-        # Set rodzaj_pracy field if available
-        rodzaj_pracy_field = self.field_ids.get('rodzaj_pracy')
-        if rodzaj_pracy_field:
-            issue.fields.rodzaj_pracy = getattr(issue.fields, rodzaj_pracy_field, None)
-        
-        # Extract backet information
-        allocation_value, allocation_code = self._extract_backet_info(issue)
-        
-        # Extract status change date if available
-        status_change_date = None
-        data_zmiany_statusu_field = self.field_ids.get('data_zmiany_statusu')
-        if data_zmiany_statusu_field:
-            status_change_date_raw = getattr(issue.fields, data_zmiany_statusu_field, None)
-            if status_change_date_raw:
-                try:
-                    # Use our utility to ensure ISO8601 format
-                    status_change_date = to_iso8601(status_change_date_raw)
-                except (ValueError, TypeError):
-                    logger.debug(f"Could not parse 'data zmiany statusu' date: {status_change_date_raw}")
-        
-        # Extract component information
-        components = []
-        if hasattr(issue.fields, 'components') and issue.fields.components:
-            for component in issue.fields.components:
-                # Store only the component name as a simple string
-                components.append(component.name)
-        
-        # Extract labels
-        labels = []
-        if hasattr(issue.fields, 'labels') and issue.fields.labels:
-            labels = issue.fields.labels
-        
-        # Extract parent issue information
-        parent_issue = None
-        if hasattr(issue.fields, 'parent'):
-            parent_issue = {
-                "id": issue.fields.parent.id,
-                "key": issue.fields.parent.key,
-                "summary": issue.fields.summary
-            }
-        
-        # Extract epic information
-        epic_issue = None
-        epic_link_field = self.field_ids.get('epic_link')
-        if epic_link_field:
-            epic_key = getattr(issue.fields, epic_link_field, None)
-            if epic_key:
-                try:
-                    # Try to get the epic issue
-                    epic = self.jira_client.issue(epic_key)
-                    epic_issue = {
-                        "id": epic.id,
-                        "key": epic.key,
-                        "summary": epic.fields.summary
-                    }
-                except Exception as e:
-                    logger.debug(f"Error retrieving epic issue {epic_key}: {e}")
-        
-        # If no epic found but there is a parent, try to get the parent's epic
-        if not epic_issue and parent_issue:
-            try:
-                # Get parent issue with its epic link
-                parent = self.jira_client.issue(parent_issue["key"])
-                
-                # Check if parent has an epic
-                if epic_link_field and hasattr(parent.fields, epic_link_field):
-                    parent_epic_key = getattr(parent.fields, epic_link_field)
-                    if parent_epic_key:
-                        try:
-                            # Get the parent's epic
-                            parent_epic = self.jira_client.issue(parent_epic_key)
-                            epic_issue = {
-                                "id": parent_epic.id,
-                                "key": parent_epic.key,
-                                "summary": parent_epic.fields.summary,
-                                "inherited": True  # Mark as inherited from parent
-                            }
-                            logger.debug(f"Issue {issue.key} inherited epic {parent_epic_key} from parent {parent_issue['key']}")
-                        except Exception as e:
-                            logger.debug(f"Error retrieving parent's epic {parent_epic_key}: {e}")
-            except Exception as e:
-                logger.debug(f"Error retrieving parent issue to check for epic: {e}")
-            
-        # Add fields specific to get_issue method
-        created_date = to_iso8601(issue.fields.created)
-        
-        # Extract basic issue data
-        issue_data = {
-            "id": issue.id,
-            "key": issue.key,
-            "summary": issue.fields.summary,
-            "status": issue.fields.status.name,
-            "type": issue.fields.issuetype.name if hasattr(issue.fields, 'issuetype') and issue.fields.issuetype else "Unknown",
-            "assignee": issue.fields.assignee.displayName if issue.fields.assignee else None,
-            "status_change_date": status_change_date,
-            "components": components,
-            "labels": labels,
-            "reporter": issue.fields.reporter.displayName if hasattr(issue.fields, 'reporter') and issue.fields.reporter else None,
-            "backet": allocation_value,
-            "allocation_code": allocation_code,
-            "parent_issue": parent_issue,
-            "epic_issue": epic_issue,
-            "updated": to_iso8601(issue.fields.updated),
-            "created": created_date,
-            "days_since_creation": calculate_working_days_between(parse_date(created_date), now()),
-        }
-        
-        return issue_data
-
+    # The _extract_issue_data method has been moved below the methods that use it
+    
     def get_issue(self, issue_key: str) -> Dict[str, Any]:
         """Retrieve an issue by its key.
         
@@ -272,8 +156,6 @@ class JiraService:
             logger.error(f"Error searching issues with query {jql_query}: {str(e)}")
             raise
             
-    # Moving get_field_id_by_name method after its usage in other methods
-    
     def get_issue_changelog(self, issue_key: str) -> List[Dict[str, Any]]:
         """Retrieve the changelog for a specific issue.
         
@@ -617,6 +499,124 @@ class JiraService:
             logger.error(f"Error retrieving issue history: {str(e)}")
             raise
     
+    def _extract_issue_data(self, issue) -> Dict[str, Any]:
+        """Extract common issue data into a standardized dictionary.
+        
+        Args:
+            issue: Jira issue object
+            
+        Returns:
+            Dict containing the standardized issue details
+        """
+        # Set rodzaj_pracy field if available
+        rodzaj_pracy_field = self.field_ids.get('rodzaj_pracy')
+        if rodzaj_pracy_field:
+            issue.fields.rodzaj_pracy = getattr(issue.fields, rodzaj_pracy_field, None)
+        
+        # Extract backet information
+        allocation_value, allocation_code = self._extract_backet_info(issue)
+        
+        # Extract status change date if available
+        status_change_date = None
+        data_zmiany_statusu_field = self.field_ids.get('data_zmiany_statusu')
+        if data_zmiany_statusu_field:
+            status_change_date_raw = getattr(issue.fields, data_zmiany_statusu_field, None)
+            if status_change_date_raw:
+                try:
+                    # Use our utility to ensure ISO8601 format
+                    status_change_date = to_iso8601(status_change_date_raw)
+                except (ValueError, TypeError):
+                    logger.debug(f"Could not parse 'data zmiany statusu' date: {status_change_date_raw}")
+        
+        # Extract component information
+        components = []
+        if hasattr(issue.fields, 'components') and issue.fields.components:
+            for component in issue.fields.components:
+                # Store only the component name as a simple string
+                components.append(component.name)
+        
+        # Extract labels
+        labels = []
+        if hasattr(issue.fields, 'labels') and issue.fields.labels:
+            labels = issue.fields.labels
+        
+        # Extract parent issue information
+        parent_issue = None
+        if hasattr(issue.fields, 'parent'):
+            parent_issue = {
+                "id": issue.fields.parent.id,
+                "key": issue.fields.parent.key,
+                "summary": issue.fields.summary
+            }
+        
+        # Extract epic information
+        epic_issue = None
+        epic_link_field = self.field_ids.get('epic_link')
+        if epic_link_field:
+            epic_key = getattr(issue.fields, epic_link_field, None)
+            if epic_key:
+                try:
+                    # Try to get the epic issue
+                    epic = self.jira_client.issue(epic_key)
+                    epic_issue = {
+                        "id": epic.id,
+                        "key": epic.key,
+                        "summary": epic.fields.summary
+                    }
+                except Exception as e:
+                    logger.debug(f"Error retrieving epic issue {epic_key}: {e}")
+        
+        # If no epic found but there is a parent, try to get the parent's epic
+        if not epic_issue and parent_issue:
+            try:
+                # Get parent issue with its epic link
+                parent = self.jira_client.issue(parent_issue["key"])
+                
+                # Check if parent has an epic
+                if epic_link_field and hasattr(parent.fields, epic_link_field):
+                    parent_epic_key = getattr(parent.fields, epic_link_field)
+                    if parent_epic_key:
+                        try:
+                            # Get the parent's epic
+                            parent_epic = self.jira_client.issue(parent_epic_key)
+                            epic_issue = {
+                                "id": parent_epic.id,
+                                "key": parent_epic.key,
+                                "summary": parent_epic.fields.summary,
+                                "inherited": True  # Mark as inherited from parent
+                            }
+                            logger.debug(f"Issue {issue.key} inherited epic {parent_epic_key} from parent {parent_issue['key']}")
+                        except Exception as e:
+                            logger.debug(f"Error retrieving parent's epic {parent_epic_key}: {e}")
+            except Exception as e:
+                logger.debug(f"Error retrieving parent issue to check for epic: {e}")
+            
+        # Add fields specific to get_issue method
+        created_date = to_iso8601(issue.fields.created)
+        
+        # Extract basic issue data
+        issue_data = {
+            "id": issue.id,
+            "key": issue.key,
+            "summary": issue.fields.summary,
+            "status": issue.fields.status.name,
+            "type": issue.fields.issuetype.name if hasattr(issue.fields, 'issuetype') and issue.fields.issuetype else "Unknown",
+            "assignee": issue.fields.assignee.displayName if issue.fields.assignee else None,
+            "status_change_date": status_change_date,
+            "components": components,
+            "labels": labels,
+            "reporter": issue.fields.reporter.displayName if hasattr(issue.fields, 'reporter') and issue.fields.reporter else None,
+            "backet": allocation_value,
+            "allocation_code": allocation_code,
+            "parent_issue": parent_issue,
+            "epic_issue": epic_issue,
+            "updated": to_iso8601(issue.fields.updated),
+            "created": created_date,
+            "days_since_creation": calculate_working_days_between(parse_date(created_date), now()),
+        }
+        
+        return issue_data
+
     def _cache_field_ids(self) -> None:
         """Look up and cache custom field IDs for use in Jira operations.
         
