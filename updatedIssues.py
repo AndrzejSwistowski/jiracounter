@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 import dateutil.parser
 from jiraservice import JiraService
 import config
-from utils import calculate_days_since_date, validate_and_format_dates
+from utils import calculate_days_since_date, validate_and_format_dates, format_date_polish
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, "INFO"))
@@ -60,16 +60,16 @@ class UpdatedIssuesReport:
                         "summary": issue_details["summary"],
                         "status": issue_details["status"],
                         "type": issue_details.get("type", "Unknown"),
-                        "creationDate": issue_details["creationDate"],
+                        "created": issue_details["created"],
                         "updated": issue_details["updated"],
                         "updatedDate": dateutil.parser.parse(issue_details["updated"]).strftime("%Y-%m-%d"),
-                        "daysSinceCreation": issue_details["daysSinceCreation"],
+                        "days_since_creation": issue_details["days_since_creation"],
                         "reporter": issue_details["reporter"],
                         "assignee": issue_details["assignee"],
                         "projectKey": issue_key.split("-")[0],  # Extract project key from issue key
-                        "backetKey": issue_details.get("backetKey", "Undefined"),  # Add backetKey information
-                        "statusChangeDate": issue_details.get("statusChangeDate", None),
-                        "daysInCurrentStatus": calculate_days_since_date(issue_details.get("statusChangeDate", None)) if issue_details.get("statusChangeDate") else None
+                        "allocation_code": issue_details.get("allocation_code", "Undefined"),  # Add allocation_code information
+                        "status_change_date": issue_details.get("status_change_date", None),
+                        "daysInCurrentStatus": calculate_days_since_date(issue_details.get("status_change_date", None)) if issue_details.get("status_change_date") else None
                     }
                     
                     issues_with_details.append(issue_info)
@@ -173,8 +173,12 @@ if __name__ == "__main__":
                     else:
                         status_info = f"({issue['status']} - {issue['daysInCurrentStatus']} days)"
                 
+                # Format the dates in Polish
+                updated_date_polish = format_date_polish(issue['updated'])
+                created_date_polish = format_date_polish(issue['created'])
+                
                 print(f"  {issue['key']}: [{issue['type']}] {issue['summary']} {status_info} - "
-                      f"Updated: {issue['updatedDate']} - Created: {issue['creationDate']} ({issue['daysSinceCreation']} days ago) [{issue['backetKey']}]")
+                      f"Updated: {updated_date_polish} - Created: {created_date_polish} ({issue['days_since_creation']} days ago) [{issue['allocation_code']}]")
                 
         # If a specific project is requested via command line
         if len(sys.argv) > 3:
@@ -194,8 +198,12 @@ if __name__ == "__main__":
                     else:
                         status_info = f"({issue['status']} - {issue['daysInCurrentStatus']} days)"
                 
+                # Format the dates in Polish
+                updated_date_polish = format_date_polish(issue['updated'])
+                created_date_polish = format_date_polish(issue['created'])
+                
                 print(f"  {issue['key']}: [{issue['type']}] {issue['summary']} {status_info} - "
-                      f"Updated: {issue['updatedDate']} - Created: {issue['creationDate']} ({issue['daysSinceCreation']} days ago) [{issue['backetKey']}]")
+                      f"Updated: {updated_date_polish} - Created: {created_date_polish} ({issue['days_since_creation']} days ago) [{issue['allocation_code']}]")
                 
     except Exception as e:
         print(f"Error: {str(e)}")

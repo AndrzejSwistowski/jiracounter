@@ -1,0 +1,117 @@
+{
+	"_index": "jira-changelog",
+	"_id": "BAI-17_39239", 
+	"_version": 1,
+	"_source": {
+		"historyId": 39239,
+		"historyDate": "2025-04-25T13:38:33.949000+02:00",
+		"@timestamp": "2025-04-25T13:38:33.949000+02:00",
+		"factType": 3,
+		"issue": {
+			"id": "10239",
+			"key": "BAI-17",
+			"type": {
+				"name": "Epic"
+			},
+			"status": {
+				"name": "BACKLOG"
+			}
+		},
+		"project": {
+			"key": "BAI",
+			"name": "Bus API Integracje"
+		},
+		"author": {
+			"username": "712020:4b88f61c-51f1-497d-aea7-854d5457f9d4",
+			"displayName": "Andrzej Świstowski"
+		},
+		"summary": "Obsługa sprzedaży LikeBus na www",
+		"workingDaysFromCreation": 189.9,
+		"reporter": {
+			"username": "Andrzej Świstowski",
+			"displayName": "Andrzej Świstowski"
+		},
+		"changes": [
+			{
+				"field": "description",
+				"from": null,
+				"to": "Funkcjonalność działa dla agenta, należy uruchomić ją również w serwisie WWW i w API zewnętrznym"
+			}
+		]
+	},
+	"fields": {
+		"summary": [
+			"Obsługa sprzedaży LikeBus na www"
+		],
+		"reporter.displayName.keyword": [
+			"Andrzej Świstowski"
+		],
+		"project.key": [
+			"BAI"
+		],
+		"author.username": [
+			"712020:4b88f61c-51f1-497d-aea7-854d5457f9d4"
+		],
+		"factType": [
+			3
+		],
+		"changes": [
+			{
+				"field": [
+					"description"
+				],
+				"to.keyword": [
+					"Funkcjonalność działa dla agenta, należy uruchomić ją również w serwisie WWW i w API zewnętrznym"
+				],
+				"to": [
+					"Funkcjonalność działa dla agenta, należy uruchomić ją również w serwisie WWW i w API zewnętrznym"
+				]
+			}
+		],
+		"project.name": [
+			"Bus API Integracje"
+		],
+		"historyDate": [
+			"2025-04-25T11:38:33.949Z"
+		],
+		"@timestamp": [
+			"2025-04-25T11:38:33.949Z"
+		],
+		"issue.type.name": [
+			"Epic"
+		],
+		"issue.id": [
+			"10239"
+		],
+		"author.displayName": [
+			"Andrzej Świstowski"
+		],
+		"reporter.username": [
+			"Andrzej Świstowski"
+		],
+		"historyId": [
+			"39239"
+		],
+		"reporter.displayName": [
+			"Andrzej Świstowski"
+		],
+		"issue.key": [
+			"BAI-17"
+		],
+		"project.name.keyword": [
+			"Bus API Integracje"
+		],
+		"issue.status.name": [
+			"BACKLOG"
+		],
+		"summary.keyword": [
+			"Obsługa sprzedaży LikeBus na www"
+		],
+		"workingDaysFromCreation": [
+			189.9
+		],
+		"author.displayName.keyword": [
+			"Andrzej Świstowski"
+		]
+	}
+}

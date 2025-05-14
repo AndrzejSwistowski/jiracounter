@@ -16,6 +16,7 @@ Closed, or Completed status. The epic information includes:
 import logging
 from typing import List, Dict, Any
 from jiraservice import JiraService
+from utils import calculate_days_since_date, format_date_polish
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -57,11 +58,11 @@ class EpicOpenedReport:
                         "idIssue": issue_key,
                         "summary": issue_details["summary"],
                         "status": issue_details["status"],
-                        "creationDate": issue_details["creationDate"],
-                        "daysSinceCreation": issue_details["daysSinceCreation"],
+                        "created": issue_details["created"],
+                        "days_since_creation": issue_details["days_since_creation"],
                         "Reporter": issue_details["reporter"],
                         "Assignee": issue_details["assignee"],
-                        "statusChangeDate": issue_details.get("statusChangeDate", None),
+                        "status_change_date": issue_details.get("status_change_date", None),
                         "daysInCurrentStatus": issue_details.get("daysInCurrentStatus", None),
                     }
                     
@@ -123,6 +124,10 @@ if __name__ == "__main__":
                 status_info = f"{epic['status']}"
                 if epic.get('daysInCurrentStatus') is not None:
                     status_info += f" - {epic['daysInCurrentStatus']} days in current status"
-                print(f"  {epic['idIssue']}: {epic['summary']} ({status_info}) - Created: {epic['creationDate']} ({epic['daysSinceCreation']} days ago) - Reporter: {epic['Reporter']} - Assignee: {epic['Assignee']}")
+                
+                # Format the creation date in Polish
+                created_date_polish = format_date_polish(epic['created'])
+                
+                print(f"  {epic['idIssue']}: {epic['summary']} ({status_info}) - Created: {created_date_polish} ({epic['days_since_creation']} days ago) - Reporter: {epic['Reporter']} - Assignee: {epic['Assignee']}")
     except Exception as e:
         print(f"Error: {str(e)}")

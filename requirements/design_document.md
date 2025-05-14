@@ -64,6 +64,23 @@ The `JiraService` class acts as a facade, providing a simplified interface to th
 - Environment-based configuration
 - Support for custom field mappings
 
+## Coding Principles
+
+1. **Don't Repeat Yourself (DRY)**:
+   - Avoid code duplication
+   - Extract common functionality into reusable methods
+   - Use inheritance and composition appropriately
+
+2. **Tell Don't Ask**:
+   - Tell objects what to do, don't ask for their state to make decisions
+   - Objects should be responsible for their own behavior
+   - Minimize exposing internal state
+
+3. **Function Ordering**:
+   - Keep implementation functions below the functions that call them
+   - Public methods should appear before private methods
+   - This improves code readability and makes interfaces more discoverable
+
 ## Error Handling Strategy
 
 1. **Layered Approach**:
