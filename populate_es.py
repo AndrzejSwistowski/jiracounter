@@ -265,20 +265,7 @@ def main():
                 logger.info(f"No previous sync found, using last {args.days} days")
             else:
                 logger.info(f"Performing incremental sync from last sync date: {start_date}")
-        
-        # Estimate total records for progress tracking
-        try:
-            # Make a preliminary query to estimate record count
-            logger.info("Estimating total records to process...")
-            estimate = populator.jira_service.estimate_record_count(start_date, end_date, args.max_issues)
-            if estimate and estimate > 0:
-                logger.info(f"Estimated {estimate} records to process")
-            else:
-                logger.info("Could not estimate record count, will show progress without percentages")
-                estimate = None
-        except Exception as e:
-            logger.warning(f"Error estimating record count: {e}")
-            estimate = None
+
           # Populate Elasticsearch
         logger.info(f"Starting ETL process from {start_date} to {end_date}")
         count = populator.populate_from_jira(

@@ -558,11 +558,11 @@ class JiraService:
         if epic_key:
             try:
                 # Try to get the epic issue
-                epic = self.jira_client.issue(epic_key)
+                epic_data = self.get_issue(epic_key)
                 epic_issue = {
-                    "id": epic.id,
-                    "key": epic.key,
-                    "summary": epic.fields.summary
+                    "id": epic_data["id"],
+                    "key": epic_data["key"],
+                    "summary": epic_data["summary"]
                 }
             except Exception as e:
                 logger.debug(f"Error retrieving epic issue {epic_key}: {e}")
@@ -571,23 +571,32 @@ class JiraService:
         if not epic_issue and parent_issue:
             try:
                 # Get parent issue with its epic link
-                parent = self.jira_client.issue(parent_issue["key"])
+                parent_data = self.get_issue(parent_issue["key"])
                 
-                # Check if parent has an epic using field manager
-                parent_epic_key = self.field_manager.get_field_value(parent, 'epic_link')
-                if parent_epic_key:
-                    try:
-                        # Get the parent's epic
-                        parent_epic = self.jira_client.issue(parent_epic_key)
-                        epic_issue = {
-                            "id": parent_epic.id,
-                            "key": parent_epic.key,
-                            "summary": parent_epic.fields.summary,
-                            "inherited": True  # Mark as inherited from parent
-                        }
-                        logger.debug(f"Issue {issue.key} inherited epic {parent_epic_key} from parent {parent_issue['key']}")
-                    except Exception as e:
-                        logger.debug(f"Error retrieving parent's epic {parent_epic_key}: {e}")
+                # First check if the parent_data already has epic information
+                if parent_data.get("epic_issue"):
+                    epic_issue = parent_data["epic_issue"]
+                    epic_issue["inherited"] = True  # Mark as inherited from parent
+                    logger.debug(f"Issue {issue.key} inherited epic {parent_data['epic_issue']['key']} from parent {parent_issue['key']}")
+                # else:
+                #     # For field manager we need the raw jira object
+                #     parent = self.jira_client.issue(parent_issue["key"])
+                #     # Check if parent has an epic using field manager
+                #     parent_epic_key = self.field_manager.get_field_value(parent, 'epic_link')
+                #     if parent_epic_key:
+                #         try:
+                #             # Get the parent's epic
+                #             parent_epic_data = self.get_issue(parent_epic_key)
+                #             parent_epic = self.jira_client.issue(parent_epic_key)  # Still need this for field access
+                #             epic_issue = {
+                #                 "id": parent_epic.id,
+                #                 "key": parent_epic.key,
+                #                 "summary": parent_epic.fields.summary,
+                #                 "inherited": True  # Mark as inherited from parent
+                #             }
+                #             logger.debug(f"Issue {issue.key} inherited epic {parent_epic_key} from parent {parent_issue['key']}")
+                #         except Exception as e:
+                #             logger.debug(f"Error retrieving parent's epic {parent_epic_key}: {e}")
             except Exception as e:
                 logger.debug(f"Error retrieving parent issue to check for epic: {e}")
             
@@ -620,38 +629,8 @@ class JiraService:
     # The _cache_field_ids method has been removed as this functionality
     # is now handled by the JiraFieldManager class
     
-    def get_field_id_by_name(self, field_name: str, jira_client=None) -> Optional[str]:
-        """Find the custom field ID by its visible name.
-        
-        Args:
-            field_name: The visible name of the field in Jira
-            jira_client: Optional Jira client to use for the operation. If not provided,
-                        will use self.jira_client if available or connect first.
-            
-        Returns:
-            Optional[str]: The field ID if found, None otherwise
-        """
-        # Use provided client, or existing client, or establish a new connection
-        client = jira_client or self.jira_client
-        if not client:
-            if not self.connected:
-                client = self.connect()
-            else:
-                logger.warning("No Jira client available. Connect first.")
-                return None
-            
-        try:
-            fields = client.fields()
-            for field in fields:
-                if field['name'].lower() == field_name.lower():
-                    logger.debug(f"Found field '{field_name}' with ID: {field['id']}")
-                    return field['id']
-            
-            logger.warning(f"Field '{field_name}' not found in Jira")
-            return None
-        except Exception as e:
-            logger.error(f"Error finding field ID for '{field_name}': {str(e)}")
-            return None
+    # The get_field_id_by_name method has been removed as this functionality
+    # is now handled by the JiraFieldManager class
     
     def _extract_backet_info(self, rodzaj_pracy_value=None) -> tuple:
         """Extract backet value and key from the rodzaj_pracy field.
