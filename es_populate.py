@@ -43,7 +43,9 @@ class JiraElasticsearchPopulator:
     """
     Handles populating Elasticsearch with data from the JIRA API.
     Connects to Elasticsearch and manages the indices for storing JIRA data.
-    """    def __init__(self, agent_name="JiraETLAgent", host=ES_HOST, port=ES_PORT,
+    """
+    
+    def __init__(self, agent_name="JiraETLAgent", host=ES_HOST, port=ES_PORT,
                  api_key=ELASTIC_APIKEY, use_ssl=ES_USE_SSL, url=ELASTIC_URL):
         """
         Initialize the Elasticsearch populator.
@@ -64,12 +66,6 @@ class JiraElasticsearchPopulator:
         self.api_key = api_key
         self.use_ssl = use_ssl
         self.url = url
-        
-        # Create a progress tracker for this populator instance
-        self.progress_tracker = ProgressTracker(
-            logger=logging.getLogger(__name__),
-            name=f"es_populator_{agent_name}"
-        )
         
         # Create a progress tracker for this populator instance
         self.progress_tracker = ProgressTracker(
@@ -391,17 +387,23 @@ class JiraElasticsearchPopulator:
         # Flag to track if all bulk operations succeeded
         all_bulk_operations_succeeded = True
         success_count = 0
-          try:
+        
+        try:
             # Reset the progress tracker at the start of a new populate operation
             self.progress_tracker.reset()
             
             # Get issue history records from JIRA
-            result = self.jira_service.get_issue_history(start_date=start_date, end_date=end_date, max_issues=max_issues)
+            result = self.jira_service.get_issue_history(
+                start_date=start_date,
+                end_date=end_date,
+                max_issues=max_issues
+            )
+            
             if result is None:
                 history_records = []
             else:
                 history_records = result
-					
+                
             # If we get here, JIRA authentication was successful
             jira_connected = True
             
@@ -441,13 +443,20 @@ class JiraElasticsearchPopulator:
                     last_record = batch[-1]
                     if last_record.get('historyDate'):
                         try:
-                            record_date = datetime.fromisoformat(last_record['historyDate']) if isinstance(last_record['historyDate'], str) else last_record['historyDate']
+                            record_date = (datetime.fromisoformat(last_record['historyDate']) 
+                                          if isinstance(last_record['historyDate'], str) 
+                                          else last_record['historyDate'])
                             if isinstance(record_date, datetime):
                                 last_successful_date = record_date
                         except (ValueError, TypeError):
                             logger.debug(f"Could not parse historyDate: {last_record.get('historyDate')}")
-              # Log final progress with force_log=True to ensure it's displayed
-            self.progress_tracker.update(increment=0, total=len(history_records), force_log=True)
+            
+            # Log final progress with force_log=True to ensure it's displayed
+            self.progress_tracker.update(
+                increment=0, 
+                total=len(history_records), 
+                force_log=True
+            )
             
             # Log summary of operation
             logger.info(f"Successfully inserted {total_inserted} out of {len(history_records)} records")
@@ -498,7 +507,7 @@ class JiraElasticsearchPopulator:
         try:
             # Calculate the date range
             end_date = datetime.now(APP_TIMEZONE)
-            start_date = end_date - timedelta(days=30)
+            start_date = end_date - timedelta(days=days)
             
             # Build the query
             query = {
@@ -705,8 +714,16 @@ class JiraElasticsearchPopulator:
         return es_record
 
     def _execute_bulk(self, actions):
-        # Method implementation
-        pass
+        """Execute a bulk operation in Elasticsearch."""
+        if not actions:
+            return 0, 0
+            
+        try:
+            success, errors = bulk(self.es, actions, stats_only=True, raise_on_error=False)
+            return success, len(actions) - success
+        except Exception as e:
+            logger.error(f"Error executing bulk operation: {e}")
+            return 0, len(actions)
             
 # Example usage
 if __name__ == "__main__":
