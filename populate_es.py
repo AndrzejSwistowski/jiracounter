@@ -32,45 +32,21 @@ import config
 from es_mapping import CHANGELOG_MAPPING, SETTINGS_MAPPING
 import requests
 from logger_utils import setup_logging
+from progress_tracker import ProgressTracker
 
-# Track progress globally
-progress_count = 0
-start_time = None
-
+# For backward compatibility - delegates to ProgressTracker
 def log_progress(logger, current, total=None, interval=30):
-    """Log progress at regular intervals to prevent log file from growing too large."""
-    global progress_count, start_time
+    """
+    Legacy function that delegates to ProgressTracker.
     
-    progress_count += current
-    
-    # Only initialize start_time on first call
-    if start_time is None:
-        start_time = time.time()
+    This function is maintained for backward compatibility.
+    New code should use the ProgressTracker class directly.
+    """
+    # Get or create a singleton tracker for backward compatibility
+    if not hasattr(log_progress, '_tracker'):
+        log_progress._tracker = ProgressTracker(logger=logger, name="etl_progress")
         
-    current_time = time.time()
-    elapsed = current_time - start_time
-    
-    # Calculate items per second
-    rate = progress_count / elapsed if elapsed > 0 else 0
-    
-    # Format as HH:MM:SS
-    elapsed_str = time.strftime('%H:%M:%S', time.gmtime(elapsed))
-    
-    # Log with percentage if total is known
-    if total:
-        percentage = (progress_count / total) * 100
-        logger.info(f"Progress: {progress_count}/{total} ({percentage:.1f}%) | Rate: {rate:.2f} items/sec | Elapsed: {elapsed_str}")
-    else:
-        logger.info(f"Progress: {progress_count} items | Rate: {rate:.2f} items/sec | Elapsed: {elapsed_str}")
-    
-    # Estimate remaining time if total is known
-    if total and rate > 0:
-        remaining_items = total - progress_count
-        estimated_seconds = remaining_items / rate
-        remaining_str = time.strftime('%H:%M:%S', time.gmtime(estimated_seconds))
-        logger.info(f"Estimated time remaining: {remaining_str}")
-        
-    return progress_count
+    return log_progress._tracker.update(increment=current, total=total, interval=interval)
 
 def delete_index(populator, index_name, logger):
     """Delete an Elasticsearch index."""

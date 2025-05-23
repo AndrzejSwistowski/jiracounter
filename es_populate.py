@@ -21,6 +21,7 @@ import config
 import dateutil.parser
 from es_mapping import CHANGELOG_MAPPING, SETTINGS_MAPPING
 from es_document_formatter import ElasticsearchDocumentFormatter
+from progress_tracker import ProgressTracker
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, "INFO"))
@@ -42,9 +43,7 @@ class JiraElasticsearchPopulator:
     """
     Handles populating Elasticsearch with data from the JIRA API.
     Connects to Elasticsearch and manages the indices for storing JIRA data.
-    """
-    
-    def __init__(self, agent_name="JiraETLAgent", host=ES_HOST, port=ES_PORT,
+    """    def __init__(self, agent_name="JiraETLAgent", host=ES_HOST, port=ES_PORT,
                  api_key=ELASTIC_APIKEY, use_ssl=ES_USE_SSL, url=ELASTIC_URL):
         """
         Initialize the Elasticsearch populator.
@@ -65,6 +64,18 @@ class JiraElasticsearchPopulator:
         self.api_key = api_key
         self.use_ssl = use_ssl
         self.url = url
+        
+        # Create a progress tracker for this populator instance
+        self.progress_tracker = ProgressTracker(
+            logger=logging.getLogger(__name__),
+            name=f"es_populator_{agent_name}"
+        )
+        
+        # Create a progress tracker for this populator instance
+        self.progress_tracker = ProgressTracker(
+            logger=logging.getLogger(__name__),
+            name=f"es_populator_{agent_name}"
+        )
         
     def connect(self):
         """Establishes a connection to Elasticsearch."""
@@ -380,8 +391,10 @@ class JiraElasticsearchPopulator:
         # Flag to track if all bulk operations succeeded
         all_bulk_operations_succeeded = True
         success_count = 0
-        
-        try:
+          try:
+            # Reset the progress tracker at the start of a new populate operation
+            self.progress_tracker.reset()
+            
             # Get issue history records from JIRA
             result = self.jira_service.get_issue_history(start_date=start_date, end_date=end_date, max_issues=max_issues)
             if result is None:
@@ -400,11 +413,22 @@ class JiraElasticsearchPopulator:
             # Track the last successfully processed history date
             last_successful_date = None
             
+            # Log the total number of records to process
+            logger.info(f"Found {len(history_records)} history records to process")
+            total_records = len(history_records)
+            
             # Process records in batches
             for i in range(0, len(history_records), bulk_size):
                 batch = history_records[i:i+bulk_size]
                 inserted_count = self.bulk_insert_issue_history(batch)
                 total_inserted += inserted_count
+                
+                # Update progress after each batch
+                self.progress_tracker.update(
+                    increment=len(batch), 
+                    total=total_records,
+                    interval=30
+                )
                 
                 # If nothing was inserted in this batch, there might be an issue
                 if inserted_count == 0 and len(batch) > 0:
@@ -422,8 +446,13 @@ class JiraElasticsearchPopulator:
                                 last_successful_date = record_date
                         except (ValueError, TypeError):
                             logger.debug(f"Could not parse historyDate: {last_record.get('historyDate')}")
+              # Log final progress with force_log=True to ensure it's displayed
+            self.progress_tracker.update(increment=0, total=len(history_records), force_log=True)
             
+            # Log summary of operation
             logger.info(f"Successfully inserted {total_inserted} out of {len(history_records)} records")
+            logger.info(f"Average processing rate: {self.progress_tracker.items_per_second:.2f} items/sec")
+            
             success_count = total_inserted
             
         except Exception as e:
