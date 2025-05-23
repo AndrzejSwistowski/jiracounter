@@ -9,24 +9,7 @@ import argparse
 import sys
 from datetime import datetime, timedelta
 from es_populate import JiraElasticsearchPopulator
-
-def setup_logging(verbose=True):
-    """Configure logging for the repopulation process."""
-    level = logging.DEBUG if verbose else logging.INFO
-    
-    logging.basicConfig(
-        level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler("jira_full_repopulate.log"),
-            logging.StreamHandler()
-        ]
-    )
-    
-    # Reduce noise from other libraries
-    logging.getLogger('urllib3').setLevel(logging.WARNING)
-    logging.getLogger('requests').setLevel(logging.WARNING)
-    logging.getLogger('elasticsearch').setLevel(logging.WARNING)
+from logger_utils import setup_logging
 
 def main():
     """Main entry point for the full repopulation process."""
@@ -47,10 +30,12 @@ def main():
                         help='Continue processing other batches if one fails')
     
     args = parser.parse_args()
-    
-    # Set up logging
-    setup_logging(verbose=True)
-    logger = logging.getLogger(__name__)
+      # Set up logging
+    logger = setup_logging(
+        verbose=True,
+        log_prefix="jira_full_repopulate",
+        use_timestamp=False  # Keep the original behavior with a fixed filename
+    )
     
     logger.info("Starting full repopulation of Elasticsearch with historical Jira data")
     logger.info(f"Will process approximately {args.days} days of history in batches of {args.batch_size} days")

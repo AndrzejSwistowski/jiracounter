@@ -37,32 +37,7 @@ from datetime import datetime, timedelta
 from es_populate import JiraElasticsearchPopulator
 import config
 from es_mapping import CHANGELOG_MAPPING, SETTINGS_MAPPING
-
-def setup_logging(verbose=False, log_file="recreate_es_index.log"):
-    """Configure logging for the process."""
-    level = logging.DEBUG if verbose else logging.INFO
-    
-    # Create logs directory if it doesn't exist
-    os.makedirs('logs', exist_ok=True)
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_filename = f"logs/recreate_es_index_{timestamp}.log"
-    
-    logging.basicConfig(
-        level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_filename),
-            logging.StreamHandler()
-        ]
-    )
-    
-    # Reduce noise from other libraries
-    logging.getLogger('urllib3').setLevel(logging.WARNING)
-    logging.getLogger('requests').setLevel(logging.WARNING)
-    logging.getLogger('elasticsearch').setLevel(logging.WARNING)
-    
-    return logging.getLogger(__name__)
+from logger_utils import setup_logging
 
 def delete_index(populator, index_name, logger):
     """Delete an Elasticsearch index."""
@@ -226,9 +201,11 @@ def main():
                         help='Enable verbose logging')
     
     args = parser.parse_args()
-    
-    # Set up logging
-    logger = setup_logging(args.verbose)
+      # Set up logging
+    logger = setup_logging(
+        verbose=args.verbose,
+        log_prefix="recreate_es_index"
+    )
     
     logger.info("Starting Elasticsearch index recreation process")
     

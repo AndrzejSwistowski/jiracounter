@@ -29,8 +29,9 @@ from elasticsearch import Elasticsearch
 # Import from existing modules
 from reset_es_sync_date import connect_elasticsearch
 from es_mapping import CHANGELOG_MAPPING, SETTINGS_MAPPING
-from populate_es import setup_logging, recreate_indices
+from populate_es import recreate_indices
 from es_populate import JiraElasticsearchPopulator
+from logger_utils import setup_logging
 import config
 
 def delete_index(url, headers, index_name, logger):
@@ -120,9 +121,11 @@ def main():
                         help='Enable verbose logging')
     
     args = parser.parse_args()
-    
-    # Set up logging
-    logger = setup_logging(args.verbose)
+      # Set up logging
+    logger = setup_logging(
+        verbose=args.verbose,
+        log_prefix="update_es_indices"
+    )
     
     logger.info("Starting Elasticsearch index update process")
     
