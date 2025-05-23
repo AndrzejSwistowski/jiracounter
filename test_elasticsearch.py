@@ -5,8 +5,8 @@ This will attempt to connect to Elasticsearch and list available indices.
 """
 
 import logging
-import os
 from elasticsearch import Elasticsearch
+import config
 
 # Configure logging
 logging.basicConfig(
@@ -15,16 +15,20 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Get connection details from environment variables
-ELASTIC_URL = os.environ.get('ELASTIC_URL', 'http://localhost:9200')
-ELASTIC_APIKEY = os.environ.get('ELASTIC_APIKEY')
-
 def test_elasticsearch_connection():
     """Test connection to Elasticsearch."""
-    logger.info(f"Testing connection to Elasticsearch at {ELASTIC_URL}")
+    es_config = config.get_elasticsearch_config()
+    
+    # Build the connection URL
+    if es_config['url']:
+        connection_url = es_config['url']
+    else:
+        connection_url = f"http://{es_config['host']}:{es_config['port']}"
+    
+    logger.info(f"Testing connection to Elasticsearch at {connection_url}")
     
     # Remove trailing slash if present
-    url = ELASTIC_URL.rstrip('/')
+    url = connection_url.rstrip('/')
     
     # Prepare connection arguments
     connect_args = {
@@ -32,9 +36,9 @@ def test_elasticsearch_connection():
     }
     
     # Add API key authentication if provided
-    if ELASTIC_APIKEY:
+    if es_config['api_key']:
         connect_args['headers'] = {
-            "Authorization": f"ApiKey {ELASTIC_APIKEY}"
+            "Authorization": f"ApiKey {es_config['api_key']}"
         }
         logger.info("Using API key authentication")
     

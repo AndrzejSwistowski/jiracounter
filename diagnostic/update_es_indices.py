@@ -27,10 +27,11 @@ import requests
 from elasticsearch import Elasticsearch
 
 # Import from existing modules
-from reset_es_sync_date import connect_elasticsearch, ELASTIC_URL, ELASTIC_APIKEY
+from reset_es_sync_date import connect_elasticsearch
 from es_mapping import CHANGELOG_MAPPING, SETTINGS_MAPPING
 from populate_es import setup_logging, recreate_indices
-from es_populate import JiraElasticsearchPopulator, INDEX_CHANGELOG, INDEX_SETTINGS, ES_HOST, ES_PORT, ES_USE_SSL
+from es_populate import JiraElasticsearchPopulator
+import config
 
 def delete_index(url, headers, index_name, logger):
     """Delete an Elasticsearch index."""
@@ -135,22 +136,21 @@ def main():
         
         # Before deleting, log the current mapping for reference if needed
         try:
-            current_mapping_response = requests.get(f"{url}/{INDEX_CHANGELOG}/_mapping", headers=headers)
+            current_mapping_response = requests.get(f"{url}/{config.INDEX_CHANGELOG}/_mapping", headers=headers)
             if current_mapping_response.status_code == 200:
                 logger.debug("Current mapping before update retrieved successfully")
         except Exception as e:
             logger.debug(f"Could not retrieve current mapping: {e}")
-        
-        # Get confirmation for index deletion if not already provided
+          # Get confirmation for index deletion if not already provided
         if not args.confirm:
-            confirmation = input(f"WARNING: This will delete indices '{INDEX_CHANGELOG}' and '{INDEX_SETTINGS}'. "
+            confirmation = input(f"WARNING: This will delete indices '{config.INDEX_CHANGELOG}' and '{config.INDEX_SETTINGS}'. "
                                f"All data will be lost. Type 'yes' to continue: ")
             if confirmation.lower() != "yes":
                 logger.info("Index update cancelled by user")
                 return 0
         
         # Delete the indices
-        indices_to_delete = [INDEX_CHANGELOG, INDEX_SETTINGS]
+        indices_to_delete = [config.INDEX_CHANGELOG, config.INDEX_SETTINGS]
         for index_name in indices_to_delete:
             delete_result = delete_index(url, headers, index_name, logger)
             if not delete_result:
@@ -158,13 +158,14 @@ def main():
                 return 1
         
         # Create the Elasticsearch populator for recreating indices
+        es_config = config.get_elasticsearch_config()
         populator = JiraElasticsearchPopulator(
             agent_name="JiraETLAgent",
-            host=ES_HOST,
-            port=ES_PORT,
-            api_key=ELASTIC_APIKEY,
-            use_ssl=ES_USE_SSL,
-            url=ELASTIC_URL
+            host=es_config['host'],
+            port=es_config['port'],
+            api_key=es_config['api_key'],
+            use_ssl=es_config['use_ssl'],
+            url=es_config['url']
         )
         
         # Connect the populator
@@ -195,7 +196,7 @@ def main():
         # Verify field mappings and data
         if count > 0:
             logger.info("Verifying field mappings and data...")
-            verify_field_mappings(es, url, headers, INDEX_CHANGELOG, logger)
+            verify_field_mappings(es, url, headers, config.INDEX_CHANGELOG, logger)
         
         # Get and log database summary
         summary = populator.get_database_summary()

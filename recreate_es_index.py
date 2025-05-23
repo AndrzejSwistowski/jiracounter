@@ -34,8 +34,8 @@ import argparse
 import os
 import sys
 from datetime import datetime, timedelta
-from es_populate import JiraElasticsearchPopulator, ELASTIC_URL, ELASTIC_APIKEY, ES_HOST, ES_PORT, ES_USE_SSL
-from es_populate import INDEX_CHANGELOG, INDEX_SETTINGS
+from es_populate import JiraElasticsearchPopulator
+import config
 from es_mapping import CHANGELOG_MAPPING, SETTINGS_MAPPING
 
 def setup_logging(verbose=False, log_file="recreate_es_index.log"):
@@ -151,9 +151,8 @@ def recreate_indices(populator, logger):
     """Create the indices with updated mappings."""
     try:
         logger.info("Creating indices with explicit mappings from es_mapping module")
-        
-        # Try to create with full mapping first
-        result_changelog = create_index(populator, INDEX_CHANGELOG, CHANGELOG_MAPPING, logger)
+          # Try to create with full mapping first
+        result_changelog = create_index(populator, config.INDEX_CHANGELOG, CHANGELOG_MAPPING, logger)
         
         # If creating with Polish analyzer fails, try a fallback mapping
         if not result_changelog:
@@ -173,16 +172,15 @@ def recreate_indices(populator, logger):
                             del simplified_mapping["mappings"]["properties"][field_name]["fields"]["polish"]
             
             # Try with simplified mapping
-            result_changelog = create_index(populator, INDEX_CHANGELOG, simplified_mapping, logger)
+            result_changelog = create_index(populator, config.INDEX_CHANGELOG, simplified_mapping, logger)
             
         if not result_changelog:
-            logger.error(f"Failed to create index {INDEX_CHANGELOG}")
+            logger.error(f"Failed to create index {config.INDEX_CHANGELOG}")
             return False
             
         # Create the settings index with the proper mapping
-        result_settings = create_index(populator, INDEX_SETTINGS, SETTINGS_MAPPING, logger)
-        if not result_settings:
-            logger.error(f"Failed to create index {INDEX_SETTINGS}")
+        result_settings = create_index(populator, config.INDEX_SETTINGS, SETTINGS_MAPPING, logger)        if not result_settings:
+            logger.error(f"Failed to create index {config.INDEX_SETTINGS}")
             return False
             
         return True
@@ -204,16 +202,18 @@ def restore_sync_date(populator, last_sync_date, logger):
 
 def main():
     """Main entry point for the script."""
+    es_config = config.get_elasticsearch_config()
+    
     parser = argparse.ArgumentParser(description='Recreate Elasticsearch index with correct mapping')
     parser.add_argument('--agent', type=str, default='JiraETLAgent', 
                         help='Name of the ETL agent')
-    parser.add_argument('--host', type=str, default=ES_HOST,
-                        help=f'Elasticsearch host (default: {ES_HOST})')
-    parser.add_argument('--port', type=int, default=ES_PORT,
-                        help=f'Elasticsearch port (default: {ES_PORT})')
-    parser.add_argument('--api-key', type=str, default=ELASTIC_APIKEY,
+    parser.add_argument('--host', type=str, default=es_config['host'],
+                        help=f'Elasticsearch host (default: {es_config["host"]})')
+    parser.add_argument('--port', type=int, default=es_config['port'],
+                        help=f'Elasticsearch port (default: {es_config["port"]})')
+    parser.add_argument('--api-key', type=str, default=es_config['api_key'],
                         help='Elasticsearch API key (default: from ELASTIC_APIKEY env var)')
-    parser.add_argument('--url', type=str, default=ELASTIC_URL,
+    parser.add_argument('--url', type=str, default=es_config['url'],
                         help='Complete Elasticsearch URL (default: from ELASTIC_URL env var)')
     parser.add_argument('--confirm', action='store_true', 
                         help='Skip confirmation prompt and proceed with index deletion')
@@ -237,7 +237,7 @@ def main():
         host=args.host,
         port=args.port,
         api_key=args.api_key,
-        use_ssl=ES_USE_SSL,
+        use_ssl=es_config['use_ssl'],
         url=args.url
     )
     
@@ -247,7 +247,7 @@ def main():
         
         # Get confirmation for index deletion if not already provided
         if not args.confirm:
-            confirmation = input(f"WARNING: This will delete and recreate the '{INDEX_CHANGELOG}' index. All data will be lost. Type 'yes' to continue: ")
+            confirmation = input(f"WARNING: This will delete and recreate the '{config.INDEX_CHANGELOG}' index. All data will be lost. Type 'yes' to continue: ")
             if confirmation.lower() != "yes":
                 logger.info("Operation cancelled by user")
                 return 0
@@ -256,12 +256,12 @@ def main():
         last_sync_date = get_last_sync_date_from_settings(populator, logger)
         
         # Delete the changelog index
-        if not delete_index(populator, INDEX_CHANGELOG, logger):
+        if not delete_index(populator, config.INDEX_CHANGELOG, logger):
             logger.error("Failed to delete changelog index, aborting")
             return 1
         
         # Delete the settings index
-        if not delete_index(populator, INDEX_SETTINGS, logger):
+        if not delete_index(populator, config.INDEX_SETTINGS, logger):
             logger.warning("Failed to delete settings index, continuing anyway")
         
         # Recreate the indices with updated mappings

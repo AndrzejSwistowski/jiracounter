@@ -27,8 +27,8 @@ import os
 import sys
 import time
 from datetime import datetime, timedelta
-from es_populate import JiraElasticsearchPopulator, ELASTIC_URL, ELASTIC_APIKEY, ES_HOST, ES_PORT, ES_USE_SSL
-from es_populate import INDEX_CHANGELOG, INDEX_SETTINGS
+from es_populate import JiraElasticsearchPopulator
+import config
 from es_mapping import CHANGELOG_MAPPING, SETTINGS_MAPPING
 import requests
 
@@ -171,6 +171,8 @@ def recreate_indices(populator, logger):
 
 def main():
     """Main entry point for the ETL process."""
+    es_config = config.get_elasticsearch_config()
+    
     parser = argparse.ArgumentParser(description='Populate Elasticsearch with JIRA data')
     parser.add_argument('--days', type=int, default=1, 
                         help='Number of days of history to fetch (default: 1)')
@@ -178,13 +180,13 @@ def main():
                         help='Maximum number of issues to process')
     parser.add_argument('--agent', type=str, default='JiraETLAgent', 
                         help='Name of the ETL agent')
-    parser.add_argument('--host', type=str, default=ES_HOST,
-                        help=f'Elasticsearch host (default: {ES_HOST})')
-    parser.add_argument('--port', type=int, default=ES_PORT,
-                        help=f'Elasticsearch port (default: {ES_PORT})')
-    parser.add_argument('--api-key', type=str, default=ELASTIC_APIKEY,
+    parser.add_argument('--host', type=str, default=es_config['host'],
+                        help=f'Elasticsearch host (default: {es_config["host"]})')
+    parser.add_argument('--port', type=int, default=es_config['port'],
+                        help=f'Elasticsearch port (default: {es_config["port"]})')
+    parser.add_argument('--api-key', type=str, default=es_config['api_key'],
                         help='Elasticsearch API key (default: from ELASTIC_APIKEY env var)')
-    parser.add_argument('--url', type=str, default=ELASTIC_URL,
+    parser.add_argument('--url', type=str, default=es_config['url'],
                         help='Complete Elasticsearch URL (default: from ELASTIC_URL env var)')
     parser.add_argument('--bulk-size', type=int, default=100,
                         help='Number of records to process in each bulk operation (default: 100)')
@@ -203,14 +205,13 @@ def main():
     logger = setup_logging(args.verbose)
     
     logger.info(f"Starting JIRA to Elasticsearch ETL process with agent: {args.agent}")
-    
-    # Create the populator
+      # Create the populator
     populator = JiraElasticsearchPopulator(
         agent_name=args.agent,
         host=args.host,
         port=args.port,
         api_key=args.api_key,
-        use_ssl=ES_USE_SSL,
+        use_ssl=es_config['use_ssl'],
         url=args.url
     )
     
@@ -222,7 +223,7 @@ def main():
         if args.recreate_index:
             # Get confirmation for index deletion if not already provided
             if not args.confirm:
-                confirmation = input(f"WARNING: This will delete and recreate the '{INDEX_CHANGELOG}' index. "
+                confirmation = input(f"WARNING: This will delete and recreate the '{config.INDEX_CHANGELOG}' index. "
                                    f"All data will be lost. Type 'yes' to continue: ")
                 if confirmation.lower() != "yes":
                     logger.info("Index recreation cancelled by user")
@@ -232,7 +233,7 @@ def main():
             last_sync_date = get_last_sync_date_from_settings(populator, logger)
             
             # Delete the changelog index
-            if not delete_index(populator, INDEX_CHANGELOG, logger):
+            if not delete_index(populator, config.INDEX_CHANGELOG, logger):
                 logger.error("Failed to delete changelog index, aborting")
                 return 1
             
