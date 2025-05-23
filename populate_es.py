@@ -200,7 +200,8 @@ def main():
                         help='Enable verbose logging')
     
     args = parser.parse_args()
-      # Set up logging
+    
+    # Set up logging
     logger = setup_logging(args.verbose)
     
     logger.info(f"Starting JIRA to Elasticsearch ETL process with agent: {args.agent}")
@@ -236,8 +237,7 @@ def main():
             if not delete_index(populator, config.INDEX_CHANGELOG, logger):
                 logger.error("Failed to delete changelog index, aborting")
                 return 1
-            
-            # Recreate the indices with updated mappings
+              # Recreate the indices with updated mappings
             if not recreate_indices(populator, logger):
                 logger.error("Failed to recreate indices, aborting")
                 return 1
@@ -245,7 +245,8 @@ def main():
             # Restore the last sync date
             if not restore_sync_date(populator, last_sync_date, logger):
                 logger.warning("Failed to restore last sync date")
-                  # Force full sync when recreating index
+                
+            # Force full sync when recreating index
             args.full_sync = True
             logger.info("Index recreated successfully, proceeding with full sync")
         
