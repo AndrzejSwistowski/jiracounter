@@ -5,26 +5,32 @@ Script to update the Elasticsearch mapping with the missing fields
 """
 
 import os
+import sys
 import logging
 from elasticsearch import Elasticsearch, NotFoundError
+
+# Add parent directory to path to import config
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import config
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 def main():
-    # Get Elasticsearch settings from environment variables
-    elastic_url = os.environ.get('ELASTIC_URL')
-    elastic_apikey = os.environ.get('ELASTIC_APIKEY')
+    # Get Elasticsearch settings from centralized config
+    es_config = config.get_elasticsearch_config()
     
-    if not elastic_url:
-        logger.error("ELASTIC_URL environment variable not set")
-        return
+    # Build the connection URL
+    if es_config['url']:
+        elastic_url = es_config['url']
+    else:
+        elastic_url = f"http://{es_config['host']}:{es_config['port']}"
     
     # Connect to Elasticsearch
     headers = {}
-    if elastic_apikey:
-        headers["Authorization"] = f"ApiKey {elastic_apikey}"
+    if es_config['api_key']:
+        headers["Authorization"] = f"ApiKey {es_config['api_key']}"
         logger.info("Using API key authentication")
     
     try:

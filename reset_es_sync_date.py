@@ -11,12 +11,12 @@ Run this script before repopulating the Elasticsearch index after structural cha
 """
 
 import logging
-import os
 import sys
 import json
 import requests
 from datetime import datetime, timedelta
 from elasticsearch import Elasticsearch
+import config
 
 # Configure logging
 logging.basicConfig(
@@ -29,44 +29,23 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Get Elasticsearch settings from environment variables
-ELASTIC_URL = os.environ.get('ELASTIC_URL')
-ELASTIC_APIKEY = os.environ.get('ELASTIC_APIKEY')
-
-# Default Elasticsearch connection settings if environment variables not set
-ES_HOST = "localhost"
-ES_PORT = 9200
-ES_USE_SSL = False
-
-# If ELASTIC_URL is provided, parse it to extract host, port, and protocol
-if ELASTIC_URL:
-    try:
-        from urllib.parse import urlparse
-        parsed_url = urlparse(ELASTIC_URL)
-        ES_HOST = parsed_url.hostname or ES_HOST
-        ES_PORT = parsed_url.port or ES_PORT
-        ES_USE_SSL = parsed_url.scheme == 'https'
-        logger.info(f"Using Elasticsearch URL from environment: {ELASTIC_URL}")
-    except Exception as e:
-        logger.warning(f"Error parsing ELASTIC_URL: {e}. Using defaults.")
-
-# Index names
-INDEX_SETTINGS = "jira-settings"
 AGENT_NAME = "JiraETLAgent"  # Default agent name used in the settings index
 
 def connect_elasticsearch():
     """Establishes a connection to Elasticsearch."""
     try:
-        # Remove trailing slash if present in URL
-        if ELASTIC_URL:
-            url = ELASTIC_URL.rstrip('/')
+        es_config = config.get_elasticsearch_config()
+        
+        # Build the connection URL
+        if es_config['url']:
+            url = es_config['url'].rstrip('/')
         else:
-            url = f'{"https" if ES_USE_SSL else "http"}://{ES_HOST}:{ES_PORT}'
+            url = f'{"https" if es_config["use_ssl"] else "http"}://{es_config["host"]}:{es_config["port"]}'
             
         # Prepare headers with API key authentication
         headers = {"Content-Type": "application/json"}
-        if ELASTIC_APIKEY:
-            headers["Authorization"] = f"ApiKey {ELASTIC_APIKEY}"
+        if es_config['api_key']:
+            headers["Authorization"] = f"ApiKey {es_config['api_key']}"
             logger.info("Using API key authentication")
         
         # Test the connection by requesting cluster health
@@ -82,7 +61,7 @@ def connect_elasticsearch():
         connect_args = {'hosts': [url]}
         
         # Add API key authentication if provided
-        if ELASTIC_APIKEY:
+        if es_config['api_key']:
             connect_args['headers'] = headers
         
         es = Elasticsearch(**connect_args)
@@ -103,13 +82,12 @@ def get_current_sync_date(es, agent_name=AGENT_NAME):
                 }
             }
         }
-        
-        # Check if the settings index exists
-        if not es.indices.exists(index=INDEX_SETTINGS):
-            logger.warning(f"Settings index {INDEX_SETTINGS} does not exist")
+          # Check if the settings index exists
+        if not es.indices.exists(index=config.INDEX_SETTINGS):
+            logger.warning(f"Settings index {config.INDEX_SETTINGS} does not exist")
             return None, None
         
-        result = es.search(index=INDEX_SETTINGS, body=query)
+        result = es.search(index=config.INDEX_SETTINGS, body=query)
         
         if result["hits"]["total"]["value"] > 0:
             hit = result["hits"]["hits"][0]
@@ -135,7 +113,7 @@ def reset_sync_date(es, doc_id=None, new_date=None, delete_doc=False, agent_name
     try:
         if delete_doc and doc_id:
             # Delete the document
-            es.delete(index=INDEX_SETTINGS, id=doc_id)
+            es.delete(index=config.INDEX_SETTINGS, id=doc_id)
             logger.info(f"Deleted settings document with ID {doc_id}")
             return True
             
@@ -153,7 +131,7 @@ def reset_sync_date(es, doc_id=None, new_date=None, delete_doc=False, agent_name
                 }
             }
             
-            es.update(index=INDEX_SETTINGS, id=doc_id, body=update_doc)
+            es.update(index=config.INDEX_SETTINGS, id=doc_id, body=update_doc)
             logger.info(f"Updated last_sync_date to {new_date}")
             return True
             
@@ -165,7 +143,7 @@ def reset_sync_date(es, doc_id=None, new_date=None, delete_doc=False, agent_name
                 "last_updated": datetime.now().isoformat()
             }
             
-            es.index(index=INDEX_SETTINGS, body=doc)
+            es.index(index=config.INDEX_SETTINGS, body=doc)
             logger.info(f"Created new settings document with last_sync_date: {doc['last_sync_date']}")
             return True
             

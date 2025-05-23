@@ -20,6 +20,10 @@ import requests
 from datetime import datetime
 from elasticsearch import Elasticsearch
 
+# Add parent directory to path to import config
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import config
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -31,44 +35,24 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Get Elasticsearch settings from environment variables
-ELASTIC_URL = os.environ.get('ELASTIC_URL')
-ELASTIC_APIKEY = os.environ.get('ELASTIC_APIKEY')
-
-# Default Elasticsearch connection settings if environment variables not set
-ES_HOST = "localhost"
-ES_PORT = 9200
-ES_USE_SSL = False
-
-# If ELASTIC_URL is provided, parse it to extract host, port, and protocol
-if ELASTIC_URL:
-    try:
-        from urllib.parse import urlparse
-        parsed_url = urlparse(ELASTIC_URL)
-        ES_HOST = parsed_url.hostname or ES_HOST
-        ES_PORT = parsed_url.port or ES_PORT
-        ES_USE_SSL = parsed_url.scheme == 'https'
-        logger.info(f"Using Elasticsearch URL from environment: {ELASTIC_URL}")
-    except Exception as e:
-        logger.warning(f"Error parsing ELASTIC_URL: {e}. Using defaults.")
-
-# Index names
-INDEX_CHANGELOG = "jira-changelog"
-TEMP_INDEX = f"{INDEX_CHANGELOG}-temp"
+# Index names from config
+TEMP_INDEX = f"{config.INDEX_CHANGELOG}-temp"
 
 def connect_elasticsearch():
     """Establishes a connection to Elasticsearch."""
     try:
-        # Remove trailing slash if present in URL
-        if ELASTIC_URL:
-            url = ELASTIC_URL.rstrip('/')
+        es_config = config.get_elasticsearch_config()
+        
+        # Build the connection URL
+        if es_config['url']:
+            url = es_config['url'].rstrip('/')
         else:
-            url = f'{"https" if ES_USE_SSL else "http"}://{ES_HOST}:{ES_PORT}'
+            url = f'{"https" if es_config["use_ssl"] else "http"}://{es_config["host"]}:{es_config["port"]}'
             
         # Prepare headers with API key authentication
         headers = {"Content-Type": "application/json"}
-        if ELASTIC_APIKEY:
-            headers["Authorization"] = f"ApiKey {ELASTIC_APIKEY}"
+        if es_config['api_key']:
+            headers["Authorization"] = f"ApiKey {es_config['api_key']}"
             logger.info("Using API key authentication")
         
         # Test the connection by requesting cluster health
@@ -84,7 +68,7 @@ def connect_elasticsearch():
         connect_args = {'hosts': [url]}
         
         # Add API key authentication if provided
-        if ELASTIC_APIKEY:
+        if es_config['api_key']:
             connect_args['headers'] = headers
         
         es = Elasticsearch(**connect_args)
@@ -220,14 +204,13 @@ def create_new_index(url, headers):
         }
         
         # Create the new index with the updated mapping
-        create_response = requests.put(
-            f"{url}/{INDEX_CHANGELOG}", 
+        create_response = requests.put(            f"{url}/{config.INDEX_CHANGELOG}", 
             headers=headers,
             json=updated_mapping
         )
         
         if create_response.status_code >= 200 and create_response.status_code < 300:
-            logger.info(f"Created index {INDEX_CHANGELOG} successfully with updated mapping")
+            logger.info(f"Created index {config.INDEX_CHANGELOG} successfully with updated mapping")
             return True
         else:
             logger.error(f"Error creating index: {create_response.status_code} - {create_response.text}")
@@ -243,7 +226,7 @@ def main():
         es, url, headers = connect_elasticsearch()
         
         # Delete the existing index
-        if not delete_index(url, headers, INDEX_CHANGELOG):
+        if not delete_index(url, headers, config.INDEX_CHANGELOG):
             logger.error("Failed to delete existing index. Aborting.")
             return False
         
