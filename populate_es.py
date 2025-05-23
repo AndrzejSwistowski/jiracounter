@@ -31,39 +31,11 @@ from es_populate import JiraElasticsearchPopulator
 import config
 from es_mapping import CHANGELOG_MAPPING, SETTINGS_MAPPING
 import requests
+from logger_utils import setup_logging
 
 # Track progress globally
 progress_count = 0
 start_time = None
-
-def setup_logging(verbose=False):
-    """Configure logging for the ETL process."""
-    level = logging.DEBUG if verbose else logging.INFO
-    
-    # Create logs directory if it doesn't exist
-    os.makedirs('logs', exist_ok=True)
-    
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    log_filename = f"logs/jira_etl_es_{timestamp}.log"
-    
-    logging.basicConfig(
-        level=level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(log_filename),
-            logging.StreamHandler()
-        ]
-    )
-    
-    # Reduce noise from other libraries
-    logging.getLogger('urllib3').setLevel(logging.WARNING)
-    logging.getLogger('requests').setLevel(logging.WARNING)
-    logging.getLogger('elasticsearch').setLevel(logging.WARNING)
-    
-    logger = logging.getLogger(__name__)
-    logger.info(f"Log file: {log_filename}")
-    
-    return logger
 
 def log_progress(logger, current, total=None, interval=30):
     """Log progress at regular intervals to prevent log file from growing too large."""
@@ -200,9 +172,11 @@ def main():
                         help='Enable verbose logging')
     
     args = parser.parse_args()
-    
-    # Set up logging
-    logger = setup_logging(args.verbose)
+      # Set up logging
+    logger = setup_logging(
+        verbose=args.verbose,
+        log_prefix="jira_etl_es"
+    )
     
     logger.info(f"Starting JIRA to Elasticsearch ETL process with agent: {args.agent}")
     
