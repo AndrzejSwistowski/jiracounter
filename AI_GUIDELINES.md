@@ -305,8 +305,7 @@ except Exception as e:
       "elasticsearch": "8.x", 
       "python-dateutil": "latest",
       "pytest": "latest"
-    },
-    "environment_variables": {
+    },    "environment_variables": {
       "required": [
         "JIRA_API_TOKEN",
         "ELASTIC_URL",
@@ -317,6 +316,17 @@ except Exception as e:
         "JIRA_USERNAME", 
         "JIRA_LOG_LEVEL",
         "JIRA_CACHE_DURATION"
+      ]
+    },
+    "platform": {
+      "os": "Windows",
+      "shell": "PowerShell",
+      "command_syntax": "powershell",
+      "forbidden_syntax": ["&&", "||", "bash", "sh"],
+      "preferred_patterns": [
+        "semicolon_separation",
+        "if_lastexitcode_checks",
+        "try_catch_blocks"
       ]
     },
     "custom_fields": {
@@ -486,6 +496,71 @@ for issue_key in issue_keys:
     issue = self.get_issue(issue_key)  # N+1 query problem
 ```
 
+## Windows PowerShell Specific Guidelines
+
+### Command Chaining and Terminal Usage
+
+Since this project runs on Windows with PowerShell, follow these patterns:
+
+```powershell
+# CORRECT - PowerShell command chaining
+python script.py; if ($LASTEXITCODE -eq 0) { Write-Host "Success" }
+
+# CORRECT - PowerShell conditional execution
+if (Test-Path "file.txt") { python process.py }
+
+# INCORRECT - Unix-style (don't use in PowerShell)
+python script.py && echo "Success"  # This will cause errors!
+
+# CORRECT - Multiple commands in PowerShell
+python script.py
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "Script completed successfully"
+} else {
+    Write-Error "Script failed with exit code $LASTEXITCODE"
+}
+```
+
+### Terminal Command Generation Rules
+
+```powershell
+# AI-HINT: Always use PowerShell syntax for terminal commands
+# AI-HINT: Use semicolon (;) or separate commands, not && operator
+# AI-HINT: Check exit codes with $LASTEXITCODE variable
+
+# Environment variables in PowerShell
+$env:ELASTIC_URL = "http://localhost:9200"
+[Environment]::SetEnvironmentVariable("ELASTIC_URL", "value", "User")
+
+# File operations
+Test-Path "file.txt"           # Check if file exists
+Get-Content "file.txt"         # Read file content
+Set-Content "file.txt" "data"  # Write to file
+
+# Process management
+Start-Process python -ArgumentList "script.py" -NoNewWindow -Wait
+```
+
+### Diagnostic Scripts Pattern
+
+Follow the established PowerShell patterns in `/diagnostic/` folder:
+
+```powershell
+# Standard error handling for PowerShell scripts
+try {
+    # Main logic here
+    $result = Invoke-SomeOperation
+    Write-Host "Operation successful" -ForegroundColor Green
+}
+catch {
+    Write-Host "Error: $($_.Exception.Message)" -ForegroundColor Red
+    exit 1
+}
+finally {
+    # Cleanup code
+}
+```
+
 ## Summary
 
 When working with AI on JiraCounter:
@@ -497,5 +572,7 @@ When working with AI on JiraCounter:
 5. **Test Thoroughly**: Write pytest tests for new functionality
 6. **Think Security**: Never expose credentials or sensitive data
 7. **Optimize Performance**: Consider API call patterns and caching
+8. **Use Windows Syntax**: Always use PowerShell command syntax, never Unix-style `&&` operators
+9. **Follow PowerShell Patterns**: Use established patterns from `/diagnostic/` scripts
 
 This ensures AI-generated code integrates seamlessly with the existing JiraCounter architecture and maintains high code quality standards.

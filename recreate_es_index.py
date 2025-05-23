@@ -151,7 +151,7 @@ def recreate_indices(populator, logger):
     """Create the indices with updated mappings."""
     try:
         logger.info("Creating indices with explicit mappings from es_mapping module")
-          # Try to create with full mapping first
+        # Try to create with full mapping first
         result_changelog = create_index(populator, config.INDEX_CHANGELOG, CHANGELOG_MAPPING, logger)
         
         # If creating with Polish analyzer fails, try a fallback mapping
@@ -179,7 +179,8 @@ def recreate_indices(populator, logger):
             return False
             
         # Create the settings index with the proper mapping
-        result_settings = create_index(populator, config.INDEX_SETTINGS, SETTINGS_MAPPING, logger)        if not result_settings:
+        result_settings = create_index(populator, config.INDEX_SETTINGS, SETTINGS_MAPPING, logger)
+        if not result_settings:
             logger.error(f"Failed to create index {config.INDEX_SETTINGS}")
             return False
             
