@@ -200,12 +200,12 @@ def main():
                         help='Enable verbose logging')
     
     args = parser.parse_args()
-    
-    # Set up logging
+      # Set up logging
     logger = setup_logging(args.verbose)
     
     logger.info(f"Starting JIRA to Elasticsearch ETL process with agent: {args.agent}")
-      # Create the populator
+    
+    # Create the populator
     populator = JiraElasticsearchPopulator(
         agent_name=args.agent,
         host=args.host,
@@ -245,11 +245,11 @@ def main():
             # Restore the last sync date
             if not restore_sync_date(populator, last_sync_date, logger):
                 logger.warning("Failed to restore last sync date")
-                
-            # Force full sync when recreating index
+                  # Force full sync when recreating index
             args.full_sync = True
             logger.info("Index recreated successfully, proceeding with full sync")
-          # Determine date range
+        
+        # Determine date range
         end_date = datetime.now()
         
         if args.full_sync:
@@ -267,7 +267,7 @@ def main():
             else:
                 logger.info(f"Performing incremental sync from last sync date: {start_date}")
 
-          # Populate Elasticsearch
+        # Populate Elasticsearch
         logger.info(f"Starting ETL process from {start_date} to {end_date}")
         count = populator.populate_from_jira(
             start_date=start_date,
