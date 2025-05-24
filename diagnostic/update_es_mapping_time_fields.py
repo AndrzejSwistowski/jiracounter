@@ -23,7 +23,7 @@ from elasticsearch import Elasticsearch
 # Add parent directory to path to import config
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
-from es_utils import delete_index
+from es_utils import delete_index, create_index
 
 # Configure logging
 logging.basicConfig(
@@ -79,13 +79,10 @@ def connect_elasticsearch():
         logger.error(f"Error connecting to Elasticsearch: {e}")
         raise
 
-# This function has been moved to es_utils.py
-# It is now imported at the top of the file
-
 def create_new_index(url, headers):
     """Create a new index with the updated mapping."""
     try:
-        # Define an updated mapping for changelog entries with fixed field types
+        # Define an updated mapping for changelog entries with time-based fields
         updated_mapping = {
             "mappings": {
                 "properties": {
@@ -186,18 +183,8 @@ def create_new_index(url, headers):
             }
         }
         
-        # Create the new index with the updated mapping
-        create_response = requests.put(            f"{url}/{config.INDEX_CHANGELOG}", 
-            headers=headers,
-            json=updated_mapping
-        )
-        
-        if create_response.status_code >= 200 and create_response.status_code < 300:
-            logger.info(f"Created index {config.INDEX_CHANGELOG} successfully with updated mapping")
-            return True
-        else:
-            logger.error(f"Error creating index: {create_response.status_code} - {create_response.text}")
-            return False
+        # Use the centralized create_index function from es_utils.py
+        return create_index(url=url, api_key=None, index_name=config.INDEX_CHANGELOG, mapping=updated_mapping, logger=logger)
             
     except Exception as e:
         logger.error(f"Error creating new index: {e}")

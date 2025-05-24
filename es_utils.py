@@ -7,6 +7,7 @@ and can be imported by other modules to avoid code duplication.
 
 import logging
 import requests
+import json  # Add json import for the create_index function
 
 def delete_index(host=None, port=None, api_key=None, use_ssl=True, url=None, 
                  index_name=None, logger=None, populator=None):
@@ -74,4 +75,76 @@ def delete_index(host=None, port=None, api_key=None, use_ssl=True, url=None,
             return False
     except Exception as e:
         logger.error(f"Error deleting index {index_name}: {e}")
+        return False
+
+def create_index(host=None, port=None, api_key=None, use_ssl=True, url=None,
+                index_name=None, mapping=None, logger=None, populator=None):
+    """
+    Create an Elasticsearch index with the specified mapping.
+    
+    This function can be called in two ways:
+    1. With a populator object: create_index(populator=populator, index_name=index_name, mapping=mapping, logger=logger)
+    2. With connection details: create_index(url=url, api_key=api_key, index_name=index_name, mapping=mapping, logger=logger)
+       or create_index(host=host, port=port, use_ssl=use_ssl, api_key=api_key, index_name=index_name, mapping=mapping, logger=logger)
+       
+    Args:
+        host (str): Elasticsearch host
+        port (int): Elasticsearch port
+        api_key (str): Elasticsearch API key
+        use_ssl (bool): Whether to use SSL for the connection
+        url (str): Complete Elasticsearch URL
+        index_name (str): Name of the index to create
+        mapping (dict): Mapping dictionary to apply to the index
+        logger (logging.Logger): Logger object
+        populator: An instance of JiraElasticsearchPopulator
+        
+    Returns:
+        bool: True if the index was created successfully, False if there was an error
+    """
+    if logger is None:
+        logger = logging.getLogger(__name__)
+        
+    try:
+        # If populator is provided, extract connection parameters from it
+        if populator:
+            if url is None:
+                url = populator.url
+            if host is None:
+                host = populator.host
+            if port is None:
+                port = populator.port
+            if api_key is None:
+                api_key = populator.api_key
+            if use_ssl is None:
+                use_ssl = populator.use_ssl
+        
+        # Build base URL if not provided
+        if url:
+            base_url = url.rstrip('/')
+        else:
+            base_url = f'{"https" if use_ssl else "http"}://{host}:{port}'
+            
+        # Prepare headers with API key authentication
+        headers = {"Content-Type": "application/json"}
+        if api_key:
+            headers["Authorization"] = f"ApiKey {api_key}"
+        
+        # Create the index with mapping
+        logger.info(f"Creating index {index_name} with explicit mapping...")
+        
+        # Send PUT request to create the index with mapping
+        create_response = requests.put(
+            f"{base_url}/{index_name}", 
+            headers=headers,
+            json=mapping
+        )
+        
+        if create_response.status_code in [200, 201]:
+            logger.info(f"Successfully created index {index_name} with explicit mapping")
+            return True
+        else:
+            logger.error(f"Failed to create index {index_name}: {create_response.status_code} - {create_response.text}")
+            return False
+    except Exception as e:
+        logger.error(f"Error creating index {index_name}: {e}")
         return False

@@ -22,6 +22,7 @@ import dateutil.parser
 from es_mapping import CHANGELOG_MAPPING, SETTINGS_MAPPING
 from es_document_formatter import ElasticsearchDocumentFormatter
 from progress_tracker import ProgressTracker
+from es_utils import create_index
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, "INFO"))
@@ -125,25 +126,27 @@ class JiraElasticsearchPopulator:
         if self.es:
             self.es.close()
             logger.info("Elasticsearch connection closed")
-    
-    def create_indices(self):
+      def create_indices(self):
         """Create the necessary indices with proper mappings."""
         try:
+            # Use the centralized create_index function from es_utils.py
             # Create changelog index with the improved mapping
-            self.es.indices.create(
-                index=INDEX_CHANGELOG,
-                body=CHANGELOG_MAPPING,
-                ignore=400  # Ignore error if index already exists
+            changelog_result = create_index(
+                populator=self, 
+                index_name=INDEX_CHANGELOG, 
+                mapping=CHANGELOG_MAPPING, 
+                logger=logger
             )
             
             # Create settings index
-            self.es.indices.create(
-                index=INDEX_SETTINGS,
-                body=SETTINGS_MAPPING,
-                ignore=400  # Ignore error if index already exists
+            settings_result = create_index(
+                populator=self, 
+                index_name=INDEX_SETTINGS, 
+                mapping=SETTINGS_MAPPING, 
+                logger=logger
             )
             
-            return True
+            return changelog_result and settings_result
         except Exception as e:
             logging.error(f"Error creating indices: {e}")
             return False

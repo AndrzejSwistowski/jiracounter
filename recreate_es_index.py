@@ -38,7 +38,7 @@ from es_populate import JiraElasticsearchPopulator
 import config
 from es_mapping import CHANGELOG_MAPPING, SETTINGS_MAPPING
 from logger_utils import setup_logging
-from es_utils import delete_index
+from es_utils import delete_index, create_index
 
 # This function has been moved to es_utils.py
 # It is now imported at the top of the file
@@ -56,49 +56,14 @@ def get_last_sync_date_from_settings(populator, logger):
         logger.error(f"Error getting last sync date: {e}")
         return None
 
-def create_index(populator, index_name, mapping, logger):
-    """Create an Elasticsearch index with the specified mapping."""
-    try:
-        import requests
-        import json
-        
-        # Build base URL
-        if populator.url:
-            base_url = populator.url.rstrip('/')
-        else:
-            base_url = f'{"https" if populator.use_ssl else "http"}://{populator.host}:{populator.port}'
-            
-        # Prepare headers with API key authentication
-        headers = {"Content-Type": "application/json"}
-        if populator.api_key:
-            headers["Authorization"] = f"ApiKey {populator.api_key}"
-        
-        # Create the index with mapping
-        logger.info(f"Creating index {index_name} with explicit mapping...")
-        
-        # Send PUT request to create the index with mapping
-        create_response = requests.put(
-            f"{base_url}/{index_name}", 
-            headers=headers,
-            json=mapping
-        )
-        
-        if create_response.status_code in [200, 201]:
-            logger.info(f"Successfully created index {index_name} with explicit mapping")
-            return True
-        else:
-            logger.error(f"Failed to create index {index_name}: {create_response.status_code} - {create_response.text}")
-            return False
-    except Exception as e:
-        logger.error(f"Error creating index {index_name}: {e}")
-        return False
+# This function has been moved to es_utils.py
+# It is now imported at the top of the file
 
 def recreate_indices(populator, logger):
     """Create the indices with updated mappings."""
     try:
-        logger.info("Creating indices with explicit mappings from es_mapping module")
-        # Try to create with full mapping first
-        result_changelog = create_index(populator, config.INDEX_CHANGELOG, CHANGELOG_MAPPING, logger)
+        logger.info("Creating indices with explicit mappings from es_mapping module")        # Try to create with full mapping first
+        result_changelog = create_index(populator=populator, index_name=config.INDEX_CHANGELOG, mapping=CHANGELOG_MAPPING, logger=logger)
         
         # If creating with Polish analyzer fails, try a fallback mapping
         if not result_changelog:
@@ -118,14 +83,13 @@ def recreate_indices(populator, logger):
                             del simplified_mapping["mappings"]["properties"][field_name]["fields"]["polish"]
             
             # Try with simplified mapping
-            result_changelog = create_index(populator, config.INDEX_CHANGELOG, simplified_mapping, logger)
+            result_changelog = create_index(populator=populator, index_name=config.INDEX_CHANGELOG, mapping=simplified_mapping, logger=logger)
             
         if not result_changelog:
             logger.error(f"Failed to create index {config.INDEX_CHANGELOG}")
             return False
-            
-        # Create the settings index with the proper mapping
-        result_settings = create_index(populator, config.INDEX_SETTINGS, SETTINGS_MAPPING, logger)
+              # Create the settings index with the proper mapping
+        result_settings = create_index(populator=populator, index_name=config.INDEX_SETTINGS, mapping=SETTINGS_MAPPING, logger=logger)
         if not result_settings:
             logger.error(f"Failed to create index {config.INDEX_SETTINGS}")
             return False
