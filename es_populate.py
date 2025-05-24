@@ -11,8 +11,6 @@ import os
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 import json
-import warnings
-import requests
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
 from jiraservice import JiraService
@@ -21,24 +19,36 @@ import config
 import dateutil.parser
 from es_mapping import CHANGELOG_MAPPING, SETTINGS_MAPPING
 from es_document_formatter import ElasticsearchDocumentFormatter
-from progress_tracker import ProgressTracker
-from es_utils import create_index
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, "INFO"))
 logger = logging.getLogger(__name__)
 
-# Get Elasticsearch configuration from centralized config
-ES_CONFIG = config.get_elasticsearch_config()
-ELASTIC_URL = ES_CONFIG['url']
-ELASTIC_APIKEY = ES_CONFIG['api_key']
-ES_HOST = ES_CONFIG['host']
-ES_PORT = ES_CONFIG['port']
-ES_USE_SSL = ES_CONFIG['use_ssl']
+# Get Elasticsearch settings from environment variables
+# Format for ELASTIC_URL is expected to be: http://hostname:port/
+ELASTIC_URL = os.environ.get('ELASTIC_URL')
+ELASTIC_APIKEY = os.environ.get('ELASTIC_APIKEY')
 
-# Index names from config
-INDEX_CHANGELOG = config.INDEX_CHANGELOG
-INDEX_SETTINGS = config.INDEX_SETTINGS
+# Default Elasticsearch connection settings if environment variables not set
+ES_HOST = "localhost"
+ES_PORT = 9200
+ES_USE_SSL = False
+
+# If ELASTIC_URL is provided, parse it to extract host, port, and protocol
+if (ELASTIC_URL):
+    try:
+        from urllib.parse import urlparse
+        parsed_url = urlparse(ELASTIC_URL)
+        ES_HOST = parsed_url.hostname or ES_HOST
+        ES_PORT = parsed_url.port or ES_PORT
+        ES_USE_SSL = parsed_url.scheme == 'https'
+        logger.info(f"Using Elasticsearch URL from environment: {ELASTIC_URL}")
+    except Exception as e:
+        logger.warning(f"Error parsing ELASTIC_URL: {e}. Using defaults.")
+
+# Index names
+INDEX_CHANGELOG = "jira-changelog"
+INDEX_SETTINGS = "jira-settings"
 
 class JiraElasticsearchPopulator:
     """
@@ -67,12 +77,6 @@ class JiraElasticsearchPopulator:
         self.api_key = api_key
         self.use_ssl = use_ssl
         self.url = url
-        
-        # Create a progress tracker for this populator instance
-        self.progress_tracker = ProgressTracker(
-            logger=logging.getLogger(__name__),
-            name=f"es_populator_{agent_name}"
-        )
         
     def connect(self):
         """Establishes a connection to Elasticsearch."""
@@ -126,27 +130,25 @@ class JiraElasticsearchPopulator:
         if self.es:
             self.es.close()
             logger.info("Elasticsearch connection closed")
-      def create_indices(self):
+    
+    def create_indices(self):
         """Create the necessary indices with proper mappings."""
         try:
-            # Use the centralized create_index function from es_utils.py
             # Create changelog index with the improved mapping
-            changelog_result = create_index(
-                populator=self, 
-                index_name=INDEX_CHANGELOG, 
-                mapping=CHANGELOG_MAPPING, 
-                logger=logger
+            self.es.indices.create(
+                index=INDEX_CHANGELOG,
+                body=CHANGELOG_MAPPING,
+                ignore=400  # Ignore error if index already exists
             )
             
             # Create settings index
-            settings_result = create_index(
-                populator=self, 
-                index_name=INDEX_SETTINGS, 
-                mapping=SETTINGS_MAPPING, 
-                logger=logger
+            self.es.indices.create(
+                index=INDEX_SETTINGS,
+                body=SETTINGS_MAPPING,
+                ignore=400  # Ignore error if index already exists
             )
             
-            return changelog_result and settings_result
+            return True
         except Exception as e:
             logging.error(f"Error creating indices: {e}")
             return False
@@ -392,21 +394,13 @@ class JiraElasticsearchPopulator:
         success_count = 0
         
         try:
-            # Reset the progress tracker at the start of a new populate operation
-            self.progress_tracker.reset()
-            
             # Get issue history records from JIRA
-            result = self.jira_service.get_issue_history(
-                start_date=start_date,
-                end_date=end_date,
-                max_issues=max_issues
-            )
-            
+            result = self.jira_service.get_issue_history(start_date=start_date, end_date=end_date, max_issues=max_issues)
             if result is None:
                 history_records = []
             else:
                 history_records = result
-                
+					
             # If we get here, JIRA authentication was successful
             jira_connected = True
             
@@ -418,22 +412,11 @@ class JiraElasticsearchPopulator:
             # Track the last successfully processed history date
             last_successful_date = None
             
-            # Log the total number of records to process
-            logger.info(f"Found {len(history_records)} history records to process")
-            total_records = len(history_records)
-            
             # Process records in batches
             for i in range(0, len(history_records), bulk_size):
                 batch = history_records[i:i+bulk_size]
                 inserted_count = self.bulk_insert_issue_history(batch)
                 total_inserted += inserted_count
-                
-                # Update progress after each batch
-                self.progress_tracker.update(
-                    increment=len(batch), 
-                    total=total_records,
-                    interval=30
-                )
                 
                 # If nothing was inserted in this batch, there might be an issue
                 if inserted_count == 0 and len(batch) > 0:
@@ -446,25 +429,13 @@ class JiraElasticsearchPopulator:
                     last_record = batch[-1]
                     if last_record.get('historyDate'):
                         try:
-                            record_date = (datetime.fromisoformat(last_record['historyDate']) 
-                                          if isinstance(last_record['historyDate'], str) 
-                                          else last_record['historyDate'])
+                            record_date = datetime.fromisoformat(last_record['historyDate']) if isinstance(last_record['historyDate'], str) else last_record['historyDate']
                             if isinstance(record_date, datetime):
                                 last_successful_date = record_date
                         except (ValueError, TypeError):
                             logger.debug(f"Could not parse historyDate: {last_record.get('historyDate')}")
             
-            # Log final progress with force_log=True to ensure it's displayed
-            self.progress_tracker.update(
-                increment=0, 
-                total=len(history_records), 
-                force_log=True
-            )
-            
-            # Log summary of operation
             logger.info(f"Successfully inserted {total_inserted} out of {len(history_records)} records")
-            logger.info(f"Average processing rate: {self.progress_tracker.items_per_second:.2f} items/sec")
-            
             success_count = total_inserted
             
         except Exception as e:
@@ -510,7 +481,7 @@ class JiraElasticsearchPopulator:
         try:
             # Calculate the date range
             end_date = datetime.now(APP_TIMEZONE)
-            start_date = end_date - timedelta(days=days)
+            start_date = end_date - timedelta(days=30)
             
             # Build the query
             query = {
@@ -717,16 +688,8 @@ class JiraElasticsearchPopulator:
         return es_record
 
     def _execute_bulk(self, actions):
-        """Execute a bulk operation in Elasticsearch."""
-        if not actions:
-            return 0, 0
-            
-        try:
-            success, errors = bulk(self.es, actions, stats_only=True, raise_on_error=False)
-            return success, len(actions) - success
-        except Exception as e:
-            logger.error(f"Error executing bulk operation: {e}")
-            return 0, len(actions)
+        # Method implementation
+        pass
             
 # Example usage
 if __name__ == "__main__":
