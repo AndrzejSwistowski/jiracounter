@@ -7,44 +7,32 @@ and analysis capabilities.
 """
 
 import logging
-import os
 from typing import Dict, List, Any, Optional
 from datetime import datetime, timedelta
 import json
+import warnings
+import requests
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
 from jiraservice import JiraService
 from utils import APP_TIMEZONE, parse_date_with_timezone
 import config
-import dateutil.parser
 from es_mapping import CHANGELOG_MAPPING, SETTINGS_MAPPING
 from es_document_formatter import ElasticsearchDocumentFormatter
+from progress_tracker import ProgressTracker
+from es_utils import create_index
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, "INFO"))
 logger = logging.getLogger(__name__)
 
-# Get Elasticsearch settings from environment variables
-# Format for ELASTIC_URL is expected to be: http://hostname:port/
-ELASTIC_URL = os.environ.get('ELASTIC_URL')
-ELASTIC_APIKEY = os.environ.get('ELASTIC_APIKEY')
-
-# Default Elasticsearch connection settings if environment variables not set
-ES_HOST = "localhost"
-ES_PORT = 9200
-ES_USE_SSL = False
-
-# If ELASTIC_URL is provided, parse it to extract host, port, and protocol
-if (ELASTIC_URL):
-    try:
-        from urllib.parse import urlparse
-        parsed_url = urlparse(ELASTIC_URL)
-        ES_HOST = parsed_url.hostname or ES_HOST
-        ES_PORT = parsed_url.port or ES_PORT
-        ES_USE_SSL = parsed_url.scheme == 'https'
-        logger.info(f"Using Elasticsearch URL from environment: {ELASTIC_URL}")
-    except Exception as e:
-        logger.warning(f"Error parsing ELASTIC_URL: {e}. Using defaults.")
+# Get Elasticsearch configuration from centralized config
+ES_CONFIG = config.get_elasticsearch_config()
+ELASTIC_URL = ES_CONFIG['url']
+ELASTIC_APIKEY = ES_CONFIG['api_key']
+ES_HOST = ES_CONFIG['host']
+ES_PORT = ES_CONFIG['port']
+ES_USE_SSL = ES_CONFIG['use_ssl']
 
 # Index names
 INDEX_CHANGELOG = "jira-changelog"
