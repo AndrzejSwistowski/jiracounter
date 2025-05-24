@@ -23,6 +23,7 @@ from elasticsearch import Elasticsearch
 # Add parent directory to path to import config
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 import config
+from es_utils import delete_index
 
 # Configure logging
 logging.basicConfig(
@@ -78,26 +79,8 @@ def connect_elasticsearch():
         logger.error(f"Error connecting to Elasticsearch: {e}")
         raise
 
-def delete_index(url, headers, index_name):
-    """Delete an Elasticsearch index."""
-    try:
-        # Check if index exists
-        response = requests.head(f"{url}/{index_name}", headers=headers)
-        if response.status_code == 200:
-            logger.info(f"Deleting index {index_name}")
-            delete_response = requests.delete(f"{url}/{index_name}", headers=headers)
-            if delete_response.status_code >= 200 and delete_response.status_code < 300:
-                logger.info(f"Successfully deleted index {index_name}")
-                return True
-            else:
-                logger.error(f"Error deleting index: {delete_response.status_code} - {delete_response.text}")
-                return False
-        else:
-            logger.info(f"Index {index_name} does not exist")
-            return True  # Not an error if index doesn't exist
-    except Exception as e:
-        logger.error(f"Error deleting index {index_name}: {e}")
-        return False
+# This function has been moved to es_utils.py
+# It is now imported at the top of the file
 
 def create_new_index(url, headers):
     """Create a new index with the updated mapping."""
@@ -224,9 +207,8 @@ def main():
     try:
         # Connect to Elasticsearch
         es, url, headers = connect_elasticsearch()
-        
-        # Delete the existing index
-        if not delete_index(url, headers, config.INDEX_CHANGELOG):
+          # Delete the existing index
+        if not delete_index(url=url, api_key=None, index_name=config.INDEX_CHANGELOG, logger=logger):
             logger.error("Failed to delete existing index. Aborting.")
             return False
         

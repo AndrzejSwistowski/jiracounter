@@ -32,27 +32,11 @@ from es_mapping import CHANGELOG_MAPPING, SETTINGS_MAPPING
 from populate_es import recreate_indices
 from es_populate import JiraElasticsearchPopulator
 from logger_utils import setup_logging
+from es_utils import delete_index
 import config
 
-def delete_index(url, headers, index_name, logger):
-    """Delete an Elasticsearch index."""
-    try:
-        # Delete the index
-        logger.info(f"Deleting index {index_name}...")
-        delete_response = requests.delete(f"{url}/{index_name}", headers=headers)
-        
-        if delete_response.status_code == 200:
-            logger.info(f"Successfully deleted index {index_name}")
-            return True
-        elif delete_response.status_code == 404:
-            logger.info(f"Index {index_name} does not exist, nothing to delete")
-            return True
-        else:
-            logger.error(f"Failed to delete index {index_name}: {delete_response.status_code} - {delete_response.text}")
-            return False
-    except Exception as e:
-        logger.error(f"Error deleting index {index_name}: {e}")
-        return False
+# This function has been moved to es_utils.py
+# It is now imported at the top of the file
 
 def verify_field_mappings(es, url, headers, index_name, logger):
     """Verify key fields in the mapping and sample data."""
@@ -155,7 +139,7 @@ def main():
         # Delete the indices
         indices_to_delete = [config.INDEX_CHANGELOG, config.INDEX_SETTINGS]
         for index_name in indices_to_delete:
-            delete_result = delete_index(url, headers, index_name, logger)
+            delete_result = delete_index(url=url, api_key=None, index_name=index_name, logger=logger)
             if not delete_result:
                 logger.error(f"Failed to delete index {index_name}, aborting")
                 return 1

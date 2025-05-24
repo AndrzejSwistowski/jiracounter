@@ -33,6 +33,7 @@ from es_mapping import CHANGELOG_MAPPING, SETTINGS_MAPPING
 import requests
 from logger_utils import setup_logging
 from progress_tracker import ProgressTracker
+from es_utils import delete_index
 
 # For backward compatibility - delegates to ProgressTracker
 def log_progress(logger, current, total=None, interval=30):
@@ -48,36 +49,8 @@ def log_progress(logger, current, total=None, interval=30):
         
     return log_progress._tracker.update(increment=current, total=total, interval=interval)
 
-def delete_index(populator, index_name, logger):
-    """Delete an Elasticsearch index."""
-    try:
-        # Build base URL
-        if populator.url:
-            base_url = populator.url.rstrip('/')
-        else:
-            base_url = f'{"https" if populator.use_ssl else "http"}://{populator.host}:{populator.port}'
-            
-        # Prepare headers with API key authentication
-        headers = {"Content-Type": "application/json"}
-        if populator.api_key:
-            headers["Authorization"] = f"ApiKey {populator.api_key}"
-        
-        # Delete the index
-        logger.info(f"Deleting index {index_name}...")
-        delete_response = requests.delete(f"{base_url}/{index_name}", headers=headers)
-        
-        if delete_response.status_code == 200:
-            logger.info(f"Successfully deleted index {index_name}")
-            return True
-        elif delete_response.status_code == 404:
-            logger.info(f"Index {index_name} does not exist, nothing to delete")
-            return True
-        else:
-            logger.error(f"Failed to delete index {index_name}: {delete_response.status_code} - {delete_response.text}")
-            return False
-    except Exception as e:
-        logger.error(f"Error deleting index {index_name}: {e}")
-        return False
+# This function has been moved to es_utils.py
+# It is now imported at the top of the file
 
 def get_last_sync_date_from_settings(populator, logger):
     """Get the last sync date from the settings index before deleting it."""
