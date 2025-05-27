@@ -91,10 +91,11 @@ class ElasticsearchDocumentFormatter:
             doc["reporter"] = {
                 "displayName": history_record['reporterDisplayName']
             }
-        
-        # Add time-based fields
+          # Add time-based fields
         if history_record.get('workingDaysFromCreation') is not None:
-            doc["days_since_creation"] = float(history_record['workingDaysFromCreation'])
+            # Convert working days to working minutes (480 minutes per working day)
+            working_days = float(history_record['workingDaysFromCreation'])
+            doc["minutes_since_creation"] = working_days * 480
             
         if history_record.get('todo_exit_date') is not None:
             doc["todo_exit_date"] = history_record['todo_exit_date']

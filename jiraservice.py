@@ -14,7 +14,8 @@ import config
 from datetime import datetime, timedelta
 from time_utils import (
     to_iso8601, parse_date, calculate_working_days_between, now, format_for_jql,
-    find_status_change_date, find_first_status_change_date, calculate_days_since_date
+    find_status_change_date, find_first_status_change_date, calculate_days_since_date,
+    calculate_working_minutes_since_date
 )
 from jira_field_manager import JiraFieldManager
 
@@ -578,32 +579,12 @@ class JiraService:
                     epic_issue = parent_data["epic_issue"]
                     epic_issue["inherited"] = True  # Mark as inherited from parent
                     logger.debug(f"Issue {issue.key} inherited epic {parent_data['epic_issue']['key']} from parent {parent_issue['key']}")
-                # else:
-                #     # For field manager we need the raw jira object
-                #     parent = self.jira_client.issue(parent_issue["key"])
-                #     # Check if parent has an epic using field manager
-                #     parent_epic_key = self.field_manager.get_field_value(parent, 'epic_link')
-                #     if parent_epic_key:
-                #         try:
-                #             # Get the parent's epic
-                #             parent_epic_data = self.get_issue(parent_epic_key)
-                #             parent_epic = self.jira_client.issue(parent_epic_key)  # Still need this for field access
-                #             epic_issue = {
-                #                 "id": parent_epic.id,
-                #                 "key": parent_epic.key,
-                #                 "summary": parent_epic.fields.summary,
-                #                 "inherited": True  # Mark as inherited from parent
-                #             }
-                #             logger.debug(f"Issue {issue.key} inherited epic {parent_epic_key} from parent {parent_issue['key']}")
-                #         except Exception as e:
-                #             logger.debug(f"Error retrieving parent's epic {parent_epic_key}: {e}")
             except Exception as e:
                 logger.debug(f"Error retrieving parent issue to check for epic: {e}")
             
         # Add fields specific to get_issue method
         created_date = to_iso8601(issue.fields.created)
-        
-        # Extract basic issue data
+          # Extract basic issue data
         issue_data = {
             "id": issue.id,
             "key": issue.key,
@@ -621,7 +602,8 @@ class JiraService:
             "epic_issue": epic_issue,
             "updated": to_iso8601(issue.fields.updated),
             "created": created_date,
-            "days_since_creation": calculate_working_days_between(parse_date(created_date), now()),
+            #obsolete the avoid returning caltulated values depedn on the time of the execution
+            "minutes_since_creation": calculate_working_minutes_since_date(created_date),
         }
         
         return issue_data
@@ -671,7 +653,7 @@ if __name__ == "__main__":
         issue = service.get_issue("PFBP-139")
         change_log = service.get_issue_changelog("PFBP-139")
         days_in_status = calculate_days_since_date(issue.get('status_change_date')) if issue.get('status_change_date') else "N/A"
-        print(f"Issue: {issue['key']} - {issue['summary']} {issue['allocation_code']} ({issue['status']} - {days_in_status} days in status) - Created: {issue['created']} ({issue['days_since_creation']} days ago) - Reporter: {issue['reporter']} - Assignee: {issue['assignee']}")   
+        print(f"Issue: {issue['key']} - {issue['summary']} {issue['allocation_code']} ({issue['status']} - {days_in_status} days in status) - Created: {issue['created']} ({issue['minutes_since_creation']} minutes ago) - Reporter: {issue['reporter']} - Assignee: {issue['assignee']}")   
         print(f"Connected to Jira as {config.JIRA_USERNAME}")
         
         # Example: Get a sample project

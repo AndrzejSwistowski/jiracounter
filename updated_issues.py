@@ -10,6 +10,7 @@ import dateutil.parser
 from jiraservice import JiraService
 import config
 from utils import calculate_days_since_date, validate_and_format_dates, format_date_polish
+from time_utils import format_working_minutes_to_text
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, "INFO"))
@@ -70,7 +71,7 @@ class UpdatedIssuesReport:
                         "updated": issue_details["updated"],
                         "days_since_update": days_since_update,
                         "created": issue_details["created"],
-                        "days_since_creation": issue_details["days_since_creation"],
+                        "minutes_since_creation": issue_details["minutes_since_creation"],
                         "reporter": issue_details["reporter"],
                         "assignee": issue_details["assignee"],
                         "allocation_code": issue_details.get("allocation_code", "Undefined"),
@@ -154,13 +155,15 @@ if __name__ == "__main__":
                         status_info = f"({issue['status']} - since today)"
                     else:
                         status_info = f"({issue['status']} - {issue['daysInCurrentStatus']} days)"
-                        
-                # Format the dates in Polish
+                          # Format the dates in Polish
                 updated_date_polish = format_date_polish(issue['updated'])
                 created_date_polish = format_date_polish(issue['created'])
+                  # Convert minutes to human-readable format
+                time_ago = format_working_minutes_to_text(issue.get('minutes_since_creation'))
+                time_ago_display = time_ago if time_ago else "N/A"
                 
                 print(f"  {issue['key']}: [{issue['type']}] {issue['summary']} {status_info} - "
-                      f"Updated: {updated_date_polish} - Created: {created_date_polish} ({issue['days_since_creation']} days ago) [{issue['allocation_code']}]")
+                      f"Updated: {updated_date_polish} - Created: {created_date_polish} ({time_ago_display} ago) [{issue['allocation_code']}]")
                 
     except Exception as e:
         print(f"Error: {str(e)}")

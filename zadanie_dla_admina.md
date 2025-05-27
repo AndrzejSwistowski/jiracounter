@@ -100,7 +100,7 @@ curl -X PUT "${ES_URL}/jira-changelog" -H 'Content-Type: application/json' -d '{
           "displayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
         }
       },
-      "days_since_creation": {"type": "float"},
+      "minutes_since_creation": {"type": "float"},
       "todo_exit_date": {"type": "date"},
       "changes": {
         "type": "nested",

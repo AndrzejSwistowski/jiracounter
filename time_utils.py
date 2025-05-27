@@ -328,3 +328,62 @@ def calculate_working_minutes_since_date(date_string):
     except Exception as e:
         logger.error(f"Error calculating working minutes since date: {e}")
         return None
+
+def format_working_minutes_to_text(minutes):
+    """
+    Convert working minutes to human-readable format like "1w 2d 3h 15m".
+    
+    Args:
+        minutes: Number of working minutes
+        
+    Returns:
+        str: Human-readable time format (e.g., "1w 2d 3h 15m", "5d 2h", "45m")
+        None: If minutes is None or invalid
+    """
+    if minutes is None or minutes < 0:
+        return None
+    
+    if minutes == 0:
+        return "0m"
+    
+    try:
+        # Convert to int to avoid floating point issues
+        minutes = int(minutes)
+        
+        # Define time units in working minutes
+        # Assuming 5 working days per week and 8 hours (480 minutes) per working day
+        minutes_per_hour = 60
+        minutes_per_day = MINUTES_PER_WORK_DAY  # 480 minutes
+        minutes_per_week = minutes_per_day * 5  # 2400 minutes
+        
+        # Calculate each unit
+        weeks = minutes // minutes_per_week
+        remaining_minutes = minutes % minutes_per_week
+        
+        days = remaining_minutes // minutes_per_day
+        remaining_minutes = remaining_minutes % minutes_per_day
+        
+        hours = remaining_minutes // minutes_per_hour
+        remaining_minutes = remaining_minutes % minutes_per_hour
+        
+        # Build the result string
+        parts = []
+        
+        if weeks > 0:
+            parts.append(f"{weeks}w")
+        if days > 0:
+            parts.append(f"{days}d")
+        if hours > 0:
+            parts.append(f"{hours}h")
+        if remaining_minutes > 0:
+            parts.append(f"{remaining_minutes}m")
+        
+        # If no parts were added (shouldn't happen but just in case)
+        if not parts:
+            return "0m"
+        
+        return " ".join(parts)
+        
+    except Exception as e:
+        logger.error(f"Error formatting working minutes to text: {e}")
+        return None
