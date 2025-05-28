@@ -20,6 +20,27 @@ class IssueDataExtractor:
         self.field_manager = field_manager        
         self.logger = logging.getLogger(__name__)
     
+    @staticmethod
+    def safe_get_field(obj, field_name, default=None):
+        """Helper function to safely get a field from an object regardless of its type.
+        Works with JIRA objects, PropertyHolder objects, and dictionaries.
+        
+        Args:
+            obj: The object to extract a field from
+            field_name: The name of the field to extract
+            default: Default value to return if the field doesn't exist
+            
+        Returns:
+            The value of the field or the default value
+        """
+        if obj is None:
+            return default
+        if hasattr(obj, field_name):  # JIRA object or PropertyHolder
+            return getattr(obj, field_name)
+        elif isinstance(obj, dict):   # Dictionary
+            return obj.get(field_name, default)
+        return default
+    
     def extract_issue_data(self, issue) -> Dict[str, Any]:
         """
         Extract comprehensive data from a JIRA issue.
@@ -32,69 +53,68 @@ class IssueDataExtractor:
         """
         # Handle both JIRA objects and dictionaries
         if hasattr(issue, 'fields'):
-            # JIRA issue object
+            # JIRA issue object - could be normal JIRA object or PropertyHolder
             fields = issue.fields
-            issue_key = issue.key
-            issue_id = issue.id
-        else:
+            issue_key = self.safe_get_field(issue, 'key')
+            issue_id = self.safe_get_field(issue, 'id')
+        elif isinstance(issue, dict):
             # Dictionary format
             fields = issue.get('fields', {})
             issue_key = issue.get('key')
             issue_id = issue.get('id')
+        else:
+            # Unknown object type, try best effort extraction
+            fields = self.safe_get_field(issue, 'fields', {})
+            issue_key = self.safe_get_field(issue, 'key', str(issue))
+            issue_id = self.safe_get_field(issue, 'id')
         
         # Extract basic issue information
         issue_data = {
             'key': issue_key,
             'id': issue_id,
-            'summary': getattr(fields, 'summary', None) if hasattr(fields, 'summary') else fields.get('summary'),
-            'description': getattr(fields, 'description', None) if hasattr(fields, 'description') else fields.get('description'),
+            'summary': self.safe_get_field(fields, 'summary'),
+            'description': self.safe_get_field(fields, 'description'),
         }
         
         # Handle issue type
-        issuetype = getattr(fields, 'issuetype', None) if hasattr(fields, 'issuetype') else fields.get('issuetype')
+        issuetype = self.safe_get_field(fields, 'issuetype')
         if issuetype:
-            issue_data['issue_type'] = getattr(issuetype, 'name', None) if hasattr(issuetype, 'name') else issuetype.get('name')
+            issue_data['issue_type'] = self.safe_get_field(issuetype, 'name')
         
         # Handle status
-        status = getattr(fields, 'status', None) if hasattr(fields, 'status') else fields.get('status')
+        status = self.safe_get_field(fields, 'status')
         if status:
-            issue_data['status'] = getattr(status, 'name', None) if hasattr(status, 'name') else status.get('name')
+            issue_data['status'] = self.safe_get_field(status, 'name')
         
         # Handle priority
-        priority = getattr(fields, 'priority', None) if hasattr(fields, 'priority') else fields.get('priority')
+        priority = self.safe_get_field(fields, 'priority')
         if priority:
-            issue_data['priority'] = getattr(priority, 'name', None) if hasattr(priority, 'name') else priority.get('name')
+            issue_data['priority'] = self.safe_get_field(priority, 'name')
         
         # Handle resolution
-        resolution = getattr(fields, 'resolution', None) if hasattr(fields, 'resolution') else fields.get('resolution')
+        resolution = self.safe_get_field(fields, 'resolution')
         if resolution:
-            issue_data['resolution'] = getattr(resolution, 'name', None) if hasattr(resolution, 'name') else resolution.get('name')
+            issue_data['resolution'] = self.safe_get_field(resolution, 'name')
         
         # Handle dates
-        created = getattr(fields, 'created', None) if hasattr(fields, 'created') else fields.get('created')
-        updated = getattr(fields, 'updated', None) if hasattr(fields, 'updated') else fields.get('updated')
-        resolved = getattr(fields, 'resolutiondate', None) if hasattr(fields, 'resolutiondate') else fields.get('resolutiondate')
+        created = self.safe_get_field(fields, 'created')
+        updated = self.safe_get_field(fields, 'updated')
+        resolved = self.safe_get_field(fields, 'resolutiondate')
         
         issue_data.update({
             'created': to_iso8601(created),
             'updated': to_iso8601(updated),
             'resolved': to_iso8601(resolved),
-        })        # Extract assignee information (provide both simple and detailed formats for compatibility)
-        assignee = getattr(fields, 'assignee', None) if hasattr(fields, 'assignee') else fields.get('assignee')
+        })
+        
+        # Extract assignee information (provide both simple and detailed formats for compatibility)
+        assignee = self.safe_get_field(fields, 'assignee')
         if assignee:
-            # Check if this is a JIRA object or dictionary
-            if hasattr(assignee, 'displayName'):
-                # JIRA object
-                display_name = assignee.displayName
-                key = getattr(assignee, 'key', None)
-                name = getattr(assignee, 'name', None)
-                email_address = getattr(assignee, 'emailAddress', None)
-            else:
-                # Dictionary
-                display_name = assignee.get('displayName')
-                key = assignee.get('key')
-                name = assignee.get('name')
-                email_address = assignee.get('emailAddress')
+            # Use our safe accessor for all object types
+            display_name = self.safe_get_field(assignee, 'displayName')
+            key = self.safe_get_field(assignee, 'key')
+            name = self.safe_get_field(assignee, 'name')
+            email_address = self.safe_get_field(assignee, 'emailAddress')
             
             issue_data['assignee'] = {
                 'display_name': display_name,
@@ -106,21 +126,13 @@ class IssueDataExtractor:
             issue_data['assignee'] = None
         
         # Extract reporter information (provide both simple and detailed formats for compatibility)
-        reporter = getattr(fields, 'reporter', None) if hasattr(fields, 'reporter') else fields.get('reporter')
+        reporter = self.safe_get_field(fields, 'reporter')
         if reporter:
-            # Check if this is a JIRA object or dictionary
-            if hasattr(reporter, 'displayName'):
-                # JIRA object
-                display_name = reporter.displayName
-                key = getattr(reporter, 'key', None)
-                name = getattr(reporter, 'name', None)
-                email_address = getattr(reporter, 'emailAddress', None)
-            else:
-                # Dictionary
-                display_name = reporter.get('displayName')
-                key = reporter.get('key')
-                name = reporter.get('name')
-                email_address = reporter.get('emailAddress')
+            # Use our safe accessor for all object types
+            display_name = self.safe_get_field(reporter, 'displayName')
+            key = self.safe_get_field(reporter, 'key')
+            name = self.safe_get_field(reporter, 'name')
+            email_address = self.safe_get_field(reporter, 'emailAddress')
             
             issue_data['reporter'] = {
                 'display_name': display_name,
@@ -130,71 +142,74 @@ class IssueDataExtractor:
             }
         else:
             issue_data['reporter'] = None
-          # Extract project information
-        project = getattr(fields, 'project', None) if hasattr(fields, 'project') else fields.get('project')
+        
+        # Extract project information
+        project = self.safe_get_field(fields, 'project')
         if project:
-            # Check if this is a JIRA object or dictionary
-            if hasattr(project, 'key'):
-                # JIRA object
-                issue_data['project'] = {
-                    'key': project.key,
-                    'name': getattr(project, 'name', None),
-                    'id': getattr(project, 'id', None)
-                }
-            else:
-                # Dictionary
-                issue_data['project'] = {
-                    'key': project.get('key'),
-                    'name': project.get('name'),
-                    'id': project.get('id')
-                }        # Extract components (provide detailed format for compatibility)
-        components = getattr(fields, 'components', []) if hasattr(fields, 'components') else fields.get('components', [])
+            # Use our safe accessor for all object types
+            project_key = self.safe_get_field(project, 'key')
+            project_name = self.safe_get_field(project, 'name')
+            project_id = self.safe_get_field(project, 'id')
+            
+            issue_data['project'] = {
+                'key': project_key,
+                'name': project_name,
+                'id': project_id
+            }
+        
+        # Extract components (provide detailed format for compatibility)
+        components = self.safe_get_field(fields, 'components') or []
         issue_data['components'] = []
         if components:
             for comp in components:
                 try:
-                    # Check if this is a JIRA object or dictionary
-                    if hasattr(comp, 'name'):
-                        # JIRA object
-                        issue_data['components'].append({
-                            'id': getattr(comp, 'id', None),
-                            'name': comp.name,
-                            'description': getattr(comp, 'description', None)
-                        })
-                    elif isinstance(comp, dict):
-                        # Dictionary
-                        issue_data['components'].append({
-                            'id': comp.get('id'),
-                            'name': comp.get('name'),
-                            'description': comp.get('description')
-                        })
+                    # Use our safe accessor for all object types
+                    comp_id = self.safe_get_field(comp, 'id')
+                    comp_name = self.safe_get_field(comp, 'name')
+                    comp_description = self.safe_get_field(comp, 'description')
+                    
+                    issue_data['components'].append({
+                        'id': comp_id,
+                        'name': comp_name,
+                        'description': comp_description
+                    })
                 except Exception as e:
                     self.logger.debug(f"Error processing component {comp}: {e}")
                     continue
         
         # Extract labels
-        labels = getattr(fields, 'labels', []) if hasattr(fields, 'labels') else fields.get('labels', [])
+        labels = self.safe_get_field(fields, 'labels') or []
         if labels:
-            issue_data['labels'] = labels        # Extract parent issue information (match original simple approach)
-        parent = getattr(fields, 'parent', None) if hasattr(fields, 'parent') else fields.get('parent')
+            issue_data['labels'] = labels
+            
+        # Extract parent issue information using the class-level safe_get_field method
+        parent = self.safe_get_field(fields, 'parent')
+        # Initialize parent_issue to None by default
+        issue_data['parent_issue'] = None
+        
         if parent:
-            # Check if this is a JIRA object or dictionary
-            if hasattr(parent, 'key'):
-                # JIRA object
-                parent_fields = getattr(parent, 'fields', None)
-                issue_data['parent_issue'] = {
-                    'id': getattr(parent, 'id', None),
-                    'key': parent.key,
-                    'summary': getattr(parent_fields, 'summary', None) if parent_fields else None
-                }
-            else:
-                # Dictionary
-                parent_fields = parent.get('fields', {})
-                issue_data['parent_issue'] = {
-                    'id': parent.get('id'),
-                    'key': parent.get('key'),
-                    'summary': parent_fields.get('summary') if isinstance(parent_fields, dict) else None
-                }
+            # Use the safe_get_field method to extract parent fields consistently
+            parent_id = self.safe_get_field(parent, 'id')
+            parent_key = self.safe_get_field(parent, 'key')
+            
+            # Get the parent fields object
+            parent_fields = self.safe_get_field(parent, 'fields')
+            
+            # Get summary from parent fields
+            parent_summary = None
+            if parent_fields:
+                parent_summary = self.safe_get_field(parent_fields, 'summary')
+            
+            # Set the parent issue data
+            issue_data['parent_issue'] = {
+                'id': parent_id,
+                'key': parent_key,
+                'summary': parent_summary
+            }
+            
+            # Log if we have a parent but couldn't get all required information
+            if not parent_key and not parent_id:
+                self.logger.debug(f"Parent found but couldn't extract key or ID from: {parent}")
         
         # Extract custom fields using field manager
         try:
@@ -218,30 +233,20 @@ class IssueDataExtractor:
                 if field_value is not None:
                     issue_data[custom_field_name.lower().replace(' ', '_')] = field_value
         except Exception as e:
-            self.logger.debug(f"Error extracting custom fields: {e}")        # Extract time tracking information
-        time_tracking = getattr(fields, 'timetracking', None) if hasattr(fields, 'timetracking') else fields.get('timetracking')
+            self.logger.debug(f"Error extracting custom fields: {e}")
+        
+        # Extract time tracking information
+        time_tracking = self.safe_get_field(fields, 'timetracking')
         if time_tracking:
-            # Check if this is a JIRA TimeTracking object or dictionary
-            if hasattr(time_tracking, 'originalEstimate'):
-                # JIRA TimeTracking object
-                issue_data['time_tracking'] = {
-                    'original_estimate': getattr(time_tracking, 'originalEstimate', None),
-                    'remaining_estimate': getattr(time_tracking, 'remainingEstimate', None),
-                    'time_spent': getattr(time_tracking, 'timeSpent', None),
-                    'original_estimate_seconds': getattr(time_tracking, 'originalEstimateSeconds', None),
-                    'remaining_estimate_seconds': getattr(time_tracking, 'remainingEstimateSeconds', None),
-                    'time_spent_seconds': getattr(time_tracking, 'timeSpentSeconds', None)
-                }
-            elif isinstance(time_tracking, dict):
-                # Dictionary
-                issue_data['time_tracking'] = {
-                    'original_estimate': time_tracking.get('originalEstimate'),
-                    'remaining_estimate': time_tracking.get('remainingEstimate'),
-                    'time_spent': time_tracking.get('timeSpent'),
-                    'original_estimate_seconds': time_tracking.get('originalEstimateSeconds'),
-                    'remaining_estimate_seconds': time_tracking.get('remainingEstimateSeconds'),
-                    'time_spent_seconds': time_tracking.get('timeSpentSeconds')
-                }
+            # Use our safe accessor for all object types
+            issue_data['time_tracking'] = {
+                'original_estimate': self.safe_get_field(time_tracking, 'originalEstimate'),
+                'remaining_estimate': self.safe_get_field(time_tracking, 'remainingEstimate'),
+                'time_spent': self.safe_get_field(time_tracking, 'timeSpent'),
+                'original_estimate_seconds': self.safe_get_field(time_tracking, 'originalEstimateSeconds'),
+                'remaining_estimate_seconds': self.safe_get_field(time_tracking, 'remainingEstimateSeconds'),
+                'time_spent_seconds': self.safe_get_field(time_tracking, 'timeSpentSeconds')
+            }
         
         # Extract working time metrics
         if created:
@@ -261,7 +266,8 @@ class IssueDataExtractor:
         Args:
             issue_data: The extracted issue data dictionary
             issue: The original JIRA issue object
-        """        # Map new field names to legacy field names
+        """
+        # Map new field names to legacy field names
         if 'issue_type' in issue_data:
             issue_data['type'] = issue_data['issue_type']
         
@@ -271,7 +277,8 @@ class IssueDataExtractor:
         
         if 'reporter' in issue_data and issue_data['reporter']:
             issue_data['reporter_display_name'] = issue_data['reporter'].get('display_name')
-          # Add simple component names list (original format compatibility)
+          
+        # Add simple component names list (original format compatibility)
         if 'components' in issue_data and issue_data['components']:
             try:
                 issue_data['component_names'] = [comp.get('name') for comp in issue_data['components'] if isinstance(comp, dict) and comp.get('name')]

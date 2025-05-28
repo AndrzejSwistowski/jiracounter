@@ -138,7 +138,9 @@ class JiraService:
                 issues_page = jira.search_issues(
                     jql_query, 
                     startAt=start_at, 
-                    maxResults=page_size
+                    maxResults=page_size, 
+                    expand='comments,parent,issuetype,fields'
+                    
                 )
                 
                 # If no more results, break the loop

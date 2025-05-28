@@ -91,7 +91,7 @@ class JiraFieldManager:
         except Exception as e:
             logger.error(f"Error finding field ID for '{field_name}': {str(e)}")
             return None
-    
+            
     def get_field_value(self, issue, field_name: str) -> Any:
         """Get the value of a field from a Jira issue.
         
@@ -109,9 +109,30 @@ class JiraFieldManager:
         if not field_id:
             logger.warning(f"Field ID for '{field_name}' not found in cache")
             return None
-            
+        
         try:
-            return getattr(issue.fields, field_id, None)
+            # Use a common approach to safely access fields from any object type
+            def safe_get(obj, attr, default=None):
+                if obj is None:
+                    return default
+                if hasattr(obj, attr):  # JIRA object or PropertyHolder
+                    return getattr(obj, attr)
+                elif isinstance(obj, dict):   # Dictionary
+                    return obj.get(attr, default)
+                return default
+            
+            # First get the fields object regardless of the issue type
+            fields = None
+            if hasattr(issue, 'fields'):
+                fields = issue.fields
+            elif isinstance(issue, dict) and 'fields' in issue:
+                fields = issue['fields']
+                
+            # Then access the specific field using the ID
+            if fields:
+                return safe_get(fields, field_id)
+                
+            return None
         except Exception as e:
             logger.error(f"Error getting value for field '{field_name}' (ID: {field_id}): {str(e)}")
             return None
