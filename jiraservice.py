@@ -191,14 +191,6 @@ class JiraService:
             changelog_entries = []
             status_change_history = []
             
-            # Process creation record
-            created_date = parse_date(issue.fields.created)
-            issue_creation_date = created_date
-            current_date = now()
-            
-            # Calculate working days since creation
-            working_days_from_creation = calculate_working_days_between(issue_creation_date, current_date)
-            
             # Extract description content if it exists
             description_text = None
             if hasattr(issue.fields, 'description') and issue.fields.description:
@@ -246,7 +238,7 @@ class JiraService:
             # Create a history record for the issue creation
             creation_record = {
                 'historyId': int(f"{issue.id}00000"),  # Use a synthetic ID for creation
-                'historyDate': to_iso8601(created_date),  # Store as ISO8601 format with timezone
+                'historyDate': issue_data['created'],  # Store as ISO8601 format with timezone
                 'factType': 1,  # 1 = create
                 'issueId': issue.id,
                 'issueKey': issue_key,
@@ -302,7 +294,7 @@ class JiraService:
                 
                 # If we found a status change date, calculate working days in status
                 if status_change_date:
-                    working_days_in_status = calculate_working_days_between(status_change_date, current_date)
+                    working_days_in_status = calculate_working_days_between(status_change_date, now())
                 
                 # Extract all changelog entries for further analysis
                 for history in histories:
@@ -371,7 +363,7 @@ class JiraService:
                             fact_type = 2  # 2 = transition
                     
                     # Calculate time-based metrics as of this history point
-                    working_days_from_creation_at_point = calculate_working_days_between(issue_creation_date, history_date)
+                    working_days_from_creation_at_point = calculate_working_days_between(issue_data['created'], history_date)
                     
                     # For each history point, determine how long it had been in the current status
                     status_in_this_history = status_name  # Default to current status

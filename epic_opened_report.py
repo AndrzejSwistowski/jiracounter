@@ -17,7 +17,7 @@ import logging
 from typing import List, Dict, Any
 from jiraservice import JiraService
 from utils import calculate_days_since_date, format_date_polish
-from time_utils import format_working_minutes_to_text
+from time_utils import format_working_minutes_to_text, calculate_working_minutes_since_date
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -60,11 +60,10 @@ class EpicOpenedReport:
                         "summary": issue_details["summary"],
                         "status": issue_details["status"],
                         "created": issue_details["created"],
-                        "minutes_since_creation": issue_details["minutes_since_creation"],
-                        "Reporter": issue_details["reporter"],
+                        "minutes_since_creation": issue_details["minutes_since_creation"],                        "Reporter": issue_details["reporter"],
                         "Assignee": issue_details["assignee"],
                         "status_change_date": issue_details.get("status_change_date", None),
-                        "daysInCurrentStatus": issue_details.get("daysInCurrentStatus", None),
+                        "minutes_in_current_status": calculate_working_minutes_since_date(issue_details.get("status_change_date", None)) if issue_details.get("status_change_date") else None,
                     }
                     
                     epics_with_details.append(epic_info)
@@ -123,8 +122,12 @@ if __name__ == "__main__":
             print(f"\nProject: {project_name} ({project_key})")
             for epic in project_epics:
                 status_info = f"{epic['status']}"
-                if epic.get('daysInCurrentStatus') is not None:
-                    status_info += f" - {epic['daysInCurrentStatus']} days in current status"                # Format the creation date in Polish
+                if epic.get('minutes_in_current_status') is not None:
+                    formatted_time = format_working_minutes_to_text(epic['minutes_in_current_status'])
+                    if formatted_time:
+                        status_info += f" - {formatted_time} in current status"
+                        
+                # Format the creation date in Polish
                 created_date_polish = format_date_polish(epic['created'])
                 
                 # Convert minutes to human-readable format
