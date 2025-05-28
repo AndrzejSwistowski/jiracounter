@@ -18,6 +18,7 @@ from time_utils import (
     calculate_working_minutes_since_date
 )
 from jira_field_manager import JiraFieldManager
+from issue_data_extractor import IssueDataExtractor
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL))
@@ -26,11 +27,16 @@ logger = logging.getLogger(__name__)
 class JiraService:
     """Service class to interact with Jira API."""
     
-    def __init__(self):
-        """Initialize the Jira service."""
-        self.jira_client = None
-        self.connected = False
+    def __init__(self, jira_client=None):
+        """Initialize the Jira service.
+        
+        Args:
+            jira_client: Optional JIRA client for testing purposes
+        """
+        self.jira_client = jira_client
+        self.connected = jira_client is not None
         self.field_manager = JiraFieldManager()
+        self.data_extractor = IssueDataExtractor(self.field_manager)
         
     @property
     def field_ids(self):
@@ -485,12 +491,10 @@ class JiraService:
                 # The consumer of this data can handle deduplication as needed
                 all_history_records.extend(issue_history)
                 
-                # Log the number of history records found for this issue
-                logger.debug(f"Found {len(issue_history)} history records for issue {issue_key}")
+                # Log the number of history records found for this issue            logger.debug(f"Found {len(issue_history)} history records for issue {issue_key}")
             
             # Sort by history date
             all_history_records.sort(key=lambda x: x['created'])
-            
             logger.info(f"Extracted {len(all_history_records)} history records")
             return all_history_records
             
@@ -506,134 +510,16 @@ class JiraService:
             
         Returns:
             Dict containing the standardized issue details
-        """
-        # Get rodzaj_pracy value using field manager
-        rodzaj_pracy_value = self.field_manager.get_field_value(issue, 'rodzaj_pracy')
-        
-        # Extract backet information using the extracted rodzaj_pracy value
-        allocation_value, allocation_code = self._extract_backet_info(rodzaj_pracy_value)
-        
-        # Extract status change date if available
-        status_change_date = None
-        data_zmiany_statusu_value = self.field_manager.get_field_value(issue, 'data_zmiany_statusu')
-        if data_zmiany_statusu_value:
-            try:
-                # Use our utility to ensure ISO8601 format
-                status_change_date = to_iso8601(data_zmiany_statusu_value)
-            except (ValueError, TypeError):
-                logger.debug(f"Could not parse 'data zmiany statusu' date: {data_zmiany_statusu_value}")
-        
-        # Extract component information
-        components = []
-        if hasattr(issue.fields, 'components') and issue.fields.components:
-            for component in issue.fields.components:
-                # Store only the component name as a simple string
-                components.append(component.name)
-        
-        # Extract labels
-        labels = []
-        if hasattr(issue.fields, 'labels') and issue.fields.labels:
-            labels = issue.fields.labels
-        
-        # Extract parent issue information
-        parent_issue = None
-        if hasattr(issue.fields, 'parent'):
-            parent_issue = {
-                "id": issue.fields.parent.id,
-                "key": issue.fields.parent.key,
-                "summary": issue.fields.summary
-            }
-        
-        # Extract epic information using field manager
-        epic_issue = None
-        epic_key = self.field_manager.get_field_value(issue, 'epic_link')
-
-        if epic_key:
-            try:
-                # Try to get the epic issue
-                epic_data = self.get_issue(epic_key)
-                epic_issue = {
-                    "id": epic_data["id"],
-                    "key": epic_data["key"],
-                    "summary": epic_data["summary"]
-                }
-            except Exception as e:
-                logger.debug(f"Error retrieving epic issue {epic_key}: {e}")
-        
-        # If no epic found but there is a parent, try to get the parent's epic
-        if not epic_issue and parent_issue:
-            try:
-                # Get parent issue with its epic link
-                parent_data = self.get_issue(parent_issue["key"])
-                
-                # First check if the parent_data already has epic information
-                if parent_data.get("epic_issue"):
-                    epic_issue = parent_data["epic_issue"]
-                    epic_issue["inherited"] = True  # Mark as inherited from parent
-                    logger.debug(f"Issue {issue.key} inherited epic {parent_data['epic_issue']['key']} from parent {parent_issue['key']}")
-            except Exception as e:
-                logger.debug(f"Error retrieving parent issue to check for epic: {e}")
-            
-        # Add fields specific to get_issue method
-        created_date = to_iso8601(issue.fields.created)
-          # Extract basic issue data
-        issue_data = {
-            "id": issue.id,
-            "key": issue.key,
-            "summary": issue.fields.summary,
-            "status": issue.fields.status.name,
-            "type": issue.fields.issuetype.name if hasattr(issue.fields, 'issuetype') and issue.fields.issuetype else "Unknown",
-            "assignee": issue.fields.assignee.displayName if issue.fields.assignee else None,
-            "status_change_date": status_change_date,
-            "components": components,
-            "labels": labels,
-            "reporter": issue.fields.reporter.displayName if hasattr(issue.fields, 'reporter') and issue.fields.reporter else None,
-            "backet": allocation_value,
-            "allocation_code": allocation_code,
-            "parent_issue": parent_issue,
-            "epic_issue": epic_issue,
-            "updated": to_iso8601(issue.fields.updated),
-            "created": created_date,
-            #obsolete the avoid returning caltulated values depedn on the time of the execution
-            "minutes_since_creation": calculate_working_minutes_since_date(created_date),
-        }
-        
-        return issue_data
-
-    # The _cache_field_ids method has been removed as this functionality
+        """        # Delegate to the IssueDataExtractor - it can handle both JIRA objects and dictionaries
+        extracted_data = self.data_extractor.extract_issue_data(issue)
+          # Return the extracted data (remove legacy code that duplicates extraction)
+        return extracted_data# The _cache_field_ids method has been removed as this functionality
     # is now handled by the JiraFieldManager class
     
     # The get_field_id_by_name method has been removed as this functionality
     # is now handled by the JiraFieldManager class
-    
-    def _extract_backet_info(self, rodzaj_pracy_value=None) -> tuple:
-        """Extract backet value and key from the rodzaj_pracy field.
-        
-        Args:
-            rodzaj_pracy_value: The value of the rodzaj_pracy field
-            
-        Returns:
-            tuple: (allocation_value, allocation_code)
-        """
-        allocation_value = None
-        allocation_code = None
-        
-        # Use the provided rodzaj_pracy_value if available
-        if rodzaj_pracy_value is not None:
-            # Check if rodzaj_pracy is a CustomFieldOption object
-            if hasattr(rodzaj_pracy_value, 'value'):
-                allocation_value = rodzaj_pracy_value.value
-            elif isinstance(rodzaj_pracy_value, str):
-                allocation_value = rodzaj_pracy_value
-        
-        # Try to extract the key if allocation_value is valid and has the format "Something [KEY]"
-        if allocation_value and '[' in allocation_value and ']' in allocation_value:
-            try:
-                allocation_code = allocation_value.split('[')[1].split(']')[0]
-            except (IndexError, AttributeError):
-                logger.debug(f"Could not extract backet key from value: {allocation_value}")
-        
-        return allocation_value, allocation_code
+
+    # The _extract_allocation_info method has been moved to the IssueDataExtractor class
 
 
 # Usage example
