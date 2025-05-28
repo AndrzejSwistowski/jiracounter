@@ -20,10 +20,9 @@ class IssueDataExtractor:
         self.field_manager = field_manager        
         self.logger = logging.getLogger(__name__)
     
-    @staticmethod
-    def safe_get_field(obj, field_name, default=None):
+    def safe_get_field(self, obj, field_name, default=None):
         """Helper function to safely get a field from an object regardless of its type.
-        Works with JIRA objects, PropertyHolder objects, and dictionaries.
+        Delegates to JiraFieldManager's safe_get_field method to avoid code duplication.
         
         Args:
             obj: The object to extract a field from
@@ -33,13 +32,7 @@ class IssueDataExtractor:
         Returns:
             The value of the field or the default value
         """
-        if obj is None:
-            return default
-        if hasattr(obj, field_name):  # JIRA object or PropertyHolder
-            return getattr(obj, field_name)
-        elif isinstance(obj, dict):   # Dictionary
-            return obj.get(field_name, default)
-        return default
+        return self.field_manager.safe_get_field(obj, field_name, default)
     
     def extract_issue_data(self, issue) -> Dict[str, Any]:
         """
