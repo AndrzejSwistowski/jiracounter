@@ -16,18 +16,28 @@ sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer)
 def test_connection():
     """Test basic connection to Jira."""
     print("Testing connection to Jira...")
-    service = JiraService()
     
     try:
-        jira = service.connect()
+        service = get_connection()
         print(f"[SUCCESS] Successfully connected to {config.JIRA_BASE_URL}")
         return service
     except Exception as e:
         print(f"[ERROR] Connection failed: {str(e)}")
         sys.exit(1)
 
-def test_projects(service):
+def get_connection():
+    service = JiraService()    
+    try:
+        service.connect()
+        return service
+    except Exception as e:
+        sys.exit(1)
+
+def test_projects(service = None):
     """List available projects."""
+    if service is None:
+        service = get_connection()
+        
     print("\nTesting project listing...")
     jira = service.jira_client
     
@@ -44,8 +54,11 @@ def test_projects(service):
     except Exception as e:
         print(f"[ERROR] Project listing failed: {str(e)}")
 
-def test_search_issues(service):
+def test_search_issues(service = None):
     """Test searching for issues."""
+    if service is None:
+        service = get_connection()
+        
     print("\nTesting issue search...")
     
     # Example JQL: issues updated in the last 7 days
@@ -74,8 +87,11 @@ def test_search_issues(service):
         print(f"[ERROR] Issue search failed: {str(e)}")
         return []  # Return an empty list on error
 
-def test_get_issue(service):
+def test_get_issue(service=None):
     """Test retrieving a specific issue."""
+    if service is None:
+        service = get_connection()
+        
     print("\nTesting issue retrieval...")
     
     # Try to get an issue from previous search results if available
@@ -116,8 +132,11 @@ def test_get_issue(service):
     except Exception as e:
         print(f"[ERROR] Issue retrieval failed: {str(e)}")
 
-def test_get_issue_changelog(service):
+def test_get_issue_changelog(service=None):
     """Test retrieving changelog for a specific issue."""
+    if service is None:
+        service = get_connection()
+        
     print("\nTesting issue changelog retrieval...")
     
     try:
@@ -138,7 +157,7 @@ def test_get_issue_changelog(service):
             
             # Display a few recent changelog entries
             for entry in changelog:  # Show first 3 entries
-                print(f"  - History ID: {entry['id']} | Changed by {entry['author']} on {entry['created']}")
+                print(f"  - History ID: {entry['historyId']} | Changed by {entry['authorDisplayName']} on {entry['created']}")
                 
                 # Show the changes in this entry
                 for change in entry['changes']:  # Show first 2 changes per entry

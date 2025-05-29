@@ -107,12 +107,15 @@ class JiraFieldManager:
                     logger.debug(f"Found field '{field_name}' with ID: {field['id']}")
                     return field["id"]
             
-            logger.warning(f"Field '{field_name}' not found in Jira")
+            logger.debug(f"Field '{field_name}' not found in Jira")
             return None
         except Exception as e:
             logger.error(f"Error finding field ID for '{field_name}': {str(e)}")
             return None
             
+    # Track which field warnings have already been logged to avoid repeated messages
+    _warned_fields = set()
+    
     def get_field_value(self, issue, field_name: str) -> Any:
         """Get the value of a field from a Jira issue.
         
@@ -128,7 +131,15 @@ class JiraFieldManager:
             
         field_id = self.field_ids.get(field_name)
         if not field_id:
-            logger.warning(f"Field ID for '{field_name}' not found in cache")
+            # Get issue key and type for better logging
+            issue_key = issue.key if hasattr(issue, 'key') else 'unknown'
+            issue_type = issue.fields.issuetype.name if hasattr(issue, 'fields') and hasattr(issue.fields, 'issuetype') else 'unknown'
+            
+            # Only log warning once per field/issue type combination
+            warning_key = f"{field_name}:{issue_type}"
+            if warning_key not in self._warned_fields:
+                logger.debug(f"Field ID for '{field_name}' not found in cache for issue type '{issue_type}'")
+                self._warned_fields.add(warning_key)
             return None
         
         try:

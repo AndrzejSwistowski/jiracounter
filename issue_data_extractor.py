@@ -204,27 +204,30 @@ class IssueDataExtractor:
             if not parent_key and not parent_id:
                 self.logger.debug(f"Parent found but couldn't extract key or ID from: {parent}")
         
-        # Extract custom fields using field manager
+        # Extract custom fields using field manager - with reduced logging
         try:
-            # Extract epic information
-            epic_link = self.field_manager.get_field_value(issue if hasattr(issue, 'fields') else None, 'Epic Link')
-            if epic_link:
-                issue_data['epic_link'] = epic_link
+            # Only extract custom fields based on issue type
+            issue_type_name = issue_data.get('issue_type', '').lower()
             
-            epic_name = self.field_manager.get_field_value(issue if hasattr(issue, 'fields') else None, 'Epic Name')
-            if epic_name:
-                issue_data['epic_name'] = epic_name
+            # Create a list of relevant fields based on issue type
+            # Only attempt to extract fields relevant to specific issue types
+            relevant_fields = []
             
-            # Extract story points
-            story_points = self.field_manager.get_field_value(issue if hasattr(issue, 'fields') else None, 'Story Points')
-            if story_points is not None:
-                issue_data['story_points'] = story_points
+            # Most fields are only relevant for stories or epics
+            if issue_type_name in ['story', 'epic']:
+                relevant_fields.extend(['Epic Link', 'Epic Name', 'Story Points', 'Team', 'Sprint', 'Epic Color'])
             
-            # Extract custom fields using field manager
-            for custom_field_name in ['Team', 'Sprint', 'Epic Color']:
-                field_value = self.field_manager.get_field_value(issue if hasattr(issue, 'fields') else None, custom_field_name)
-                if field_value is not None:
-                    issue_data[custom_field_name.lower().replace(' ', '_')] = field_value
+            # If field IDs are already in cache, proceed with extraction
+            # This avoids unnecessary warnings for fields that aren't in the cache
+            cached_fields = self.field_manager.field_ids.keys()
+            
+            # Only extract fields that are either relevant to the issue type or already cached
+            for field_name in relevant_fields:
+                field_key = field_name.lower().replace(' ', '_')
+                if field_key in cached_fields:
+                    field_value = self.field_manager.get_field_value(issue if hasattr(issue, 'fields') else None, field_key)
+                    if field_value is not None:
+                        issue_data[field_key] = field_value
         except Exception as e:
             self.logger.debug(f"Error extracting custom fields: {e}")
         
