@@ -20,31 +20,139 @@ class IssueDataExtractor:
         self.field_manager = field_manager        
         self.logger = logging.getLogger(__name__)
     
-    def safe_get_field(self, obj, field_name, default=None):
-        """Helper function to safely get a field from an object regardless of its type.
-        Delegates to JiraFieldManager's safe_get_field method to avoid code duplication.
-        
-        Args:
-            obj: The object to extract a field from
-            field_name: The name of the field to extract
-            default: Default value to return if the field doesn't exist
-            
-        Returns:
-            The value of the field or the default value
-        """
-        return self.field_manager.safe_get_field(obj, field_name, default)
-    
     def extract_issue_data(self, issue) -> Dict[str, Any]:
         """
         Extract comprehensive data from a JIRA issue.
+        
+        This method serves as a template method that coordinates the extraction process,
+        delegating to specialized methods for each type of data.
         
         Args:
             issue: JIRA issue object or dictionary
             
         Returns:
-            Dictionary containing extracted issue data
+            Dictionary containing extracted issue data with the following structure:
+            
+            {
+                # Basic information
+                'key': 'PROJECT-123',       # JIRA issue key
+                'id': '12345',              # JIRA issue ID
+                'summary': 'Issue title',   # Issue summary
+                'description': 'Details',   # Issue description text
+                
+                # Type and status information
+                'issue_type': 'Story',      # Issue type name
+                'status': 'In Progress',    # Current status
+                'priority': 'High',         # Priority level
+                'resolution': 'Done',       # Resolution if resolved
+                
+                # Date fields (ISO 8601 format strings)
+                'created': '2023-01-01T10:00:00+00:00',    # Creation date
+                'updated': '2023-01-15T14:30:00+00:00',    # Last update date
+                'resolved': '2023-01-20T16:00:00+00:00',   # Resolution date
+                
+                # People information
+                'assignee': {               # Assigned user (or None)
+                    'display_name': 'John Doe',
+                    'key': 'jdoe',
+                    'name': 'jdoe',
+                    'email_address': 'jdoe@example.com'
+                },
+                'reporter': {               # Reporter user (or None)
+                    'display_name': 'Jane Smith',
+                    'key': 'jsmith',
+                    'name': 'jsmith',
+                    'email_address': 'jsmith@example.com'
+                },
+                
+                # Project information
+                'project': {                # Project data
+                    'key': 'PROJECT',
+                    'name': 'Project Name',
+                    'id': '10000'
+                },
+                
+                # Components and labels
+                'components': [             # List of components
+                    {
+                        'id': '1001',
+                        'name': 'Frontend',
+                        'description': 'UI components'
+                    },
+                    {
+                        'id': '1002',
+                        'name': 'API',
+                        'description': 'Backend API'
+                    }
+                ],
+                'labels': ['label1', 'label2'],  # List of labels
+                
+                # Parent issue information (if available, otherwise None)
+                'parent_issue': {
+                    'id': '12344',
+                    'key': 'PROJECT-122',
+                    'summary': 'Parent Issue'
+                },
+                
+                # Custom fields (only for specific issue types)
+                'epic_link': 'PROJECT-100',     # For stories: link to epic
+                'epic_name': 'Feature Epic',    # For epics: epic name
+                'story_points': 5,              # For stories: estimation points
+                'team': 'Team A',               # Team assignment
+                'sprint': 'Sprint 5',           # Current sprint
+                'epic_color': 'green',          # For epics: color
+                
+                # Time tracking
+                'time_tracking': {
+                    'original_estimate': '2d',
+                    'remaining_estimate': '1d',
+                    'time_spent': '1d',
+                    'original_estimate_seconds': 57600,
+                    'remaining_estimate_seconds': 28800,
+                    'time_spent_seconds': 28800
+                },
+                
+                # Working time metrics
+                'working_minutes_since_created': 4800,  # Working minutes since creation
+                
+                # Legacy fields (for backward compatibility)
+                'type': 'Story',                # Same as 'issue_type'
+                'assignee_display_name': 'John Doe',
+                'reporter_display_name': 'Jane Smith',
+                'component_names': ['Frontend', 'API'],
+                'minutes_since_creation': 4800,  # Same as 'working_minutes_since_created'
+                'allocation_code': 'DEV',       # Work type code
+                'status_change_date': '2023-01-10T09:00:00+00:00'
+            }
+            
+            Note: Some fields may be None or missing if the data is not available
+            in the original issue object.
         """
-        # Handle both JIRA objects and dictionaries
+        # Get fields and basic identifiers 
+        fields, issue_key, issue_id = self._extract_issue_fields(issue)
+        
+        # Create result dictionary with base data
+        issue_data = self._extract_base_fields(fields, issue_key, issue_id)
+        
+        # Extract each type of data through dedicated methods
+        self._extract_type_and_status_fields(fields, issue_data)
+        self._extract_date_fields(fields, issue_data)
+        self._extract_people_fields(fields, issue_data)
+        self._extract_project_info(fields, issue_data)
+        self._extract_components(fields, issue_data)
+        self._extract_labels(fields, issue_data)
+        self._extract_parent_issue(fields, issue_data)
+        self._extract_custom_fields(issue, fields, issue_data)
+        self._extract_time_tracking(fields, issue_data)
+        self._extract_working_time_metrics(fields, issue_data)
+        
+        # Add legacy fields for backward compatibility
+        self._add_legacy_fields(issue_data, issue)
+        
+        return issue_data
+    
+    def _extract_issue_fields(self, issue) -> tuple:
+        """Extract fields object and basic identifiers based on issue type."""
         if hasattr(issue, 'fields'):
             # JIRA issue object - could be normal JIRA object or PropertyHolder
             fields = issue.fields
@@ -61,19 +169,24 @@ class IssueDataExtractor:
             issue_key = self.safe_get_field(issue, 'key', str(issue))
             issue_id = self.safe_get_field(issue, 'id')
         
-        # Extract basic issue information
-        issue_data = {
+        return fields, issue_key, issue_id
+    
+    def _extract_base_fields(self, fields, issue_key, issue_id) -> Dict[str, Any]:
+        """Extract the basic issue information."""
+        return {
             'key': issue_key,
             'id': issue_id,
             'summary': self.safe_get_field(fields, 'summary'),
             'description': self.safe_get_field(fields, 'description'),
         }
-        
+    
+    def _extract_type_and_status_fields(self, fields, issue_data) -> None:
+        """Extract issue type, status, priority and resolution fields."""
         # Handle issue type
         issuetype = self.safe_get_field(fields, 'issuetype')
         if issuetype:
             issue_data['issue_type'] = self.safe_get_field(issuetype, 'name')
-	
+        
         # Handle status
         status = self.safe_get_field(fields, 'status')
         if status:
@@ -88,8 +201,9 @@ class IssueDataExtractor:
         resolution = self.safe_get_field(fields, 'resolution')
         if resolution:
             issue_data['resolution'] = self.safe_get_field(resolution, 'name')
-        
-        # Handle dates
+    
+    def _extract_date_fields(self, fields, issue_data) -> None:
+        """Extract and format date fields."""
         created = self.safe_get_field(fields, 'created')
         updated = self.safe_get_field(fields, 'updated')
         resolved = self.safe_get_field(fields, 'resolutiondate')
@@ -99,81 +213,65 @@ class IssueDataExtractor:
             'updated': to_iso8601(updated),
             'resolved': to_iso8601(resolved),
         })
-        
-        # Extract assignee information (provide both simple and detailed formats for compatibility)
+    
+    def _extract_people_fields(self, fields, issue_data) -> None:
+        """Extract assignee and reporter information."""
+        # Extract assignee
         assignee = self.safe_get_field(fields, 'assignee')
         if assignee:
-            # Use our safe accessor for all object types
-            display_name = self.safe_get_field(assignee, 'displayName')
-            key = self.safe_get_field(assignee, 'key')
-            name = self.safe_get_field(assignee, 'name')
-            email_address = self.safe_get_field(assignee, 'emailAddress')
-            
-            issue_data['assignee'] = {
-                'display_name': display_name,
-                'key': key,
-                'name': name,
-                'email_address': email_address
-            }
+            issue_data['assignee'] = self._extract_user_info(assignee)
         else:
             issue_data['assignee'] = None
         
-        # Extract reporter information (provide both simple and detailed formats for compatibility)
+        # Extract reporter
         reporter = self.safe_get_field(fields, 'reporter')
         if reporter:
-            # Use our safe accessor for all object types
-            display_name = self.safe_get_field(reporter, 'displayName')
-            key = self.safe_get_field(reporter, 'key')
-            name = self.safe_get_field(reporter, 'name')
-            email_address = self.safe_get_field(reporter, 'emailAddress')
-            
-            issue_data['reporter'] = {
-                'display_name': display_name,
-                'key': key,
-                'name': name,
-                'email_address': email_address
-            }
+            issue_data['reporter'] = self._extract_user_info(reporter)
         else:
             issue_data['reporter'] = None
-        
-        # Extract project information
+    
+    def _extract_user_info(self, user_obj) -> Dict[str, str]:
+        """Extract standard user information from a user object."""
+        return {
+            'display_name': self.safe_get_field(user_obj, 'displayName'),
+            'key': self.safe_get_field(user_obj, 'key'),
+            'name': self.safe_get_field(user_obj, 'name'),
+            'email_address': self.safe_get_field(user_obj, 'emailAddress')
+        }
+    
+    def _extract_project_info(self, fields, issue_data) -> None:
+        """Extract project information."""
         project = self.safe_get_field(fields, 'project')
         if project:
-            # Use our safe accessor for all object types
-            project_key = self.safe_get_field(project, 'key')
-            project_name = self.safe_get_field(project, 'name')
-            project_id = self.safe_get_field(project, 'id')
-            
             issue_data['project'] = {
-                'key': project_key,
-                'name': project_name,
-                'id': project_id
+                'key': self.safe_get_field(project, 'key'),
+                'name': self.safe_get_field(project, 'name'),
+                'id': self.safe_get_field(project, 'id')
             }
-        
-        # Extract components (provide detailed format for compatibility)
+    
+    def _extract_components(self, fields, issue_data) -> None:
+        """Extract components information."""
         components = self.safe_get_field(fields, 'components') or []
         issue_data['components'] = []
+        
         if components:
             for comp in components:
                 try:
-                    # Use our safe accessor for all object types
-                    comp_id = self.safe_get_field(comp, 'id')
-                    comp_name = self.safe_get_field(comp, 'name')
-                    comp_description = self.safe_get_field(comp, 'description')
-                    
-                    issue_data['components'].append({
-                        'id': comp_id,
-                        'name': comp_name,
-                        'description': comp_description
-                    })
+                    comp_data = {
+                        'id': self.safe_get_field(comp, 'id'),
+                        'name': self.safe_get_field(comp, 'name'),
+                        'description': self.safe_get_field(comp, 'description')
+                    }
+                    issue_data['components'].append(comp_data)
                 except Exception as e:
                     self.logger.debug(f"Error processing component {comp}: {e}")
-                    continue
-        
-        # Extract labels
+    
+    def _extract_labels(self, fields, issue_data) -> None:
+        """Extract and normalize labels."""
         try:
             labels = self.safe_get_field(fields, 'labels') or []
-            # Ensure labels is always a list even if it comes as another type
+            
+            # Normalize labels to always be a list
             if labels:
                 if not isinstance(labels, list):
                     try:
@@ -188,26 +286,21 @@ class IssueDataExtractor:
         except Exception as e:
             self.logger.debug(f"Error processing labels: {e}")
             issue_data['labels'] = []
-            
-        # Extract parent issue information using the class-level safe_get_field method
+    
+    def _extract_parent_issue(self, fields, issue_data) -> None:
+        """Extract parent issue information if available."""
         parent = self.safe_get_field(fields, 'parent')
-        # Initialize parent_issue to None by default
         issue_data['parent_issue'] = None
         
         if parent:
-            # Use the safe_get_field method to extract parent fields consistently
             parent_id = self.safe_get_field(parent, 'id')
             parent_key = self.safe_get_field(parent, 'key')
-            
-            # Get the parent fields object
             parent_fields = self.safe_get_field(parent, 'fields')
             
-            # Get summary from parent fields
             parent_summary = None
             if parent_fields:
                 parent_summary = self.safe_get_field(parent_fields, 'summary')
             
-            # Set the parent issue data
             issue_data['parent_issue'] = {
                 'id': parent_id,
                 'key': parent_key,
@@ -217,38 +310,38 @@ class IssueDataExtractor:
             # Log if we have a parent but couldn't get all required information
             if not parent_key and not parent_id:
                 self.logger.debug(f"Parent found but couldn't extract key or ID from: {parent}")
-        
-        # Extract custom fields using field manager - with reduced logging
+    
+    def _extract_custom_fields(self, issue, fields, issue_data) -> None:
+        """Extract custom fields based on issue type."""
         try:
             # Only extract custom fields based on issue type
             issue_type_name = issue_data.get('issue_type', '').lower()
-            
-            # Create a list of relevant fields based on issue type
-            # Only attempt to extract fields relevant to specific issue types
             relevant_fields = []
             
             # Most fields are only relevant for stories or epics
             if issue_type_name in ['story', 'epic']:
                 relevant_fields.extend(['Epic Link', 'Epic Name', 'Story Points', 'Team', 'Sprint', 'Epic Color'])
             
-            # If field IDs are already in cache, proceed with extraction
-            # This avoids unnecessary warnings for fields that aren't in the cache
+            # Get cached fields to avoid unnecessary warnings
             cached_fields = self.field_manager.field_ids.keys()
             
-            # Only extract fields that are either relevant to the issue type or already cached
+            # Extract only cached relevant fields
             for field_name in relevant_fields:
                 field_key = field_name.lower().replace(' ', '_')
                 if field_key in cached_fields:
-                    field_value = self.field_manager.get_field_value(issue if hasattr(issue, 'fields') else None, field_key)
+                    field_value = self.field_manager.get_field_value(
+                        issue if hasattr(issue, 'fields') else None, 
+                        field_key
+                    )
                     if field_value is not None:
                         issue_data[field_key] = field_value
         except Exception as e:
             self.logger.debug(f"Error extracting custom fields: {e}")
-        
-        # Extract time tracking information
+    
+    def _extract_time_tracking(self, fields, issue_data) -> None:
+        """Extract time tracking information."""
         time_tracking = self.safe_get_field(fields, 'timetracking')
         if time_tracking:
-            # Use our safe accessor for all object types
             issue_data['time_tracking'] = {
                 'original_estimate': self.safe_get_field(time_tracking, 'originalEstimate'),
                 'remaining_estimate': self.safe_get_field(time_tracking, 'remainingEstimate'),
@@ -257,17 +350,14 @@ class IssueDataExtractor:
                 'remaining_estimate_seconds': self.safe_get_field(time_tracking, 'remainingEstimateSeconds'),
                 'time_spent_seconds': self.safe_get_field(time_tracking, 'timeSpentSeconds')
             }
-        
-        # Extract working time metrics
+    
+    def _extract_working_time_metrics(self, fields, issue_data) -> None:
+        """Calculate and extract working time metrics."""
+        created = self.safe_get_field(fields, 'created')
         if created:
             working_minutes = calculate_working_minutes_since_date(created)
             if working_minutes is not None:
                 issue_data['working_minutes_since_created'] = working_minutes
-        
-        # Add legacy fields for backward compatibility
-        self._add_legacy_fields(issue_data, issue)
-        
-        return issue_data
     
     def _add_legacy_fields(self, issue_data: Dict[str, Any], issue) -> None:
         """
@@ -349,8 +439,7 @@ class IssueDataExtractor:
                 allocation_value = rodzaj_pracy_value.value
             elif isinstance(rodzaj_pracy_value, str):
                 allocation_value = rodzaj_pracy_value
-        
-        # Extract the code from brackets if the format is "Something [CODE]"
+          # Extract the code from brackets if the format is "Something [CODE]"
         if allocation_value and '[' in allocation_value and ']' in allocation_value:
             try:
                 allocation_code = allocation_value.split('[')[1].split(']')[0]
@@ -358,3 +447,17 @@ class IssueDataExtractor:
                 self.logger.debug(f"Could not extract allocation code from value: {allocation_value}")
         
         return allocation_value, allocation_code
+        
+    def safe_get_field(self, obj, field_name, default=None):
+        """Helper function to safely get a field from an object regardless of its type.
+        Delegates to JiraFieldManager's safe_get_field method to avoid code duplication.
+        
+        Args:
+            obj: The object to extract a field from
+            field_name: The name of the field to extract
+            default: Default value to return if the field doesn't exist
+            
+        Returns:
+            The value of the field or the default value
+        """
+        return self.field_manager.safe_get_field(obj, field_name, default)

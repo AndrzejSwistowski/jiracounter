@@ -320,7 +320,7 @@ class JiraElasticsearchPopulator:
                     failed_count = 0
                     
                     # Use the bulk helper from elasticsearch library
-                    success, errors = bulk(self.es, actions, stats_only=True, raise_on_error=False)
+                    success, errors = bulk(self.es, actions, stats_only=True, raise_on_error=True)
                     
                     success_count = success
                     failed_count = len(actions) - success if success <= len(actions) else 0
@@ -664,8 +664,7 @@ class JiraElasticsearchPopulator:
         
         # Ensure date fields are properly formatted
         for date_field in ['status_change_date', 'created', 'updated']:
-            if date_field in es_record and es_record[date_field]:
-                # Make sure it's properly formatted as ISO8601
+            if date_field in es_record and es_record[date_field]:                # Make sure it's properly formatted as ISO8601
                 try:
                     if not isinstance(es_record[date_field], str):
                         # Convert datetime object to string if needed
@@ -674,10 +673,36 @@ class JiraElasticsearchPopulator:
                     pass  # Keep as is if conversion fails
         
         return es_record
-
+        
     def _execute_bulk(self, actions):
-        # Method implementation
-        pass
+        """Execute a bulk operation with proper error handling.
+        
+        Args:
+            actions: List of actions to perform in bulk
+            
+        Returns:
+            tuple: (success_count, failed_count)
+        """
+        if not actions:
+            return 0, 0
+            
+        try:
+            # Use the bulk helper from elasticsearch library
+            success, errors = bulk(self.es, actions, stats_only=True, raise_on_error=False)
+            
+            # Calculate failed count
+            failed_count = len(actions) - success if success <= len(actions) else 0
+            
+            if failed_count > 0:
+                logger.warning(f"Bulk operation: {success} succeeded, {failed_count} failed")
+            else:
+                logger.debug(f"Bulk operation: {success} succeeded")
+                
+            return success, failed_count
+                
+        except Exception as e:
+            logger.error(f"Error during bulk operation: {e}")
+            return 0, len(actions) if actions else 0
             
 # Example usage
 if __name__ == "__main__":

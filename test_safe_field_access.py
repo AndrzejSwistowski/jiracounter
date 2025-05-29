@@ -3,8 +3,8 @@ from unittest.mock import MagicMock, patch
 import sys
 import os
 sys.path.append(os.path.abspath(os.path.dirname(__file__)))
-from jiracouter.jira_field_manager import JiraFieldManager
-from jiracouter.issue_data_extractor import IssueDataExtractor
+from jira_field_manager import JiraFieldManager
+from issue_data_extractor import IssueDataExtractor
 
 class TestSafeFieldAccess(unittest.TestCase):
     """Tests to verify the refactored code using JiraFieldManager's safe_get_field."""
