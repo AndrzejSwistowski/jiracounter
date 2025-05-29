@@ -114,6 +114,8 @@ class IssueDataExtractor:
                 
                 # Working time metrics
                 'working_minutes_since_created': 4800,  # Working minutes since creation
+                  # Work type information
+                'allocation_code': 'NEW',       # Valid values: NEW, IMPR, PROD, KTLO
                 
                 # Legacy fields (for backward compatibility)
                 'type': 'Story',                # Same as 'issue_type'
@@ -121,7 +123,6 @@ class IssueDataExtractor:
                 'reporter_display_name': 'Jane Smith',
                 'component_names': ['Frontend', 'API'],
                 'minutes_since_creation': 4800,  # Same as 'working_minutes_since_created'
-                'allocation_code': 'DEV',       # Work type code
                 'status_change_date': '2023-01-10T09:00:00+00:00'
             }
             
@@ -133,8 +134,7 @@ class IssueDataExtractor:
         
         # Create result dictionary with base data
         issue_data = self._extract_base_fields(fields, issue_key, issue_id)
-        
-        # Extract each type of data through dedicated methods
+          # Extract each type of data through dedicated methods
         self._extract_type_and_status_fields(fields, issue_data)
         self._extract_date_fields(fields, issue_data)
         self._extract_people_fields(fields, issue_data)
@@ -145,6 +145,11 @@ class IssueDataExtractor:
         self._extract_custom_fields(issue, fields, issue_data)
         self._extract_time_tracking(fields, issue_data)
         self._extract_working_time_metrics(fields, issue_data)
+        
+        # Extract allocation code (not a legacy field)
+        allocation_code = self._extract_allocation_code(issue)
+        if allocation_code:
+            issue_data['allocation_code'] = allocation_code
         
         # Add legacy fields for backward compatibility
         self._add_legacy_fields(issue_data, issue)
@@ -389,19 +394,9 @@ class IssueDataExtractor:
         # Add working minutes field with legacy name
         if 'working_minutes_since_created' in issue_data:
             issue_data['minutes_since_creation'] = issue_data['working_minutes_since_created']
-        
-        # Extract legacy allocation fields using the improved allocation extraction method
+          # Extract status change date if available (legacy field)
         try:
             if hasattr(issue, 'fields'):
-                # Get rodzaj_pracy value using field manager for allocation information
-                rodzaj_pracy_value = self.field_manager.get_field_value(issue, 'rodzaj_pracy')
-                
-                # Use the improved allocation extraction method
-                allocation_value, allocation_code = self._extract_allocation_info(rodzaj_pracy_value)
-                
-                issue_data['allocation_code'] = allocation_code
-                
-                # Extract status change date if available
                 status_change_date = None
                 data_zmiany_statusu_value = self.field_manager.get_field_value(issue, 'data_zmiany_statusu')
                 if data_zmiany_statusu_value:
@@ -448,6 +443,34 @@ class IssueDataExtractor:
         
         return allocation_value, allocation_code
         
+    def _extract_allocation_code(self, issue) -> str:
+        """
+        Extract and validate the allocation code from the issue.
+        
+        Valid allocation codes are: NEW, IMPR, PROD, KTLO
+        
+        Args:
+            issue: The JIRA issue object
+            
+        Returns:
+            str: The extracted and validated allocation code, or None if not found or invalid
+        """
+        if not hasattr(issue, 'fields'):
+            return None
+            
+        # Get rodzaj_pracy value using field manager for allocation information
+        rodzaj_pracy_value = self.field_manager.get_field_value(issue, 'rodzaj_pracy')
+        if rodzaj_pracy_value:
+            # Extract allocation info
+            allocation_value, allocation_code = self._extract_allocation_info(rodzaj_pracy_value)
+
+            valid_codes = ['NEW', 'IMPR', 'PROD', 'KTLO']
+            if allocation_code in valid_codes:
+                return allocation_code
+            else:
+                self.logger.warning(f"Invalid allocation code: {allocation_code}. Must be one of {valid_codes}")
+        return None
+
     def safe_get_field(self, obj, field_name, default=None):
         """Helper function to safely get a field from an object regardless of its type.
         Delegates to JiraFieldManager's safe_get_field method to avoid code duplication.

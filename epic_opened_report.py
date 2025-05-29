@@ -58,10 +58,12 @@ class EpicOpenedReport:
                     epic_info = {
                         "idIssue": issue_key,
                         "summary": issue_details["summary"],
+                        "allocation_code": issue_details.get("allocation_code", None),
                         "status": issue_details["status"],
                         "created": issue_details["created"],
-                        "minutes_since_creation": issue_details["minutes_since_creation"],                        "Reporter": issue_details["reporter"],
-                        "Assignee": issue_details["assignee"],
+                        "minutes_since_creation": issue_details.get("minutes_since_creation", None),
+                        "Reporter": issue_details.get("reporter_display_name", None),
+                        "Assignee": issue_details.get("assignee_display_name", None),
                         "status_change_date": issue_details.get("status_change_date", None),
                         "minutes_in_current_status": calculate_working_minutes_since_date(issue_details.get("status_change_date", None)) if issue_details.get("status_change_date") else None,
                     }
@@ -134,6 +136,6 @@ if __name__ == "__main__":
                 time_ago = format_working_minutes_to_text(epic.get('minutes_since_creation'))
                 time_ago_display = time_ago if time_ago else "N/A"
                 
-                print(f"  {epic['idIssue']}: {epic['summary']} ({status_info}) - Created: {created_date_polish} ({time_ago_display} ago) - Reporter: {epic['Reporter']} - Assignee: {epic['Assignee']}")
+                print(f"  {epic['idIssue']}: {epic['allocation_code']} {epic['summary']}  ({status_info}) - Created: {created_date_polish} ({time_ago_display} ago) - Reporter: {epic['Reporter']} - Assignee: {epic['Assignee']}")
     except Exception as e:
         print(f"Error: {str(e)}")
