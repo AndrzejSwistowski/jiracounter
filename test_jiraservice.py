@@ -162,6 +162,35 @@ def check_api_token():
         return False
     return True
 
+# Runner functions for direct execution from the IDE
+def run_test_projects():
+    """Run only the test_projects function - call this directly from the IDE."""
+    if not check_api_token():
+        sys.exit(1)
+    service = test_connection()
+    test_projects(service)
+
+def run_test_search_issues():
+    """Run only the test_search_issues function - call this directly from the IDE."""
+    if not check_api_token():
+        sys.exit(1)
+    service = test_connection()
+    test_search_issues(service)
+
+def run_test_get_issue():
+    """Run only the test_get_issue function - call this directly from the IDE."""
+    if not check_api_token():
+        sys.exit(1)
+    service = test_connection()
+    test_get_issue(service)
+
+def run_test_get_issue_changelog():
+    """Run only the test_get_issue_changelog function - call this directly from the IDE."""
+    if not check_api_token():
+        sys.exit(1)
+    service = test_connection()
+    test_get_issue_changelog(service)
+
 if __name__ == "__main__":
     print("Jira Service Test Script")
     print("=" * 30)
@@ -172,11 +201,32 @@ if __name__ == "__main__":
     if not check_api_token():
         sys.exit(1)
     
-    # Run tests
+    # Check for specific test execution parameters
+    import argparse
+    parser = argparse.ArgumentParser(description='Run Jira service tests')
+    parser.add_argument('--test', type=str, help='Specific test to run (projects, search, issue, changelog)')
+    args = parser.parse_args()
+    
+    # Always establish connection first
     service = test_connection()
-    test_projects(service)
-    test_search_issues(service)
-    test_get_issue(service)
-    test_get_issue_changelog(service)
+    
+    if args.test == 'projects':
+        # Run only the projects test
+        test_projects(service)
+    elif args.test == 'search':
+        # Run only the search issues test
+        test_search_issues(service)
+    elif args.test == 'issue':
+        # Run only the get issue test
+        test_get_issue(service)
+    elif args.test == 'changelog':
+        # Run only the changelog test
+        test_get_issue_changelog(service)
+    else:
+        # Run all tests
+        test_projects(service)
+        test_search_issues(service)
+        test_get_issue(service)
+        test_get_issue_changelog(service)
     
     print("\nAll tests completed.")

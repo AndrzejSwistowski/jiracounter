@@ -8,14 +8,13 @@ All data is returned in ISO8601 format with timezone information.
 """
 
 import logging
-from typing import Optional, Dict, List, Any
+from typing import Dict, List, Any
 from jira import JIRA
 import config
-from datetime import datetime, timedelta
+from datetime import timedelta
 from time_utils import (
     to_iso8601, parse_date, calculate_working_days_between, now, format_for_jql,
-    find_status_change_date, find_first_status_change_date, calculate_days_since_date,
-    calculate_working_minutes_since_date
+    find_status_change_date,  calculate_days_since_date
 )
 from jira_field_manager import JiraFieldManager
 from issue_data_extractor import IssueDataExtractor

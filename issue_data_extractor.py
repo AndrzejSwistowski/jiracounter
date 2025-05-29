@@ -73,7 +73,7 @@ class IssueDataExtractor:
         issuetype = self.safe_get_field(fields, 'issuetype')
         if issuetype:
             issue_data['issue_type'] = self.safe_get_field(issuetype, 'name')
-        
+	
         # Handle status
         status = self.safe_get_field(fields, 'status')
         if status:
