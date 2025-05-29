@@ -12,8 +12,10 @@ from datetime import datetime, timedelta
 import json
 import warnings
 import requests
+import urllib3
 from elasticsearch import Elasticsearch
 from elasticsearch.helpers import bulk
+from elasticsearch.exceptions import ElasticsearchWarning
 from jiraservice import JiraService
 from utils import APP_TIMEZONE, parse_date_with_timezone
 import config
@@ -25,6 +27,12 @@ from es_utils import create_index
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, "INFO"))
 logger = logging.getLogger(__name__)
+
+# Suppress Elasticsearch warnings about compatibility
+warnings.simplefilter('ignore', ElasticsearchWarning)
+
+# Suppress urllib3 InsecureRequestWarning
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Get Elasticsearch configuration from centralized config
 ES_CONFIG = config.get_elasticsearch_config()
@@ -81,9 +89,11 @@ class JiraElasticsearchPopulator:
                 base_url = self.url
             else:
                 base_url = f'{"https" if self.use_ssl else "http"}://{self.host}:{self.port}'
-                
-            # Prepare headers with API key authentication
-            headers = {"Content-Type": "application/json"}
+                  # Prepare headers with API key authentication
+            headers = {
+                "Content-Type": "application/json",
+                "Accept": "application/json"  # Explicitly use standard JSON instead of versioned content type
+            }
             if self.api_key:
                 headers["Authorization"] = f"ApiKey {self.api_key}"
                 logger.info("Using API key authentication")
@@ -99,11 +109,14 @@ class JiraElasticsearchPopulator:
             
             # Now, create the Elasticsearch client instance with the same connection params
             connect_args = {'hosts': [base_url]}
-            
-            # Add API key authentication if provided - using headers like in requests
+              # Add API key authentication if provided - using headers like in requests
             if self.api_key:
                 connect_args['headers'] = headers
             
+            # Set compatibility mode to 8 for the Elasticsearch client
+            connect_args['meta_header'] = False  # Disable the meta-header sending client version
+            
+            # Create client with version compatibility settings
             self.es = Elasticsearch(**connect_args)
             
             # We won't check with ping() since we already verified the connection works

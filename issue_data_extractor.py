@@ -171,9 +171,23 @@ class IssueDataExtractor:
                     continue
         
         # Extract labels
-        labels = self.safe_get_field(fields, 'labels') or []
-        if labels:
-            issue_data['labels'] = labels
+        try:
+            labels = self.safe_get_field(fields, 'labels') or []
+            # Ensure labels is always a list even if it comes as another type
+            if labels:
+                if not isinstance(labels, list):
+                    try:
+                        issue_data['labels'] = list(labels) if hasattr(labels, '__iter__') else [str(labels)]
+                    except Exception as e:
+                        self.logger.debug(f"Error converting labels to list: {e}")
+                        issue_data['labels'] = [str(labels)]
+                else:
+                    issue_data['labels'] = labels
+            else:
+                issue_data['labels'] = []
+        except Exception as e:
+            self.logger.debug(f"Error processing labels: {e}")
+            issue_data['labels'] = []
             
         # Extract parent issue information using the class-level safe_get_field method
         parent = self.safe_get_field(fields, 'parent')
