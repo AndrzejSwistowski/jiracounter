@@ -478,15 +478,14 @@ class IssueHistoryExtractor:
                 'backflow_count': 0,
                 'unique_statuses_visited': ['Open']
             }
-        
-        # Find initial status from first change
+          # Find initial status from first change
         initial_status = 'Open'  # Default
         for history in status_change_history:
             for change in history['changes']:
                 if change['field'] == 'status':
                     initial_status = change['from']
                     break
-            if initial_status != 'Open':
+            if initial_status:  # Break when we find any initial status
                 break
         
         current_status = initial_status
