@@ -254,7 +254,7 @@ class IssueHistoryExtractor:
             'issueId': issue.id,
             'issueKey': issue_key,
             'typeName': issue_data['type'],
-            'statusName': 'Open',  # Assume issues start as Open
+            'statusName': 'Backlog',  # Assume issues start as Backlog
             'assigneeUserName': issue_data['assignee'],
             'assigneeDisplayName': issue_data['assignee'],
             'reporterUserName': issue_data['reporter'],
@@ -281,7 +281,7 @@ class IssueHistoryExtractor:
             'previous_status': None,        # Just created, so no previous status
             'total_transitions': 0,         # Just created, so no transitions yet
             'backflow_count': 0,           # Just created, so no backflows yet
-            'unique_statuses_visited': ['Open'],  # Just created, only initial status
+            'unique_statuses_visited': ['Backlog'],  # Just created, only initial status
             'status_transitions': [],       # Just created, no transitions yet
             'todo_exit_date': None,
             "status_change_date": to_iso8601(issue_data['status_change_date']) if issue_data['status_change_date'] else None,
@@ -356,7 +356,7 @@ class IssueHistoryExtractor:
         # If there are no status changes, we need to determine the initial status
         # and calculate time based on that
         if not status_change_history:
-            # Default initial status is usually 'Open' or similar - categorize as waiting
+            # Default initial status is usually 'Backlog' or similar - categorize as backlog
             total_minutes = calculate_working_minutes_between(creation_date, update_date)
             waiting_minutes = total_minutes
             return {
@@ -374,10 +374,9 @@ class IssueHistoryExtractor:
                     break
             if initial_status:
                 break
-        
-        # If we couldn't find initial status, assume 'Open'
+          # If we couldn't find initial status, assume 'Backlog'
         if not initial_status:
-            initial_status = 'Open'
+            initial_status = 'Backlog'
         
         current_status = initial_status
         
@@ -456,30 +455,46 @@ class IssueHistoryExtractor:
         transitions = []
         unique_statuses = set()
         backflow_count = 0
-        
-        # Define typical workflow order for backflow detection
+          # Define typical workflow order for backflow detection
         workflow_order = {
-            'Open': 1, 'Backlog': 2, 'Selected': 3, 'In progress': 4, 
-            'In review': 5, 'testing': 6, 'Done': 7, 'Completed': 8, 'Closed': 9
+            'Backlog': 1,
+            'Draft': 2,
+            'Open': 3,
+            'Hold': 4,
+            'Planned': 5,
+            'SELECTED FOR DEVELOPMENT': 6,
+            'Do poprawy': 7,
+            'In progress': 8,
+            'Ready for review': 9,
+            'In review': 10,
+            'READY FOR TESTING': 11,
+            'TESTY WEWNĘTRZNE': 12,
+            'Testing': 13,
+            'Do akceptacji klienta': 14,
+            'Awaiting production release': 15,
+            'CUSTOMER NOTIFICATION': 16,
+            'Closed': 17,
+            'Canceled': 18,
+            'Completed': 19,
+            'Done': 20
         }
         
         # Track current status and timing
         current_status = None
         previous_status = None
         status_start_date = creation_date
-        
-        # If no status changes, return minimal data
+          # If no status changes, return minimal data
         if not status_change_history:
             return {
                 'status_transitions': [],
-                'current_status': 'Open',  # Default initial status
+                'current_status': 'Backlog',  # Default initial status
                 'previous_status': None,
                 'total_transitions': 0,
                 'backflow_count': 0,
-                'unique_statuses_visited': ['Open']
+                'unique_statuses_visited': ['Backlog']
             }
           # Find initial status from first change
-        initial_status = 'Open'  # Default
+        initial_status = 'Backlog'  # Default
         for history in status_change_history:
             for change in history['changes']:
                 if change['field'] == 'status':
@@ -587,9 +602,8 @@ class IssueHistoryExtractor:
         """Find the date when the issue first changed status from its initial status."""
         todo_exit_date = None
         initial_status_found = False
-        
-        # First, determine what the initial status was
-        initial_status = 'Open'  # Default assumption
+          # First, determine what the initial status was
+        initial_status = 'Backlog'  # Default assumption
         
         # If we have any status changes, check the first one to find the actual initial status
         for history_item in status_change_history:

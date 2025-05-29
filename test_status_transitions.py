@@ -134,11 +134,11 @@ def test_no_status_changes():
     print(f"  Unique statuses visited: {result['unique_statuses_visited']}")
     
     # Verify expectations
-    assert result['current_status'] == 'Open', "Expected default status 'Open'"
+    assert result['current_status'] == 'Backlog', "Expected default status 'Backlog'"
     assert result['previous_status'] is None, "Expected no previous status"
     assert result['total_transitions'] == 0, "Expected 0 transitions"
     assert result['backflow_count'] == 0, "Expected 0 backflows"
-    assert result['unique_statuses_visited'] == ['Open'], "Expected only 'Open' status"
+    assert result['unique_statuses_visited'] == ['Backlog'], "Expected only 'Backlog' status"
     
     print(f"✅ Test passed! No status changes handled correctly.")
     return True
