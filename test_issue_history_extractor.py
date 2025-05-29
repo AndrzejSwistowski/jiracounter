@@ -126,16 +126,18 @@ class TestIssueHistoryExtractor(unittest.TestCase):
         )
         
         # Verify the creation record structure
-        self.assertEqual(result['factType'], 1)  # 1 = create
-        self.assertEqual(result['issueKey'], "TEST-123")
+        self.assertEqual(result['factType'], 1)  # 1 = create        self.assertEqual(result['issueKey'], "TEST-123")
         self.assertEqual(result['typeName'], 'Story')
         self.assertEqual(result['statusName'], 'Open')
         self.assertEqual(result['allocationCode'], 'NEW')
         self.assertEqual(result['projectKey'], 'TEST')
         self.assertEqual(result['projectName'], 'Test Project')
         self.assertEqual(result['summary'], 'Test Issue')
-        self.assertEqual(result['workingDaysFromCreation'], 0)
-        self.assertEqual(result['workingDaysInStatus'], 0)
+        self.assertEqual(result['working_minutes_from_create'], 0)
+        self.assertEqual(result['working_minutes_in_status'], 0)
+        self.assertEqual(result['backlog_minutes'], 0)
+        self.assertEqual(result['processing_minutes'], 0)
+        self.assertEqual(result['waiting_minutes'], 0)
         self.assertEqual(result['description_text'], description_text)
         self.assertEqual(result['comment_text'], comment_text)
         

@@ -89,9 +89,9 @@ class ElasticsearchDocumentFormatter:
         # Add reporter with proper structure according to mapping
         if history_record.get('reporterDisplayName'):
             doc["reporter"] = {
-                "displayName": history_record['reporterDisplayName']
-            }
-          # Add time-based fields
+                "displayName": history_record['reporterDisplayName']            }
+        
+        # Add time-based fields
         if history_record.get('workingDaysFromCreation') is not None:
             # Convert working days to working minutes (480 minutes per working day)
             working_days = float(history_record['workingDaysFromCreation'])
@@ -100,14 +100,23 @@ class ElasticsearchDocumentFormatter:
         if history_record.get('todo_exit_date') is not None:
             doc["todo_exit_date"] = history_record['todo_exit_date']
             
-        if history_record.get('workingDaysInStatus') is not None:
-            doc["days_in_status"] = float(history_record['workingDaysInStatus'])
-            
-        # Add working_days_from_move_at_point field based on available data
-        if history_record.get('working_days_from_move_at_point') is not None:
-            doc["working_days_from_move_at_point"] = float(history_record['working_days_from_move_at_point'])
+        if history_record.get('working_minutes_in_status') is not None:
+            doc["days_in_status"] = float(history_record['working_minutes_in_status']) / (60 * 8)  # Convert minutes to days
+              # Add working_minutes_from_move_at_point field based on available data
+        if history_record.get('working_minutes_from_move_at_point') is not None:
+            doc["working_days_from_move_at_point"] = float(history_record['working_minutes_from_move_at_point']) / (60 * 8)  # Convert minutes to days
         elif history_record.get('workingDaysFromToDo') is not None:
             doc["working_days_from_move_at_point"] = float(history_record['workingDaysFromToDo'])
+        
+        # Add categorized time metrics (convert minutes to days for consistency)
+        if history_record.get('backlog_minutes') is not None:
+            doc["backlog_days"] = float(history_record['backlog_minutes']) / (60 * 8)  # Convert minutes to days
+        
+        if history_record.get('processing_minutes') is not None:
+            doc["processing_days"] = float(history_record['processing_minutes']) / (60 * 8)  # Convert minutes to days
+        
+        if history_record.get('waiting_minutes') is not None:
+            doc["waiting_days"] = float(history_record['waiting_minutes']) / (60 * 8)  # Convert minutes to days
         
         # Add assignee with proper structure according to mapping
         if history_record.get('assigneeDisplayName'):

@@ -9,7 +9,8 @@ import logging
 from typing import Dict, Any, Optional, List
 from time_utils import (
     to_iso8601, parse_date, calculate_working_days_between, now,
-    find_status_change_date
+    find_status_change_date, calculate_working_minutes_since_date,
+    calculate_working_minutes_between
 )
 from jira_field_manager import JiraFieldManager
 
@@ -110,12 +111,16 @@ class IssueHistoryExtractor:
                         }
                     ],
                     'description_text': 'Issue description...',  # Full description text
-                    'comment_text': '[2023-01-02T10:00:00+00:00 by John Doe] Comment text...',  # All comments
+                    'comment_text': '[2023-01-02T10:00:00+00:00 by John Doe] Comment text...',  # All comments                    # Time metrics (calculated at this history point)
+                    'working_minutes_from_create': 7200, # Working minutes from creation to this history point
+                    'working_minutes_in_status': 2880,   # Working minutes in current status at this point
+                    'working_minutes_from_move_at_point': 4320, # Working minutes from first status change
                     
-                    # Time metrics (calculated at this history point)
-                    'workingDaysFromCreation': 5,        # Working days from creation to this history point
-                    'workingDaysInStatus': 2,            # Working days in current status at this point
-                    'working_days_from_move_at_point': 3, # Working days from first status change
+                    # Categorized time metrics (working minutes spent in status categories)
+                    'backlog_minutes': 1440,            # Working minutes spent in 'Backlog' status
+                    'processing_minutes': 5760,         # Working minutes spent in processing statuses ('In progress', 'In review', 'testing')
+                    'waiting_minutes': 2880,            # Working minutes spent in waiting statuses (all others except completed/backlog)
+                    
                     'todo_exit_date': '2023-01-03T09:00:00+00:00',  # Date of first status change
                     
                     # Date fields (ISO 8601 format)
@@ -248,13 +253,14 @@ class IssueHistoryExtractor:
             'changes': creation_changes,  # Include description as a change if it exists
             'summary': issue_data['summary'],
             'labels': issue_data['labels'],
-            'components': issue_data['components'],
-            'parent_issue': issue_data.get('parent_issue'),
+            'components': issue_data['components'],            'parent_issue': issue_data.get('parent_issue'),
             'parent_summary': issue_data.get('parent_issue', {}).get('summary') if issue_data.get('parent_issue') else None,
-            'epic_issue': issue_data.get('epic_issue'),
-            'workingDaysFromCreation': 0,  # Just created, so 0 days
-            'workingDaysInStatus': 0,      # Just created, so 0 days in status
-            'working_days_from_move_at_point': None,    # No status change yet
+            'epic_issue': issue_data.get('epic_issue'),            'working_minutes_from_create': 0,  # Just created, so 0 minutes
+            'working_minutes_in_status': 0,       # Just created, so 0 minutes in status
+            'working_minutes_from_move_at_point': None,    # No status change yet
+            'backlog_minutes': 0,           # Just created, so 0 minutes in backlog
+            'processing_minutes': 0,        # Just created, so 0 minutes in processing
+            'waiting_minutes': 0,           # Just created, so 0 minutes waiting
             'todo_exit_date': None,
             "status_change_date": to_iso8601(issue_data['status_change_date']) if issue_data['status_change_date'] else None,
             "created": to_iso8601(issue_data['created']) if issue_data['created'] else None,
@@ -280,20 +286,122 @@ class IssueHistoryExtractor:
                         'to': item.toString
                     })
                 status_change_history.append({
-                    'historyDate': history_date,
-                    'changes': changes
+                    'historyDate': history_date,                    'changes': changes
                 })
         
         # Sort status change history chronologically (oldest first)
         status_change_history.sort(key=lambda x: x['historyDate'])
         return status_change_history
     
+    def _calculate_categorized_time_metrics(self, status_change_history: List[Dict[str, Any]], 
+                                           creation_date: Any, update_date: Any) -> Dict[str, Any]:
+        """
+        Calculate time spent in different status categories.
+        
+        Categories:
+        - Backlog: Time in 'Backlog' status
+        - Processing: Time in 'In progress', 'In review', 'testing' statuses
+        - Waiting: Time in all other statuses (except 'Completed' and 'Backlog')
+        
+        Args:
+            status_change_history: List of status changes chronologically sorted
+            creation_date: Issue creation date
+            update_date: Issue last update date
+            
+        Returns:
+            Dictionary with working minutes for each category:
+            {
+                'backlog_minutes': int,
+                'processing_minutes': int, 
+                'waiting_minutes': int
+            }
+        """
+        # Define status categories
+        processing_statuses = {'In progress', 'In review', 'testing'}
+        backlog_statuses = {'Backlog'}
+        completed_statuses = {'Completed', 'Done', 'Closed', 'Resolved'}
+        
+        # Initialize counters
+        backlog_minutes = 0
+        processing_minutes = 0
+        waiting_minutes = 0
+        
+        # Track current status and when it started
+        current_status = None
+        status_start_date = creation_date
+        
+        # If there are no status changes, we need to determine the initial status
+        # and calculate time based on that
+        if not status_change_history:
+            # Default initial status is usually 'Open' or similar - categorize as waiting
+            total_minutes = calculate_working_minutes_between(creation_date, update_date)
+            waiting_minutes = total_minutes
+            return {
+                'backlog_minutes': backlog_minutes,
+                'processing_minutes': processing_minutes,
+                'waiting_minutes': waiting_minutes
+            }
+        
+        # Find the initial status from the first status change
+        initial_status = None
+        for history in status_change_history:
+            for change in history['changes']:
+                if change['field'] == 'status':
+                    initial_status = change['from']
+                    break
+            if initial_status:
+                break
+        
+        # If we couldn't find initial status, assume 'Open'
+        if not initial_status:
+            initial_status = 'Open'
+        
+        current_status = initial_status
+        
+        # Process each status change
+        for history in status_change_history:
+            for change in history['changes']:
+                if change['field'] == 'status':
+                    # Calculate time spent in previous status
+                    time_in_status = calculate_working_minutes_between(status_start_date, history['historyDate'])
+                      # Categorize the time based on the status we're leaving
+                    if current_status in backlog_statuses:
+                        backlog_minutes += time_in_status
+                    elif current_status in processing_statuses:
+                        processing_minutes += time_in_status
+                    elif current_status not in completed_statuses:
+                        # Not in backlog, processing, or completed = waiting
+                        waiting_minutes += time_in_status
+                    # If in completed status, we don't count the time
+                    
+                    # Update for next iteration
+                    current_status = change['to']
+                    status_start_date = history['historyDate']
+                    break
+        
+        # Calculate time spent in final status (from last change to update date)
+        if current_status not in completed_statuses:
+            time_in_final_status = calculate_working_minutes_between(status_start_date, update_date)
+            
+            if current_status in backlog_statuses:
+                backlog_minutes += time_in_final_status
+            elif current_status in processing_statuses:
+                processing_minutes += time_in_final_status
+            else:
+                waiting_minutes += time_in_final_status
+        
+        return {
+            'backlog_minutes': backlog_minutes,
+            'processing_minutes': processing_minutes,
+            'waiting_minutes': waiting_minutes
+        }
+
     def _calculate_status_metrics(self, issue_data: Dict[str, Any], 
                                 status_change_history: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Calculate status-related metrics for the issue."""
         status_name = issue_data['status']
         status_change_date = None
-        working_days_in_status = None
+        working_minutes_in_status = None
         
         # Find the most recent status change to the current status
         for history in status_change_history:
@@ -304,14 +412,21 @@ class IssueHistoryExtractor:
             if status_change_date:
                 break
         
-        # If we found a status change date, calculate working days in status
+        # If we found a status change date, calculate working minutes in status
         if status_change_date:
-            working_days_in_status = calculate_working_days_between(status_change_date, now())
+            working_minutes_in_status = calculate_working_minutes_between(status_change_date, now())
+          # Calculate categorized time metrics
+        creation_date = issue_data.get('created')
+        update_date = issue_data.get('updated')
+        categorized_metrics = self._calculate_categorized_time_metrics(status_change_history, creation_date, update_date)
         
         return {
             'status_name': status_name,
             'status_change_date': status_change_date,
-            'working_days_in_status': working_days_in_status
+            'working_minutes_in_status': working_minutes_in_status,
+            'backlog_minutes': categorized_metrics['backlog_minutes'],
+            'processing_minutes': categorized_metrics['processing_minutes'],
+            'waiting_minutes': categorized_metrics['waiting_minutes']
         }
     
     def _find_todo_exit_date(self, status_change_history: List[Dict[str, Any]]) -> Optional[Any]:
@@ -370,16 +485,13 @@ class IssueHistoryExtractor:
             })
             
             if item.field == 'status':
-                fact_type = 2  # 2 = transition
-        
-        # Calculate time-based metrics as of this history point
-        working_days_from_creation_at_point = calculate_working_days_between(
-            issue_data['created'], history_date
+                fact_type = 2  # 2 = transition        # Calculate time-based metrics as of this history point
+        working_minutes_from_creation_at_point = calculate_working_minutes_between(
+            parse_date(issue_data['created']), history_date
         )
-        
-        # For each history point, determine how long it had been in the current status
+          # For each history point, determine how long it had been in the current status
         status_in_this_history = status_metrics['status_name']  # Default to current status
-        working_days_in_status_at_point = status_metrics['working_days_in_status']
+        working_minutes_in_status_at_point = status_metrics['working_minutes_in_status']
         
         # Check if this history changes the status
         for change in changes:
@@ -389,16 +501,15 @@ class IssueHistoryExtractor:
                     status_change_history, change['from'], None
                 )
                 if previous_status_change:
-                    working_days_in_status_at_point = calculate_working_days_between(
+                    working_minutes_in_status_at_point = calculate_working_minutes_between(
                         previous_status_change, history_date
                     )
                 status_in_this_history = change['to']
                 break
-        
-        # Calculate working days from first status change at this history point
-        working_days_from_move_at_point = None
+          # Calculate working minutes from first status change at this history point
+        working_minutes_from_move_at_point = None
         if todo_exit_date and history_date >= todo_exit_date:
-            working_days_from_move_at_point = calculate_working_days_between(
+            working_minutes_from_move_at_point = calculate_working_minutes_between(
                 todo_exit_date, history_date
             )
         
@@ -424,12 +535,13 @@ class IssueHistoryExtractor:
             'summary': issue_data['summary'],
             'labels': issue_data['labels'],
             'components': issue_data['components'],
-            'parent_issue': issue_data.get('parent_issue'),
-            'parent_summary': issue_data.get('parent_issue', {}).get('summary') if issue_data.get('parent_issue') else None,
-            'epic_issue': issue_data.get('epic_issue'),
-            'workingDaysFromCreation': working_days_from_creation_at_point,
-            'workingDaysInStatus': working_days_in_status_at_point,
-            'working_days_from_move_at_point': working_days_from_move_at_point,
+            'parent_issue': issue_data.get('parent_issue'),            'parent_summary': issue_data.get('parent_issue', {}).get('summary') if issue_data.get('parent_issue') else None,
+            'epic_issue': issue_data.get('epic_issue'),            'working_minutes_from_create': working_minutes_from_creation_at_point,
+            'working_minutes_in_status': working_minutes_in_status_at_point,
+            'working_minutes_from_move_at_point': working_minutes_from_move_at_point,
+            'backlog_minutes': status_metrics['backlog_minutes'],
+            'processing_minutes': status_metrics['processing_minutes'],
+            'waiting_minutes': status_metrics['waiting_minutes'],
             'todo_exit_date': to_iso8601(todo_exit_date) if todo_exit_date else None,
             "status_change_date": to_iso8601(issue_data['status_change_date']) if issue_data['status_change_date'] else None,
             "created": to_iso8601(issue_data['created']) if issue_data['created'] else None,
