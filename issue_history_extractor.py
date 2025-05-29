@@ -115,11 +115,26 @@ class IssueHistoryExtractor:
                     'working_minutes_from_create': 7200, # Working minutes from creation to this history point
                     'working_minutes_in_status': 2880,   # Working minutes in current status at this point
                     'working_minutes_from_move_at_point': 4320, # Working minutes from first status change
-                    
-                    # Categorized time metrics (working minutes spent in status categories)
+                      # Categorized time metrics (working minutes spent in status categories)
                     'backlog_minutes': 1440,            # Working minutes spent in 'Backlog' status
                     'processing_minutes': 5760,         # Working minutes spent in processing statuses ('In progress', 'In review', 'testing')
                     'waiting_minutes': 2880,            # Working minutes spent in waiting statuses (all others except completed/backlog)
+                    
+                    # Status transition metrics (for workflow analysis)
+                    'previous_status': 'In progress',   # Previous status before current one
+                    'total_transitions': 3,             # Total number of status transitions
+                    'backflow_count': 1,                # Number of backwards status transitions
+                    'unique_statuses_visited': ['Open', 'In progress', 'In review'],  # All statuses this issue has been in
+                    'status_transitions': [             # Detailed transition history
+                        {
+                            'from_status': 'Open',
+                            'to_status': 'In progress', 
+                            'transition_date': '2024-01-02T10:00:00+00:00',
+                            'minutes_in_previous_status': 1440,
+                            'is_forward_transition': True,
+                            'is_backflow': False
+                        }
+                    ],
                     
                     'todo_exit_date': '2023-01-03T09:00:00+00:00',  # Date of first status change
                     
@@ -253,14 +268,21 @@ class IssueHistoryExtractor:
             'changes': creation_changes,  # Include description as a change if it exists
             'summary': issue_data['summary'],
             'labels': issue_data['labels'],
-            'components': issue_data['components'],            'parent_issue': issue_data.get('parent_issue'),
+            'components': issue_data['components'],            
+            'parent_issue': issue_data.get('parent_issue'),
             'parent_summary': issue_data.get('parent_issue', {}).get('summary') if issue_data.get('parent_issue') else None,
-            'epic_issue': issue_data.get('epic_issue'),            'working_minutes_from_create': 0,  # Just created, so 0 minutes
+            'epic_issue': issue_data.get('epic_issue'),            
+            'working_minutes_from_create': 0,  # Just created, so 0 minutes
             'working_minutes_in_status': 0,       # Just created, so 0 minutes in status
-            'working_minutes_from_move_at_point': None,    # No status change yet
+            'working_minutes_from_move_at_point': None,    # No status change yet            
             'backlog_minutes': 0,           # Just created, so 0 minutes in backlog
             'processing_minutes': 0,        # Just created, so 0 minutes in processing
             'waiting_minutes': 0,           # Just created, so 0 minutes waiting
+            'previous_status': None,        # Just created, so no previous status
+            'total_transitions': 0,         # Just created, so no transitions yet
+            'backflow_count': 0,           # Just created, so no backflows yet
+            'unique_statuses_visited': ['Open'],  # Just created, only initial status
+            'status_transitions': [],       # Just created, no transitions yet
             'todo_exit_date': None,
             "status_change_date": to_iso8601(issue_data['status_change_date']) if issue_data['status_change_date'] else None,
             "created": to_iso8601(issue_data['created']) if issue_data['created'] else None,
@@ -286,7 +308,8 @@ class IssueHistoryExtractor:
                         'to': item.toString
                     })
                 status_change_history.append({
-                    'historyDate': history_date,                    'changes': changes
+                    'historyDate': history_date,                    
+                    'changes': changes
                 })
         
         # Sort status change history chronologically (oldest first)
@@ -396,6 +419,131 @@ class IssueHistoryExtractor:
             'waiting_minutes': waiting_minutes
         }
 
+    def _calculate_status_transition_metrics(self, status_change_history: List[Dict[str, Any]], 
+                                           creation_date: Any, update_date: Any) -> Dict[str, Any]:
+        """
+        Calculate detailed status transition metrics for advanced reporting.
+        
+        This method tracks each status transition with timing information,
+        enabling analysis of workflow patterns, bottlenecks, and backflows.
+        
+        Args:
+            status_change_history: List of status changes chronologically sorted
+            creation_date: Issue creation date
+            update_date: Issue last update date
+            
+        Returns:
+            Dictionary with transition metrics:
+            {
+                'status_transitions': [
+                    {
+                        'from_status': 'Open',
+                        'to_status': 'In progress', 
+                        'transition_date': '2024-01-02T10:00:00+00:00',
+                        'minutes_in_previous_status': 1440,
+                        'is_forward_transition': True,
+                        'is_backflow': False
+                    }
+                ],
+                'current_status': 'In review',
+                'previous_status': 'In progress',
+                'total_transitions': 3,
+                'backflow_count': 0,
+                'unique_statuses_visited': ['Open', 'In progress', 'In review']
+            }
+        """
+        # Initialize result structure
+        transitions = []
+        unique_statuses = set()
+        backflow_count = 0
+        
+        # Define typical workflow order for backflow detection
+        workflow_order = {
+            'Open': 1, 'Backlog': 2, 'Selected': 3, 'In progress': 4, 
+            'In review': 5, 'testing': 6, 'Done': 7, 'Completed': 8, 'Closed': 9
+        }
+        
+        # Track current status and timing
+        current_status = None
+        previous_status = None
+        status_start_date = creation_date
+        
+        # If no status changes, return minimal data
+        if not status_change_history:
+            return {
+                'status_transitions': [],
+                'current_status': 'Open',  # Default initial status
+                'previous_status': None,
+                'total_transitions': 0,
+                'backflow_count': 0,
+                'unique_statuses_visited': ['Open']
+            }
+        
+        # Find initial status from first change
+        initial_status = 'Open'  # Default
+        for history in status_change_history:
+            for change in history['changes']:
+                if change['field'] == 'status':
+                    initial_status = change['from']
+                    break
+            if initial_status != 'Open':
+                break
+        
+        current_status = initial_status
+        unique_statuses.add(initial_status)
+        
+        # Process each status change
+        for history in status_change_history:
+            for change in history['changes']:
+                if change['field'] == 'status':
+                    # Calculate time spent in previous status
+                    minutes_in_previous = calculate_working_minutes_between(
+                        status_start_date, history['historyDate']
+                    )
+                    
+                    # Determine if this is a backflow (moving to "earlier" status)
+                    from_order = workflow_order.get(current_status, 0)
+                    to_order = workflow_order.get(change['to'], 0)
+                    is_backflow = from_order > to_order and from_order > 0 and to_order > 0
+                    is_forward = from_order < to_order and from_order > 0 and to_order > 0
+                    
+                    if is_backflow:
+                        backflow_count += 1
+                    
+                    # Record transition
+                    transition = {
+                        'from_status': current_status,
+                        'to_status': change['to'],
+                        'transition_date': to_iso8601(history['historyDate']),
+                        'minutes_in_previous_status': minutes_in_previous,
+                        'is_forward_transition': is_forward,
+                        'is_backflow': is_backflow
+                    }
+                    transitions.append(transition)
+                    
+                    # Update tracking variables
+                    previous_status = current_status
+                    current_status = change['to']
+                    unique_statuses.add(current_status)
+                    status_start_date = history['historyDate']
+                    break
+        
+        # Calculate time in current status (if not completed)
+        completed_statuses = {'Completed', 'Done', 'Closed', 'Resolved'}
+        current_status_minutes = 0
+        if current_status not in completed_statuses:
+            current_status_minutes = calculate_working_minutes_between(status_start_date, update_date)
+        
+        return {
+            'status_transitions': transitions,
+            'current_status': current_status,
+            'previous_status': previous_status,
+            'total_transitions': len(transitions),
+            'backflow_count': backflow_count,
+            'unique_statuses_visited': list(unique_statuses),
+            'current_status_minutes': current_status_minutes
+        }
+
     def _calculate_status_metrics(self, issue_data: Dict[str, Any], 
                                 status_change_history: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Calculate status-related metrics for the issue."""
@@ -414,11 +562,13 @@ class IssueHistoryExtractor:
         
         # If we found a status change date, calculate working minutes in status
         if status_change_date:
-            working_minutes_in_status = calculate_working_minutes_between(status_change_date, now())
-          # Calculate categorized time metrics
+            working_minutes_in_status = calculate_working_minutes_between(status_change_date, now())        # Calculate categorized time metrics
         creation_date = issue_data.get('created')
         update_date = issue_data.get('updated')
         categorized_metrics = self._calculate_categorized_time_metrics(status_change_history, creation_date, update_date)
+        
+        # Calculate status transition metrics
+        transition_metrics = self._calculate_status_transition_metrics(status_change_history, creation_date, update_date)
         
         return {
             'status_name': status_name,
@@ -426,7 +576,12 @@ class IssueHistoryExtractor:
             'working_minutes_in_status': working_minutes_in_status,
             'backlog_minutes': categorized_metrics['backlog_minutes'],
             'processing_minutes': categorized_metrics['processing_minutes'],
-            'waiting_minutes': categorized_metrics['waiting_minutes']
+            'waiting_minutes': categorized_metrics['waiting_minutes'],
+            'previous_status': transition_metrics['previous_status'],
+            'total_transitions': transition_metrics['total_transitions'],
+            'backflow_count': transition_metrics['backflow_count'],
+            'unique_statuses_visited': transition_metrics['unique_statuses_visited'],
+            'status_transitions': transition_metrics['status_transitions']
         }
     
     def _find_todo_exit_date(self, status_change_history: List[Dict[str, Any]]) -> Optional[Any]:
@@ -535,13 +690,19 @@ class IssueHistoryExtractor:
             'summary': issue_data['summary'],
             'labels': issue_data['labels'],
             'components': issue_data['components'],
-            'parent_issue': issue_data.get('parent_issue'),            'parent_summary': issue_data.get('parent_issue', {}).get('summary') if issue_data.get('parent_issue') else None,
-            'epic_issue': issue_data.get('epic_issue'),            'working_minutes_from_create': working_minutes_from_creation_at_point,
+            'parent_issue': issue_data.get('parent_issue'),            
+            'parent_summary': issue_data.get('parent_issue', {}).get('summary') if issue_data.get('parent_issue') else None,
+            'epic_issue': issue_data.get('epic_issue'),            
+            'working_minutes_from_create': working_minutes_from_creation_at_point,
             'working_minutes_in_status': working_minutes_in_status_at_point,
-            'working_minutes_from_move_at_point': working_minutes_from_move_at_point,
-            'backlog_minutes': status_metrics['backlog_minutes'],
+            'working_minutes_from_move_at_point': working_minutes_from_move_at_point,            'backlog_minutes': status_metrics['backlog_minutes'],
             'processing_minutes': status_metrics['processing_minutes'],
             'waiting_minutes': status_metrics['waiting_minutes'],
+            'previous_status': status_metrics['previous_status'],
+            'total_transitions': status_metrics['total_transitions'],
+            'backflow_count': status_metrics['backflow_count'],
+            'unique_statuses_visited': status_metrics['unique_statuses_visited'],
+            'status_transitions': status_metrics['status_transitions'],
             'todo_exit_date': to_iso8601(todo_exit_date) if todo_exit_date else None,
             "status_change_date": to_iso8601(issue_data['status_change_date']) if issue_data['status_change_date'] else None,
             "created": to_iso8601(issue_data['created']) if issue_data['created'] else None,
