@@ -52,24 +52,17 @@ class ElasticsearchDocumentFormatter:
             },
             "project": {
                 "key": history_record['projectKey'],
-            },
-            "author": {
-                "displayName": history_record.get('authorDisplayName')
-            }
+            }    
         }
         
         # Add allocation field (as keyword according to mapping)
         if history_record.get('allocationCode'):
             doc["allocation"] = history_record['allocationCode']
-        
-        # Add summary field with text analysis according to mapping
-        if history_record.get('summary'):
-            doc["summary"] = history_record['summary']
-            
+
         # Add labels as keyword array according to mapping
         if history_record.get('labels'):
             doc["labels"] = history_record['labels']
-            
+        
         # Add components as keyword array according to mapping
         if history_record.get('components'):
             component_names = ElasticsearchDocumentFormatter._extract_component_names(
@@ -79,6 +72,12 @@ class ElasticsearchDocumentFormatter:
             if component_names:
                 doc["components"] = component_names
                 logger.debug(f"Added {len(component_names)} components: {component_names}")
+
+        # Add summary field with text analysis according to mapping
+        if history_record.get('summary'):
+            doc["summary"] = history_record['summary']
+            
+            
             
         # Add parent_issue with proper structure according to mapping
         if history_record.get('parent_issue'):
@@ -99,16 +98,10 @@ class ElasticsearchDocumentFormatter:
             doc["reporter"] = {
                 "displayName": history_record['reporterDisplayName']            }
         
-        # Add time-based fields with proper conversion
-        if history_record.get('workingDaysFromCreation') is not None:
-            # Convert working days to working minutes (480 minutes per working day)
-            working_days = float(history_record['workingDaysFromCreation'])
-            doc["minutes_since_creation"] = working_days * 480
-        elif history_record.get('working_minutes_from_create') is not None:
-            doc["minutes_since_creation"] = history_record['working_minutes_from_create']
+
             
         if history_record.get('todo_exit_date') is not None:
-            doc["todo_exit_date"] = history_record['todo_exit_date']
+            doc["selected_for_development_at"] = history_record['todo_exit_date']
             
         if history_record.get('working_minutes_in_status') is not None:
             doc["days_in_status"] = float(history_record['working_minutes_in_status']) / (60 * 8)  # Convert minutes to days
@@ -167,6 +160,8 @@ class ElasticsearchDocumentFormatter:
         if history_record.get('comment_text'):
             doc["comment_text"] = history_record['comment_text']
         
+            #"author": {
+            #    "displayName": history_record.get('authorDisplayName')
         return doc
     
     @staticmethod

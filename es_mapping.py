@@ -19,26 +19,26 @@ CHANGELOG_MAPPING = {
             "factType": {"type": "integer"},
             "issue": {
                 "properties": {
-					"id": {"type": "keyword"},
-                    "key": {"type": "keyword"},
-                    "type": { 
-                        "properties": {
-                            "name": {"type": "keyword"}
-                        }
-                    },
-                    "status": {
-                        "properties": {
-                            "name": {"type": "keyword"},
-                            "change_at": {"type": "date"},
-                            "working_minutes": {"type": "integer"},
-                            "working_days": {"type": "integer"},    
-                            "period": {"type": "text"}
-                        }
-                    },
-                    "created_at": {"type": "date"},
-                    "working_minutes": {"type": "integer"},
-                    "working_days": {"type": "integer"},
-                    "period": {"type": "text"}    
+                  "id": {"type": "keyword"},
+                  "key": {"type": "keyword"},
+                  "type": { 
+                      "properties": {
+                          "name": {"type": "keyword"}
+                      }
+                  },
+                  "status": {
+                      "properties": {
+                          "name": {"type": "keyword"},
+                          "change_at": {"type": "date"},
+                          "working_minutes": {"type": "integer"},
+                          "working_days": {"type": "integer"},    
+                          "period": {"type": "text"}
+                      }
+                  },
+                  "created_at": {"type": "date"},
+                  "working_minutes": {"type": "integer"},
+                  "working_days": {"type": "integer"},
+                  "period": {"type": "text"}    
                 }
             },
             "allocation": {"type": "keyword"},
@@ -80,7 +80,6 @@ CHANGELOG_MAPPING = {
                     "displayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
                 }
             },
-            "days_since_creation": {"type": "float"},
             "todo_exit_at": {"type": "alias", "path": "selected_for_development_at"},
             "changes": {
                 "type": "nested",
@@ -115,24 +114,28 @@ CHANGELOG_MAPPING = {
             },
             "selected_for_development_at": {"type": "date"},
             "backlog": {
-                "type": "nested",
                 "properties": {
                     "working_minutes": {"type": "integer"},
                     "working_days": {"type": "integer"},
                     "period": {"type": "text"},
                 }
             },
-            "processing": {"type": "nested", "properties": {
-                "working_minutes": {"type": "integer"},
-                "working_days": {"type": "integer"},
-                "period": {"type": "text"}
-           }},
-            "waiting": {"type": "nested", "properties": {
-                "working_minutes": {"type": "integer"},
-                "working_days": {"type": "integer"},
-                "period": {"type": "text"}
-            }},
-            "from_selected_for_development": {"type": "nested", "properties": {
+            "processing": {
+              "properties": {
+                  "working_minutes": {"type": "integer"},
+                  "working_days": {"type": "integer"},
+                  "period": {"type": "text"}
+              }
+            },
+            "waiting": {
+              "properties": {
+                  "working_minutes": {"type": "integer"},
+                  "working_days": {"type": "integer"},
+                  "period": {"type": "text"}
+              }
+            },
+            "from_selected_for_development": {
+              "properties": {
                 "working_minutes": {"type": "integer"},
                 "working_days": {"type": "integer"},
                 "period": {"type": "text"}
@@ -141,7 +144,6 @@ CHANGELOG_MAPPING = {
             "backflow_count": {"type": "integer"},
             "unique_statuses_visited": {"type": "keyword"},
             "status_transitions": {
-                "type": "nested",
                 "properties": {
                     "from_status": {"type": "keyword"},
                     "to_status": {"type": "keyword"},
