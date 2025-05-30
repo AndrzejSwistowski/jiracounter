@@ -29,13 +29,16 @@ CHANGELOG_MAPPING = {
                     "status": {
                         "properties": {
                             "name": {"type": "keyword"},
-                            "change_date": {"type": "date"},
+                            "change_at": {"type": "date"},
                             "working_minutes": {"type": "integer"},
                             "working_days": {"type": "integer"},    
                             "period": {"type": "text"}
                         }
                     },
-                    "created_at": {"type": "date"}
+                    "created_at": {"type": "date"},
+                    "working_minutes": {"type": "integer"},
+                    "working_days": {"type": "integer"},
+                    "period": {"type": "text"}    
                 }
             },
             "allocation": {"type": "keyword"},
@@ -78,7 +81,7 @@ CHANGELOG_MAPPING = {
                 }
             },
             "days_since_creation": {"type": "float"},
-            "todo_exit_date": {"type": "alias", "path": "selected_for_development_date"},
+            "todo_exit_at": {"type": "alias", "path": "selected_for_development_at"},
             "changes": {
                 "type": "nested",
                 "properties": {
@@ -92,7 +95,7 @@ CHANGELOG_MAPPING = {
                 }
             },
             # Content fields with comprehensive text analysis for searching
-            "description_text": {
+            "description": {
                 "type": "text",
                 "analyzer": "standard",
                 "fields": {
@@ -101,7 +104,7 @@ CHANGELOG_MAPPING = {
                     # Polish field removed temporarily
                 }
             },
-            "comment_text": {
+            "comment": {
                 "type": "text", 
                 "analyzer": "standard",
                 "fields": {
@@ -110,7 +113,7 @@ CHANGELOG_MAPPING = {
                     # Polish field removed temporarily
                 }
             },
-            "selected_for_development_date": {"type": "date"},
+            "selected_for_development_at": {"type": "date"},
             "backlog": {
                 "type": "nested",
                 "properties": {
