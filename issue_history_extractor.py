@@ -563,9 +563,9 @@ class IssueHistoryExtractor:
         status_name = issue_data['status']
         status_change_date = None
         working_minutes_in_status = None
-        
-        # Find the most recent status change to the current status
-        for history in status_change_history:
+          # Find the most recent status change to the current status
+        # Iterate in reverse order to find the LAST occurrence
+        for history in reversed(status_change_history):
             for change in history['changes']:
                 if change['field'] == 'status' and change['to'] == status_name:
                     status_change_date = history['historyDate']
