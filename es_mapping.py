@@ -11,7 +11,7 @@ CHANGELOG_MAPPING = {
             }
         }
     },
-    "mappings": {
+     "mappings": {
         "properties": {
             "historyId": {"type": "keyword"},
             "historyDate": {"type": "date"},
@@ -19,29 +19,28 @@ CHANGELOG_MAPPING = {
             "factType": {"type": "integer"},
             "issue": {
                 "properties": {
-                    "id": {"type": "keyword"},
+					"id": {"type": "keyword"},
                     "key": {"type": "keyword"},
-                    "type": {
+                    "type": { 
                         "properties": {
                             "name": {"type": "keyword"}
+                        }
+                    },
+                    "status": {
+                        "properties": {
+                            "name": {"type": "keyword"},
+                            "change_date": {"type": "date"},
+                            "working_minutes": {"type": "integer"},
+                            "working_days": {"type": "integer"},    
+                            "period": {"type": "text"}
                         }
                     },
                     "created_at": {"type": "date"}
                 }
             },
             "allocation": {"type": "keyword"},
-            "statusName": {"type": "keyword"},
-            "issueId": {"type": "keyword"},
-            "issueKey": {"type": "keyword"},
-            "typeName": {"type": "keyword"},            
-            "assigneeDisplayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-            "reporterDisplayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-            "allocationCode": {"type": "keyword"},
-            "projectKey": {"type": "keyword"},
-            "projectName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-            "parentKey": {"type": "keyword"},            "authorDisplayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
-            "labels": {"type": "keyword"}, 
-            "components": {"type": "keyword"}, 
+            "labels": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+            "components": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
             "summary": {
                 "type": "text", 
                 "analyzer": "standard",
@@ -55,7 +54,8 @@ CHANGELOG_MAPPING = {
                 "properties": {
                     "key": {"type": "keyword"}
                 }
-            },              "parent_issue": {
+            },
+            "parent_issue": {
                 "properties": {
                     "key": {"type": "keyword"},
                     "summary": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
@@ -67,21 +67,26 @@ CHANGELOG_MAPPING = {
                     "summary": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
                 }
             },
-            "author": {
-                "properties": {
-                    "displayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
-                }
-            },
             "reporter": {
                 "properties": {
                     "displayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
                 }
             },
-            "minutes_since_creation": {"type": "float"},
-            "todo_exit_date": {"type": "date"},
+            "assignee": {
+                "properties": {
+                    "displayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
+                }
+            },
+            "days_since_creation": {"type": "float"},
+            "todo_exit_date": {"type": "alias", "path": "selected_for_development_date"},
             "changes": {
                 "type": "nested",
                 "properties": {
+                    "author": {
+                        "properties": {
+                            "displayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
+                            }
+                    },
                     "field": {"type": "keyword"},
                     "to": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
                 }
@@ -104,36 +109,45 @@ CHANGELOG_MAPPING = {
                     "english": {"type": "text", "analyzer": "english"}
                     # Polish field removed temporarily
                 }
-            },            
-            "backlog_minutes": {"type": "float"},
-            "processing_minutes": {"type": "float"},  
-            "waiting_minutes": {"type": "float"},
-            
-            # Status transition metrics
-            "previous_status": {"type": "keyword"},
+            },
+            "selected_for_development_date": {"type": "date"},
+            "backlog": {
+                "type": "nested",
+                "properties": {
+                    "working_minutes": {"type": "integer"},
+                    "working_days": {"type": "integer"},
+                    "period": {"type": "text"},
+                }
+            },
+            "processing": {"type": "nested", "properties": {
+                "working_minutes": {"type": "integer"},
+                "working_days": {"type": "integer"},
+                "period": {"type": "text"}
+           }},
+            "waiting": {"type": "nested", "properties": {
+                "working_minutes": {"type": "integer"},
+                "working_days": {"type": "integer"},
+                "period": {"type": "text"}
+            }},
+            "from_selected_for_development": {"type": "nested", "properties": {
+                "working_minutes": {"type": "integer"},
+                "working_days": {"type": "integer"},
+                "period": {"type": "text"}
+            }},
             "total_transitions": {"type": "integer"},
             "backflow_count": {"type": "integer"},
             "unique_statuses_visited": {"type": "keyword"},
-            "current_status_minutes": {"type": "float"},
             "status_transitions": {
                 "type": "nested",
                 "properties": {
                     "from_status": {"type": "keyword"},
                     "to_status": {"type": "keyword"},
                     "transition_date": {"type": "date"},
-                    "minutes_in_previous_status": {"type": "float"},
+                    "minutes_in_previous_status": {"type": "integer"},
                     "is_forward_transition": {"type": "boolean"},
                     "is_backflow": {"type": "boolean"}
                 }
             },
-            
-            # Working time metrics
-            "working_minutes_from_create": {"type": "float"},
-            "working_minutes_in_status": {"type": "float"},
-            "working_minutes_from_move_at_point": {"type": "float"},
-            "status_change_date": {"type": "date"},
-            "created": {"type": "date"},            "updated": {"type": "date"},
-
         }
     }
 }
