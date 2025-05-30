@@ -97,40 +97,64 @@ class ElasticsearchDocumentFormatter:
         if history_record.get('reporterDisplayName'):
             doc["reporter"] = {
                 "displayName": history_record['reporterDisplayName']            }
-        
-
             
+        # Add assignee with proper structure according to mapping
+        if history_record.get('assigneeDisplayName'):
+            doc["assignee"] = {
+                "displayName": history_record['assigneeDisplayName']
+            }
+
+        if history_record.get('authorDisplayName'):
+            doc["author"] = {
+                "displayName": history_record['authorDisplayName']
+            }
+
+        # Add changes as nested objects according to mapping
+        if history_record.get('changes'):
+            doc["changes"] = history_record['changes']
+        
+        # Add content text fields with comprehensive text analysis
+        if history_record.get('description_text'):
+            doc["description"] = history_record['description_text']
+            
+        if history_record.get('comment_text'):
+            doc["comment"] = history_record['comment_text']
+
+
         if history_record.get('todo_exit_date') is not None:
             doc["selected_for_development_at"] = history_record['todo_exit_date']
             
-        if history_record.get('working_minutes_in_status') is not None:
-            doc["days_in_status"] = float(history_record['working_minutes_in_status']) / (60 * 8)  # Convert minutes to days
-            doc["working_minutes_in_status"] = history_record['working_minutes_in_status']
-            
-        # Add working_days_from_move_at_point field based on available data
-        if history_record.get('working_minutes_from_move_at_point') is not None:
-            doc["working_days_from_move_at_point"] = float(history_record['working_minutes_from_move_at_point']) / (60 * 8)  # Convert minutes to days
-            doc["working_minutes_from_move_at_point"] = history_record['working_minutes_from_move_at_point']
-        elif history_record.get('workingDaysFromToDo') is not None:
-            doc["working_days_from_move_at_point"] = float(history_record['workingDaysFromToDo'])
-        
-        # Add categorized time metrics (convert minutes to days for consistency)
+        # Add categorized time metrics as nested objects according to mapping
         if history_record.get('backlog_minutes') is not None:
-            doc["backlog_days"] = float(history_record['backlog_minutes']) / (60 * 8)  # Convert minutes to days
-            doc["backlog_minutes"] = history_record['backlog_minutes']
+            doc["backlog"] = {
+                "working_minutes": history_record['backlog_minutes'],
+                "working_days": int(history_record['backlog_minutes'] / (60 * 8)),
+                "period": format_working_minutes_to_text(history_record['backlog_minutes'])
+            }
+
         
         if history_record.get('processing_minutes') is not None:
-            doc["processing_days"] = float(history_record['processing_minutes']) / (60 * 8)  # Convert minutes to days
-            doc["processing_minutes"] = history_record['processing_minutes']
-        
+            doc["processing"] = {
+                "working_minutes": history_record['processing_minutes'],
+                "working_days": int(history_record['processing_minutes'] / (60 * 8)),
+                "period": format_working_minutes_to_text(history_record['processing_minutes'])
+            }
+
         if history_record.get('waiting_minutes') is not None:
-            doc["waiting_days"] = float(history_record['waiting_minutes']) / (60 * 8)  # Convert minutes to days
-            doc["waiting_minutes"] = history_record['waiting_minutes']
-        
+            doc["waiting"] = {
+                "working_minutes": history_record['waiting_minutes'],
+                "working_days": int(history_record['waiting_minutes'] / (60 * 8)),
+                "period": format_working_minutes_to_text(history_record['waiting_minutes'])
+            }
+
+        if history_record.get('working_minutes_from_move_at_point') is not None:
+            doc["from_selected_for_development"] = {
+                "working_minutes": history_record['working_minutes_from_move_at_point'],
+                "working_days": int(history_record['working_minutes_from_move_at_point'] / (60 * 8)),
+                "period": format_working_minutes_to_text(history_record['working_minutes_from_move_at_point'])
+            }
+
         # Add status transition metrics
-        if history_record.get('previous_status') is not None:
-            doc["previous_status"] = history_record['previous_status']
-            
         if history_record.get('total_transitions') is not None:
             doc["total_transitions"] = history_record['total_transitions']
             
@@ -140,30 +164,13 @@ class ElasticsearchDocumentFormatter:
         if history_record.get('unique_statuses_visited'):
             doc["unique_statuses_visited"] = history_record['unique_statuses_visited']
             
-        if history_record.get('status_transitions'):
-            doc["status_transitions"] = history_record['status_transitions']
-        
-        # Add assignee with proper structure according to mapping
-        if history_record.get('assigneeDisplayName'):
-            doc["assignee"] = {
-                "displayName": history_record['assigneeDisplayName']
-            }
-        
-        # Add changes as nested objects according to mapping
-        if history_record.get('changes'):
-            doc["changes"] = history_record['changes']
-        
-        # Add content text fields with comprehensive text analysis
-        if history_record.get('description_text'):
-            doc["description_text"] = history_record['description_text']
-            
-        if history_record.get('comment_text'):
-            doc["comment_text"] = history_record['comment_text']
-        
-            #"author": {
-            #    "displayName": history_record.get('authorDisplayName')
+        # Store only the last status transition instead of the entire collection
+        if history_record.get('status_transitions') and len(history_record['status_transitions']) > 0:
+            last_transition = history_record['status_transitions'][-1]  # Get the last transition
+            doc["status_transitions"] = last_transition
+
         return doc
-    
+
     @staticmethod
     def _extract_component_names(components_data, issue_key=None):
         """

@@ -80,15 +80,15 @@ CHANGELOG_MAPPING = {
                     "displayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
                 }
             },
+            "author": {
+              "properties": {
+                  "displayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
+                }
+            },
             "todo_exit_at": {"type": "alias", "path": "selected_for_development_at"},
             "changes": {
                 "type": "nested",
                 "properties": {
-                    "author": {
-                        "properties": {
-                            "displayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
-                            }
-                    },
                     "field": {"type": "keyword"},
                     "to": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
                 }
