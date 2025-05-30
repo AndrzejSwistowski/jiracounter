@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  elasticsearch:
+    build:
+      context: .
+      dockerfile: Dockerfile.elasticsearch
+    container_name: jira-elasticsearch
+    environment:
+      - node.name=jira-es-node
+      - cluster.name=jira-es-cluster
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
+      - xpack.security.enabled=false
+      - xpack.security.enrollment.enabled=false
+      - xpack.security.http.ssl.enabled=false
+      - xpack.security.transport.ssl.enabled=false
+      - action.destructive_requires_name=false
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - elasticsearch_data:/usr/share/elasticsearch/data
+      - ./mountdata:/usr/share/elasticsearch/mountdata
+    ports:
+      - "9200:9200"
+      - "9300:9300"
+    networks:
+      - elastic
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9200/_cluster/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.3
+    container_name: jira-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - SERVER_NAME=kibana
+      - SERVER_HOST=0.0.0.0
+      - XPACK_SECURITY_ENABLED=false
+      - XPACK_ENCRYPTEDSAVEDOBJECTS_ENCRYPTIONKEY=a7a6311933d3503b89bc2dbc36572c33a6c10925682e591bffcab6911c06786d
+    ports:
+      - "5601:5601"
+    networks:
+      - elastic
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
+  elasticsearch-head:
+    image: mobz/elasticsearch-head:5
+    container_name: jira-es-head
+    ports:
+      - "9100:9100"
+    networks:
+      - elastic
+    depends_on:
+      - elasticsearch
+
+volumes:
+  elasticsearch_data:
+    driver: local
+
+networks:
+  elastic:
+    driver: bridge

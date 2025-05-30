@@ -1,0 +1,21 @@
+# Ignore unnecessary files during Docker build
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.git/
+.gitignore
+*.log
+logs/
+data/
+report/
+diagnostic/
+docs/
+.vscode/
+.idea/
+*.md
+requirements/
+sql/
+workflows/
+mountdata/*
+!mountdata/.gitkeep

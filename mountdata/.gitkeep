@@ -1,0 +1,2 @@
+# This file ensures the mountdata directory is tracked by git
+# The directory is used to mount data into the Elasticsearch container

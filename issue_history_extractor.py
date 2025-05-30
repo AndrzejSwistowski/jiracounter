@@ -253,18 +253,17 @@ class IssueHistoryExtractor:
             'factType': 1,  # 1 = create
             'issueId': issue.id,
             'issueKey': issue_key,
-            'typeName': issue_data['type'],
-            'statusName': 'Backlog',  # Assume issues start as Backlog
+            'typeName': issue_data['type'],            'statusName': 'Backlog',  # Assume issues start as Backlog
             'assigneeUserName': issue_data['assignee'],
-            'assigneeDisplayName': issue_data['assignee'],
+            'assigneeDisplayName': issue_data['assignee'].get('display_name') if issue_data['assignee'] else None,
             'reporterUserName': issue_data['reporter'],
-            'reporterDisplayName': issue_data['reporter'],
+            'reporterDisplayName': issue_data['reporter'].get('display_name') if issue_data['reporter'] else None,
             'allocationCode': issue_data.get('allocation_code'),
             'projectKey': issue.fields.project.key,
             'projectName': issue.fields.project.name,
             'parentKey': issue_data.get('parent_issue', {}).get('key') if issue_data.get('parent_issue') else None,
             'authorUserName': issue_data['reporter'],
-            'authorDisplayName': issue_data['reporter'],
+            'authorDisplayName': issue_data['reporter'].get('display_name') if issue_data['reporter'] else None,
             'changes': creation_changes,  # Include description as a change if it exists
             'summary': issue_data['summary'],
             'labels': issue_data['labels'],
@@ -284,7 +283,7 @@ class IssueHistoryExtractor:
             'unique_statuses_visited': ['Backlog'],  # Just created, only initial status
             'status_transitions': [],       # Just created, no transitions yet
             'todo_exit_date': None,
-            "status_change_date": to_iso8601(issue_data['status_change_date']) if issue_data['status_change_date'] else None,
+            "status_change_date": to_iso8601(issue_data['status_change_date']) if issue_data['status_change_date'] else to_iso8601(issue_data['created']),
             "created": to_iso8601(issue_data['created']) if issue_data['created'] else None,
             "updated": to_iso8601(issue_data['updated']) if issue_data['updated'] else None,
             "description_text": description_text,  # Add description text field directly
@@ -687,12 +686,11 @@ class IssueHistoryExtractor:
             'factType': fact_type,
             'issueId': issue.id,
             'issueKey': issue_key,
-            'typeName': issue_data['type'],
-            'statusName': status_in_this_history,
+            'typeName': issue_data['type'],            'statusName': status_in_this_history,
             'assigneeUserName': issue_data['assignee'],
-            'assigneeDisplayName': issue_data['assignee'],
+            'assigneeDisplayName': issue_data['assignee'].get('display_name') if issue_data['assignee'] else None,
             'reporterUserName': issue_data['reporter'],
-            'reporterDisplayName': issue_data['reporter'],
+            'reporterDisplayName': issue_data['reporter'].get('display_name') if issue_data['reporter'] else None,
             'allocationCode': issue_data.get('allocation_code'),
             'projectKey': issue.fields.project.key,
             'projectName': issue.fields.project.name,

@@ -36,7 +36,7 @@ import sys
 from datetime import datetime, timedelta
 from es_populate import JiraElasticsearchPopulator
 import config
-from es_mapping import CHANGELOG_MAPPING, SETTINGS_MAPPING
+from es_mapping_polish import CHANGELOG_MAPPING_POLISH, SETTINGS_MAPPING_POLISH
 from logger_utils import setup_logging
 from es_utils import delete_index, create_index
 
@@ -63,15 +63,14 @@ def recreate_indices(populator, logger):
     """Create the indices with updated mappings."""
     try:
         logger.info("Creating indices with explicit mappings from es_mapping module")        # Try to create with full mapping first
-        result_changelog = create_index(populator=populator, index_name=config.INDEX_CHANGELOG, mapping=CHANGELOG_MAPPING, logger=logger)
+        result_changelog = create_index(populator=populator, index_name=config.INDEX_CHANGELOG, mapping=CHANGELOG_MAPPING_POLISH, logger=logger)
         
         # If creating with Polish analyzer fails, try a fallback mapping
         if not result_changelog:
             logger.warning("Creating index with Polish analyzer failed. Trying fallback mapping...")
-            
-            # Create a simplified version of the mapping without custom analyzers
+              # Create a simplified version of the mapping without custom analyzers
             simplified_mapping = {
-                "mappings": CHANGELOG_MAPPING["mappings"]
+                "mappings": CHANGELOG_MAPPING_POLISH["mappings"]
             }
             
             # Modify text fields to use standard analyzer instead of polish
@@ -89,7 +88,7 @@ def recreate_indices(populator, logger):
             logger.error(f"Failed to create index {config.INDEX_CHANGELOG}")
             return False
               # Create the settings index with the proper mapping
-        result_settings = create_index(populator=populator, index_name=config.INDEX_SETTINGS, mapping=SETTINGS_MAPPING, logger=logger)
+        result_settings = create_index(populator=populator, index_name=config.INDEX_SETTINGS, mapping=SETTINGS_MAPPING_POLISH, logger=logger)
         if not result_settings:
             logger.error(f"Failed to create index {config.INDEX_SETTINGS}")
             return False
@@ -167,14 +166,13 @@ def main():
         
         # Backup the last sync date
         last_sync_date = get_last_sync_date_from_settings(populator, logger)
-        
-        # Delete the changelog index
-        if not delete_index(populator, config.INDEX_CHANGELOG, logger):
+          # Delete the changelog index
+        if not delete_index(populator=populator, index_name=config.INDEX_CHANGELOG, logger=logger):
             logger.error("Failed to delete changelog index, aborting")
             return 1
         
         # Delete the settings index
-        if not delete_index(populator, config.INDEX_SETTINGS, logger):
+        if not delete_index(populator=populator, index_name=config.INDEX_SETTINGS, logger=logger):
             logger.warning("Failed to delete settings index, continuing anyway")
         
         # Recreate the indices with updated mappings

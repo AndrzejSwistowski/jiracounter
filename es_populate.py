@@ -312,21 +312,25 @@ class JiraElasticsearchPopulator:
                     logger.error(f"Error processing record: {e}")
                     logger.debug(f"Problematic record: {record.get('historyId', 'unknown')} for issue {record.get('issueKey', 'unknown')}")
                     continue
-            
-            # Execute the bulk operation
+              # Execute the bulk operation
             if actions:
                 try:
                     success_count = 0
                     failed_count = 0
                     
-                    # Use the bulk helper from elasticsearch library
-                    success, errors = bulk(self.es, actions, stats_only=True, raise_on_error=True)
+                    # Use the bulk helper from elasticsearch library - capture detailed errors
+                    success, errors = bulk(self.es, actions, stats_only=False, raise_on_error=False)
                     
-                    success_count = success
-                    failed_count = len(actions) - success if success <= len(actions) else 0
+                    success_count = len(success) if isinstance(success, list) else success
+                    failed_count = len(errors) if errors else 0
                     
                     if failed_count > 0:
                         logger.warning(f"Bulk insert: {success_count} succeeded, {failed_count} failed")
+                        # Log detailed error information for the first few failures
+                        for i, error in enumerate(errors[:5]):  # Show first 5 errors only
+                            logger.error(f"Bulk error {i+1}: {error}")
+                        if len(errors) > 5:
+                            logger.error(f"... and {len(errors) - 5} more errors")
                     else:
                         logger.debug(f"Bulk insert: {success_count} succeeded")
                     

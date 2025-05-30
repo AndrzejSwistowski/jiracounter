@@ -1,0 +1,11 @@
+# Custom Elasticsearch image with Polish language plugins
+FROM docker.elastic.co/elasticsearch/elasticsearch:8.11.3
+
+# Install required plugins for Polish language support
+RUN bin/elasticsearch-plugin install --batch analysis-icu
+RUN bin/elasticsearch-plugin install --batch analysis-stempel
+
+# Create mountdata directory
+RUN mkdir -p /usr/share/elasticsearch/mountdata
+
+USER elasticsearch

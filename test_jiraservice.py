@@ -141,7 +141,7 @@ def test_get_issue_changelog(service=None):
     
     try:
         # Search for any issue to use as a test
-        issues = service.search_issues("key='BZPB-343'")
+        issues = service.search_issues("key='BZPB-174'")
         if not issues:
             print("[ERROR] No issues found to test changelog retrieval")
             return
