@@ -338,11 +338,10 @@ class IssueHistoryExtractor:
                 'processing_minutes': int, 
                 'waiting_minutes': int
             }
-        """
-        # Define status categories
-        processing_statuses = {'In progress', 'In review', 'testing'}
-        backlog_statuses = {'Backlog'}
-        completed_statuses = {'Completed', 'Done', 'Closed', 'Resolved'}
+        """        # Define status categories (case-insensitive comparison)
+        processing_statuses = {'in progress', 'in review', 'testing'}
+        backlog_statuses = {'backlog'}
+        completed_statuses = {'completed', 'done', 'closed', 'resolved'}
         
         # Initialize counters
         backlog_minutes = 0
@@ -385,13 +384,13 @@ class IssueHistoryExtractor:
             for change in history['changes']:
                 if change['field'] == 'status':
                     # Calculate time spent in previous status
-                    time_in_status = calculate_working_minutes_between(status_start_date, history['historyDate'])
-                      # Categorize the time based on the status we're leaving
-                    if current_status in backlog_statuses:
+                    time_in_status = calculate_working_minutes_between(status_start_date, history['historyDate'])                    # Categorize the time based on the status we're leaving (case-insensitive)
+                    current_status_lower = current_status.lower() if current_status else ''
+                    if current_status_lower in backlog_statuses:
                         backlog_minutes += time_in_status
-                    elif current_status in processing_statuses:
+                    elif current_status_lower in processing_statuses:
                         processing_minutes += time_in_status
-                    elif current_status not in completed_statuses:
+                    elif current_status_lower not in completed_statuses:
                         # Not in backlog, processing, or completed = waiting
                         waiting_minutes += time_in_status
                     # If in completed status, we don't count the time
@@ -400,14 +399,14 @@ class IssueHistoryExtractor:
                     current_status = change['to']
                     status_start_date = history['historyDate']
                     break
-        
-        # Calculate time spent in final status (from last change to update date)
-        if current_status not in completed_statuses:
+          # Calculate time spent in final status (from last change to update date)
+        current_status_lower = current_status.lower() if current_status else ''
+        if current_status_lower not in completed_statuses:
             time_in_final_status = calculate_working_minutes_between(status_start_date, update_date)
             
-            if current_status in backlog_statuses:
+            if current_status_lower in backlog_statuses:
                 backlog_minutes += time_in_final_status
-            elif current_status in processing_statuses:
+            elif current_status_lower in processing_statuses:
                 processing_minutes += time_in_final_status
             else:
                 waiting_minutes += time_in_final_status
@@ -454,29 +453,28 @@ class IssueHistoryExtractor:
         # Initialize result structure
         transitions = []
         unique_statuses = set()
-        backflow_count = 0
-          # Define typical workflow order for backflow detection
+        backflow_count = 0        # Define typical workflow order for backflow detection (case-insensitive)
         workflow_order = {
-            'Backlog': 1,
-            'Draft': 2,
-            'Open': 3,
-            'Hold': 4,
-            'Planned': 5,
-            'SELECTED FOR DEVELOPMENT': 6,
-            'Do poprawy': 7,
-            'In progress': 8,
-            'Ready for review': 9,
-            'In review': 10,
-            'READY FOR TESTING': 11,
-            'TESTY WEWNĘTRZNE': 12,
-            'Testing': 13,
-            'Do akceptacji klienta': 14,
-            'Awaiting production release': 15,
-            'CUSTOMER NOTIFICATION': 16,
-            'Closed': 17,
-            'Canceled': 18,
-            'Completed': 19,
-            'Done': 20
+            'backlog': 1,
+            'draft': 2,
+            'open': 3,
+            'hold': 4,
+            'planned': 5,
+            'selected for development': 6,
+            'do poprawy': 7,
+            'in progress': 8,
+            'ready for review': 9,
+            'in review': 10,
+            'ready for testing': 11,
+            'testy wewnętrzne': 12,
+            'testing': 13,
+            'do akceptacji klienta': 14,
+            'awaiting production release': 15,
+            'customer notification': 16,
+            'closed': 17,
+            'canceled': 18,
+            'completed': 19,
+            'done': 20
         }
         
         # Track current status and timing
@@ -514,10 +512,11 @@ class IssueHistoryExtractor:
                     minutes_in_previous = calculate_working_minutes_between(
                         status_start_date, history['historyDate']
                     )
-                    
-                    # Determine if this is a backflow (moving to "earlier" status)
-                    from_order = workflow_order.get(current_status, 0)
-                    to_order = workflow_order.get(change['to'], 0)
+                      # Determine if this is a backflow (moving to "earlier" status) - case-insensitive
+                    current_status_lower = current_status.lower() if current_status else ''
+                    to_status_lower = change['to'].lower() if change['to'] else ''
+                    from_order = workflow_order.get(current_status_lower, 0)
+                    to_order = workflow_order.get(to_status_lower, 0)
                     is_backflow = from_order > to_order and from_order > 0 and to_order > 0
                     is_forward = from_order < to_order and from_order > 0 and to_order > 0
                     
@@ -541,11 +540,11 @@ class IssueHistoryExtractor:
                     unique_statuses.add(current_status)
                     status_start_date = history['historyDate']
                     break
-        
-        # Calculate time in current status (if not completed)
-        completed_statuses = {'Completed', 'Done', 'Closed', 'Resolved'}
+          # Calculate time in current status (if not completed) - case-insensitive
+        completed_statuses = {'completed', 'done', 'closed', 'resolved'}
         current_status_minutes = 0
-        if current_status not in completed_statuses:
+        current_status_lower = current_status.lower() if current_status else ''
+        if current_status_lower not in completed_statuses:
             current_status_minutes = calculate_working_minutes_between(status_start_date, update_date)
         
         return {
@@ -563,12 +562,13 @@ class IssueHistoryExtractor:
         """Calculate status-related metrics for the issue."""
         status_name = issue_data['status']
         status_change_date = None
-        working_minutes_in_status = None
-          # Find the most recent status change to the current status
+        working_minutes_in_status = None        # Find the most recent status change to the current status (case-insensitive)
         # Iterate in reverse order to find the LAST occurrence
         for history in reversed(status_change_history):
             for change in history['changes']:
-                if change['field'] == 'status' and change['to'] == status_name:
+                if (change['field'] == 'status' and 
+                    change['to'] and status_name and 
+                    change['to'].lower() == status_name.lower()):
                     status_change_date = history['historyDate']
                     break
             if status_change_date:
@@ -614,11 +614,12 @@ class IssueHistoryExtractor:
                     break
             if initial_status_found:
                 break
-        
-        # Now find the first status change from this initial status
+          # Now find the first status change from this initial status (case-insensitive)
         for history_item in status_change_history:
             for change in history_item['changes']:
-                if change['field'] == 'status' and change['from'] == initial_status:
+                if (change['field'] == 'status' and 
+                    change['from'] and initial_status and 
+                    change['from'].lower() == initial_status.lower()):
                     todo_exit_date = history_item['historyDate']
                     self.logger.debug(f"First status change from '{initial_status}' on {todo_exit_date}")
                     break
@@ -713,10 +714,9 @@ class IssueHistoryExtractor:
             'waiting_minutes': status_metrics['waiting_minutes'],
             'previous_status': status_metrics['previous_status'],
             'total_transitions': status_metrics['total_transitions'],
-            'backflow_count': status_metrics['backflow_count'],
-            'unique_statuses_visited': status_metrics['unique_statuses_visited'],
-            'status_transitions': status_metrics['status_transitions'],            'todo_exit_date': to_iso8601(todo_exit_date) if todo_exit_date else None,
-            "todo_exit_date": to_iso8601(status_metrics['todo_exit_date']) if status_metrics['todo_exit_date'] else None,  # Use todo exit date from metrics
+            'backflow_count': status_metrics['backflow_count'],            'unique_statuses_visited': status_metrics['unique_statuses_visited'],
+            'status_transitions': status_metrics['status_transitions'],
+            "todo_exit_date": to_iso8601(todo_exit_date) if todo_exit_date else None,
             "status_change_date": to_iso8601(status_metrics['status_change_date']) if status_metrics['status_change_date'] else None,  # For history records, use actual status change date
             "created": to_iso8601(issue_data['created']) if issue_data['created'] else None,
             "updated": to_iso8601(issue_data['updated']) if issue_data['updated'] else None,
