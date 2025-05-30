@@ -25,22 +25,30 @@ class ElasticsearchDocumentFormatter:
         Returns:
             Dict containing the formatted data for Elasticsearch
         """
+        # Import time_utils functions for period formatting
+        from time_utils import format_working_minutes_to_text
+        
         doc = {
             "historyId": history_record['historyId'],
             "historyDate": history_record['historyDate'],
             "@timestamp": history_record['historyDate'],
             "factType": history_record['factType'],
             "issue": {
-                
                 "key": history_record['issueKey'],
                 "type": {
                     "name": history_record['typeName']
                 },
                 "status": {
                     "name": history_record['statusName'],
-                    "change_date": history_record.get('status_change_date') 
+                    "change_at": history_record.get('status_change_date'),
+                    "working_minutes": history_record.get('working_minutes_in_status'),
+                    "working_days": int(history_record['working_minutes_in_status'] / (60 * 8)) if history_record.get('working_minutes_in_status') else None,
+                    "period": format_working_minutes_to_text(history_record.get('working_minutes_in_status'))
                 },
-                "created_at": history_record.get('created')
+                "created_at": history_record.get('created'),
+                "working_minutes": history_record.get('working_minutes_from_create'),
+                "working_days": int(history_record['working_minutes_from_create'] / (60 * 8)) if history_record.get('working_minutes_from_create') else None,
+                "period": format_working_minutes_to_text(history_record.get('working_minutes_from_create'))
             },
             "project": {
                 "key": history_record['projectKey'],
@@ -76,7 +84,7 @@ class ElasticsearchDocumentFormatter:
         if history_record.get('parent_issue'):
             doc["parent_issue"] = {
                 "key": history_record.get('parentKey') or history_record['parent_issue'].get('key'),
-                "summary":history_record.get('parent_summary') or history_record['parent_issue'].get('summary')
+                "summary": history_record.get('parent_summary') or history_record['parent_issue'].get('summary')
             }
             
         # Add epic_issue with proper structure according to mapping
@@ -91,32 +99,56 @@ class ElasticsearchDocumentFormatter:
             doc["reporter"] = {
                 "displayName": history_record['reporterDisplayName']            }
         
-        # Add time-based fields
+        # Add time-based fields with proper conversion
         if history_record.get('workingDaysFromCreation') is not None:
             # Convert working days to working minutes (480 minutes per working day)
             working_days = float(history_record['workingDaysFromCreation'])
             doc["minutes_since_creation"] = working_days * 480
+        elif history_record.get('working_minutes_from_create') is not None:
+            doc["minutes_since_creation"] = history_record['working_minutes_from_create']
             
         if history_record.get('todo_exit_date') is not None:
             doc["todo_exit_date"] = history_record['todo_exit_date']
             
         if history_record.get('working_minutes_in_status') is not None:
             doc["days_in_status"] = float(history_record['working_minutes_in_status']) / (60 * 8)  # Convert minutes to days
-              # Add working_minutes_from_move_at_point field based on available data
+            doc["working_minutes_in_status"] = history_record['working_minutes_in_status']
+            
+        # Add working_days_from_move_at_point field based on available data
         if history_record.get('working_minutes_from_move_at_point') is not None:
             doc["working_days_from_move_at_point"] = float(history_record['working_minutes_from_move_at_point']) / (60 * 8)  # Convert minutes to days
+            doc["working_minutes_from_move_at_point"] = history_record['working_minutes_from_move_at_point']
         elif history_record.get('workingDaysFromToDo') is not None:
             doc["working_days_from_move_at_point"] = float(history_record['workingDaysFromToDo'])
         
         # Add categorized time metrics (convert minutes to days for consistency)
         if history_record.get('backlog_minutes') is not None:
             doc["backlog_days"] = float(history_record['backlog_minutes']) / (60 * 8)  # Convert minutes to days
+            doc["backlog_minutes"] = history_record['backlog_minutes']
         
         if history_record.get('processing_minutes') is not None:
             doc["processing_days"] = float(history_record['processing_minutes']) / (60 * 8)  # Convert minutes to days
+            doc["processing_minutes"] = history_record['processing_minutes']
         
         if history_record.get('waiting_minutes') is not None:
             doc["waiting_days"] = float(history_record['waiting_minutes']) / (60 * 8)  # Convert minutes to days
+            doc["waiting_minutes"] = history_record['waiting_minutes']
+        
+        # Add status transition metrics
+        if history_record.get('previous_status') is not None:
+            doc["previous_status"] = history_record['previous_status']
+            
+        if history_record.get('total_transitions') is not None:
+            doc["total_transitions"] = history_record['total_transitions']
+            
+        if history_record.get('backflow_count') is not None:
+            doc["backflow_count"] = history_record['backflow_count']
+            
+        if history_record.get('unique_statuses_visited'):
+            doc["unique_statuses_visited"] = history_record['unique_statuses_visited']
+            
+        if history_record.get('status_transitions'):
+            doc["status_transitions"] = history_record['status_transitions']
         
         # Add assignee with proper structure according to mapping
         if history_record.get('assigneeDisplayName'):
