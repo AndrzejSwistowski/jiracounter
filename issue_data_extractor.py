@@ -222,6 +222,7 @@ class IssueDataExtractor:
                     issue_data[custom_field_name.lower().replace(' ', '_')] = field_value
         except Exception as e:
             self.logger.debug(f"Error extracting custom fields: {e}")
+        return issue_data        
     
     def _extract_epic_issue_info(self, epic_link):
         """
