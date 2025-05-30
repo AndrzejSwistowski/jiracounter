@@ -281,9 +281,10 @@ class IssueHistoryExtractor:
             'total_transitions': 0,         # Just created, so no transitions yet
             'backflow_count': 0,           # Just created, so no backflows yet
             'unique_statuses_visited': ['Backlog'],  # Just created, only initial status
-            'status_transitions': [],       # Just created, no transitions yet
-            'todo_exit_date': None,
-            "status_change_date": to_iso8601(issue_data['status_change_date']) if issue_data['status_change_date'] else to_iso8601(issue_data['created']),
+            'status_transitions': [],       # Just created, no transitions yet            'todo_exit_date': None,
+            "status_change_date": to_iso8601(issue_data['status_change_date']) if issue_data['status_change_date'] else None,
+            "todo_exit_date": None,  # No todo exit date for creation record
+            "status_change_date": to_iso8601(issue_data['created']) if issue_data['created'] else None,  # For creation record, use creation date
             "created": to_iso8601(issue_data['created']) if issue_data['created'] else None,
             "updated": to_iso8601(issue_data['updated']) if issue_data['updated'] else None,
             "description_text": description_text,  # Add description text field directly
@@ -714,9 +715,9 @@ class IssueHistoryExtractor:
             'total_transitions': status_metrics['total_transitions'],
             'backflow_count': status_metrics['backflow_count'],
             'unique_statuses_visited': status_metrics['unique_statuses_visited'],
-            'status_transitions': status_metrics['status_transitions'],
-            'todo_exit_date': to_iso8601(todo_exit_date) if todo_exit_date else None,
-            "status_change_date": to_iso8601(issue_data['status_change_date']) if issue_data['status_change_date'] else None,
+            'status_transitions': status_metrics['status_transitions'],            'todo_exit_date': to_iso8601(todo_exit_date) if todo_exit_date else None,
+            "todo_exit_date": to_iso8601(status_metrics['todo_exit_date']) if status_metrics['todo_exit_date'] else None,  # Use todo exit date from metrics
+            "status_change_date": to_iso8601(status_metrics['status_change_date']) if status_metrics['status_change_date'] else None,  # For history records, use actual status change date
             "created": to_iso8601(issue_data['created']) if issue_data['created'] else None,
             "updated": to_iso8601(issue_data['updated']) if issue_data['updated'] else None,
             "description_text": description_text,  # Add description text to all records
