@@ -153,16 +153,27 @@ CHANGELOG_MAPPING_POLISH = {
                     "english": {"type": "text", "analyzer": "english"},
                     "polish": {"type": "text", "analyzer": "polish_light"},
                     "standard": {"type": "text", "analyzer": "standard"}
-                }
-            },
+                }            },
             "comment": {
-                "type": "text", 
-                "analyzer": "polish_standard",
-                "fields": {
-                    "keyword": {"type": "keyword", "ignore_above": 32766},
-                    "english": {"type": "text", "analyzer": "english"},
-                    "polish": {"type": "text", "analyzer": "polish_light"},
-                    "standard": {"type": "text", "analyzer": "standard"}
+                "type": "nested",
+                "properties": {
+                    "created_at": {"type": "date"},
+                    "body": {
+                        "type": "text",
+                        "analyzer": "polish_standard",
+                        "fields": {
+                            "keyword": {"type": "keyword", "ignore_above": 32766},
+                            "english": {"type": "text", "analyzer": "english"},
+                            "polish": {"type": "text", "analyzer": "polish_light"},
+                            "standard": {"type": "text", "analyzer": "standard"}
+                        }
+                    },
+                    "author": {
+                        "type": "text",
+                        "fields": {
+                            "keyword": {"type": "keyword"}
+                        }
+                    }
                 }
             },
             "selected_for_development_at": {"type": "date"},

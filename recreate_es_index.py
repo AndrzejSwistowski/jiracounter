@@ -72,14 +72,24 @@ def recreate_indices(populator, logger):
             simplified_mapping = {
                 "mappings": CHANGELOG_MAPPING_POLISH["mappings"]
             }
-            
-            # Modify text fields to use standard analyzer instead of polish
-            for field_name in ["summary", "description_text", "comment_text"]:
+              # Modify text fields to use standard analyzer instead of polish
+            for field_name in ["summary", "description", "comment"]:
                 if field_name in simplified_mapping["mappings"]["properties"]:
-                    if "fields" in simplified_mapping["mappings"]["properties"][field_name]:
+                    field_config = simplified_mapping["mappings"]["properties"][field_name]
+                    
+                    # Handle top-level text fields
+                    if "fields" in field_config:
                         # Remove polish analyzer field
-                        if "polish" in simplified_mapping["mappings"]["properties"][field_name]["fields"]:
-                            del simplified_mapping["mappings"]["properties"][field_name]["fields"]["polish"]
+                        if "polish" in field_config["fields"]:
+                            del field_config["fields"]["polish"]
+                    
+                    # Handle nested comment structure
+                    elif field_name == "comment" and field_config.get("type") == "nested":
+                        # Update nested comment body field
+                        if "properties" in field_config and "body" in field_config["properties"]:
+                            body_config = field_config["properties"]["body"]
+                            if "fields" in body_config and "polish" in body_config["fields"]:
+                                del body_config["fields"]["polish"]
             
             # Try with simplified mapping
             result_changelog = create_index(populator=populator, index_name=config.INDEX_CHANGELOG, mapping=simplified_mapping, logger=logger)
