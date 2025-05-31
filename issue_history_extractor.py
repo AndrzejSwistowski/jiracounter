@@ -290,7 +290,7 @@ class IssueHistoryExtractor:
             "description_text": description_text,  # Add description text field directly
             "comment_text": comment_text       # Add comments text field
         }
-    
+      
     def _extract_status_change_history(self, issue) -> List[Dict[str, Any]]:
         """Extract all status changes from the changelog for analysis."""
         status_change_history = []
@@ -300,17 +300,23 @@ class IssueHistoryExtractor:
             
             for history in histories:
                 history_date = parse_date(history.created)
-                changes = []
+                status_changes = []
+                
+                # Only include status field changes
                 for item in history.items:
-                    changes.append({
-                        'field': item.field,
-                        'from': item.fromString,
-                        'to': item.toString
+                    if item.field == 'status':
+                        status_changes.append({
+                            'field': item.field,
+                            'from': item.fromString,
+                            'to': item.toString
+                        })
+                
+                # Only add history entry if it contains status changes
+                if status_changes:
+                    status_change_history.append({
+                        'historyDate': history_date,                    
+                        'changes': status_changes
                     })
-                status_change_history.append({
-                    'historyDate': history_date,                    
-                    'changes': changes
-                })
         
         # Sort status change history chronologically (oldest first)
         status_change_history.sort(key=lambda x: x['historyDate'])
@@ -687,7 +693,8 @@ class IssueHistoryExtractor:
             'factType': fact_type,
             'issueId': issue.id,
             'issueKey': issue_key,
-            'typeName': issue_data['type'],            'statusName': status_in_this_history,
+            'typeName': issue_data['type'],            
+            'statusName': status_in_this_history,
             'assigneeUserName': issue_data['assignee'],
             'assigneeDisplayName': issue_data['assignee'].get('display_name') if issue_data['assignee'] else None,
             'reporterUserName': issue_data['reporter'],
