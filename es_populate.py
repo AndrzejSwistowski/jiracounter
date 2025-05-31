@@ -294,14 +294,15 @@ class JiraElasticsearchPopulator:
             # Prepare the bulk operation
             actions = []
             for record in history_records:
-                try:
-                    # Detect record type and format accordingly
+                try:                    # Detect record type and format accordingly
                     if self._is_comprehensive_record(record):
                         # New comprehensive record format
-                        doc = self.format_comprehensive_record(record)
-                        # Generate a unique ID for the comprehensive document
-                        issue_key = record.get('issue_data', {}).get('key', 'unknown')
-                        doc_id = f"{issue_key}_comprehensive"
+                        doc, doc_id = self.format_comprehensive_record(record)
+                        # Use the actual issue ID returned by the formatter
+                        if not doc_id:
+                            # Fallback if no doc_id returned
+                            issue_key = record.get('issue_data', {}).get('key', 'unknown')
+                            doc_id = f"{issue_key}_comprehensive"
                     else:
                         # Old individual history record format
                         if 'historyId' not in record:
@@ -312,13 +313,22 @@ class JiraElasticsearchPopulator:
                         doc = self.format_changelog_entry(record)
                         # Generate a unique ID for the document
                         doc_id = f"{record.get('issueKey', 'unknown')}_{record['historyId']}"
-                    
-                    # Add the action
-                    actions.append({
-                        "_index": INDEX_CHANGELOG,
-                        "_id": doc_id,
-                        "_source": doc
-                    })
+                      # Add the action - use update for comprehensive records, index for legacy
+                    if self._is_comprehensive_record(record):
+                        # Use update operation for comprehensive records to support updates
+                        actions.append({
+                            "_index": INDEX_CHANGELOG,
+                            "_id": doc_id,
+                            "_op_type": "index",  # Use index to support both insert and update
+                            "_source": doc
+                        })
+                    else:
+                        # Use index operation for legacy records (append-only behavior)
+                        actions.append({
+                            "_index": INDEX_CHANGELOG,
+                            "_id": doc_id,
+                            "_source": doc
+                        })
                 except Exception as e:
                     logger.error(f"Error processing record: {e}")
                     issue_id = self._extract_issue_identifier(record)
@@ -734,8 +744,7 @@ class JiraElasticsearchPopulator:
         """
         # Comprehensive records have these specific top-level keys
         comprehensive_keys = {'issue_data', 'metrics', 'status_transitions', 'field_changes'}
-        
-        # Check if at least 2 of the comprehensive keys are present
+          # Check if at least 2 of the comprehensive keys are present
         present_keys = set(record.keys()) & comprehensive_keys
         return len(present_keys) >= 2
     
@@ -762,7 +771,7 @@ class JiraElasticsearchPopulator:
             comprehensive_record: Dictionary containing the comprehensive issue data
             
         Returns:
-            Dict containing the formatted data for Elasticsearch
+            Tuple: (formatted_document, document_id) for Elasticsearch
         """
         return ElasticsearchDocumentFormatter.format_comprehensive_record(comprehensive_record)
         
