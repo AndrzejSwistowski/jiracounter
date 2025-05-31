@@ -6,7 +6,7 @@ It follows the Single Responsibility Principle by focusing solely on history dat
 """
 
 import logging
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional, List, Tuple
 from time_utils import (
     to_iso8601, parse_date, calculate_working_days_between, now,
     find_status_change_date, calculate_working_minutes_since_date,
@@ -32,118 +32,112 @@ class IssueHistoryExtractor:
         self.data_extractor = data_extractor
         self.logger = logging.getLogger(__name__)
 
-    def extract_issue_changelog(self, issue, issue_key: str) -> List[Dict[str, Any]]:
+    def extract_issue_changelog(self, issue, issue_key: str) -> Dict[str, Any]:
         """
-        Extract comprehensive changelog data from a JIRA issue.
+        Extract comprehensive issue data with complete history and metrics.
         
-        This method serves as a template method that coordinates the history extraction process,
-        delegating to specialized methods for each type of history data.
+        This method creates a single comprehensive record per issue containing current state
+        and all historical data, eliminating the overhead of duplicating issue data.
         
         Args:
             issue: JIRA issue object (expanded with changelog and comments)
             issue_key: The JIRA issue key for logging purposes
             
         Returns:
-            List of changelog entries containing the history of changes with the following structure:
+            Single comprehensive issue record with the following structure:
             
-            [
-                {
-                    # Basic history information
-                    'historyId': 12345,                    # History record ID (synthetic for creation)
-                    'historyDate': '2023-01-01T10:00:00+00:00',  # Date of the change (ISO 8601)
-                    'factType': 1,                         # 1=create, 2=transition, 3=update
-                    
-                    # Issue data (contains all basic issue information)
-                    'issue_data': {
-                        'issueId': '12345',
-                        'issueKey': 'PROJECT-123',
-                        'type': 'Story',
-                        'status': 'In Progress',
-                        'assignee': {'username': 'jdoe', 'display_name': 'John Doe'},
-                        'reporter': {'username': 'jsmith', 'display_name': 'Jane Smith'},
-                        'allocation_code': 'NEW',
-                        'project_key': 'PROJECT',
-                        'project_name': 'Project Name',
-                        'parent_issue': {'key': 'PROJECT-122', 'summary': 'Parent Issue'},
-                        'epic_issue': {'key': 'PROJECT-100', 'name': 'Feature Epic'},
-                        'summary': 'Issue title',
-                        'labels': ['label1', 'label2'],
-                        'components': [{'id': '1001', 'name': 'Frontend'}],
-                        'created': datetime_object,
-                        'updated': datetime_object,
-                        'status_change_date': datetime_object
-                    },
-                    
-                    # Change author information (different from issue assignee/reporter)
-                    'authorUserName': 'admin',            # Change author username
-                    'authorDisplayName': 'Admin User',    # Change author display name
-                    
-                    # Change details
-                    'changes': [                          # List of field changes in this history
-                        {
-                            'field': 'status',
-                            'fieldtype': 'jira',
-                            'from': 'Open',
-                            'to': 'In Progress'
-                        }                    ],
-                      # Content fields
-                    'issue_description': 'Issue description...',  # Full description text
-                    'issue_comments': [  # Array of comment objects
-                        {
-                            'created_at': '2023-01-02T10:00:00+00:00',
-                            'body': 'Comment text...',
-                            'author': 'John Doe'
-                        }
-                    ],
-                    
-                    # Time metrics (calculated at this history point)
-                    'working_minutes_from_create': 7200, # Working minutes from creation to this history point
-                    'working_minutes_in_status': 2880,   # Working minutes in current status at this point
-                    'working_minutes_from_move_at_point': 4320, # Working minutes from first status change
+            {
+                # Current issue data (latest state)
+                'issue_data': {
+                    'issueId': '12345',
+                    'issueKey': 'PROJECT-123',
+                    'type': 'Story',
+                    'status': 'In Progress',
+                    'assignee': {'username': 'jdoe', 'display_name': 'John Doe'},
+                    'reporter': {'username': 'jsmith', 'display_name': 'Jane Smith'},
+                    'allocation_code': 'NEW',
+                    'project_key': 'PROJECT',
+                    'project_name': 'Project Name',
+                    'parent_issue': {'key': 'PROJECT-122', 'summary': 'Parent Issue'},
+                    'epic_issue': {'key': 'PROJECT-100', 'name': 'Feature Epic'},
+                    'summary': 'Issue title',
+                    'labels': ['label1', 'label2'],
+                    'components': [{'id': '1001', 'name': 'Frontend'}],
+                    'created': datetime_object,
+                    'updated': datetime_object,
+                    'status_change_date': datetime_object
+                },
+                
+                # Content fields
+                'issue_description': 'Issue description...',  # Full description text
+                'issue_comments': [  # Array of comment objects
+                    {
+                        'created_at': '2023-01-02T10:00:00+00:00',
+                        'body': 'Comment text...',
+                        'author': 'John Doe'
+                    }
+                ],
+                
+                # Current time metrics (as of latest update)
+                'metrics': {
+                    'working_minutes_from_create': 7200,     # Total working minutes since creation
+                    'working_minutes_in_current_status': 2880, # Working minutes in current status
+                    'working_minutes_from_first_move': 4320,  # Working minutes since first status change
                     
                     # Categorized time metrics (working minutes spent in status categories)
-                    'backlog_minutes': 1440,            # Working minutes spent in 'Backlog' status
-                    'processing_minutes': 5760,         # Working minutes spent in processing statuses
-                    'waiting_minutes': 2880,            # Working minutes spent in waiting statuses
+                    'backlog_minutes': 1440,                 # Working minutes spent in 'Backlog' status
+                    'processing_minutes': 5760,              # Working minutes spent in processing statuses
+                    'waiting_minutes': 2880,                 # Working minutes spent in waiting statuses
                     
-                    # Status transition metrics (for workflow analysis)
-                    'previous_status': 'In progress',   # Previous status before current one
-                    'total_transitions': 3,             # Total number of status transitions
-                    'backflow_count': 1,                # Number of backwards status transitions
-                    'unique_statuses_visited': ['Open', 'In progress', 'In review'],  # All statuses this issue has been in
-                    'status_transitions': [             # Detailed transition history
-                        {
-                            'from_status': 'Open',
-                            'to_status': 'In progress', 
-                            'transition_date': '2024-01-02T10:00:00+00:00',
-                            'minutes_in_previous_status': 1440,
-                            'is_forward_transition': True,
-                            'is_backflow': False
-                        }
-                    ],
-                    
+                    # Status transition summary
+                    'previous_status': 'In progress',        # Previous status before current one
+                    'total_transitions': 3,                  # Total number of status transitions
+                    'backflow_count': 1,                     # Number of backwards status transitions
+                    'unique_statuses_visited': ['Open', 'In progress', 'In review'], # All statuses visited
                     'todo_exit_date': '2023-01-03T09:00:00+00:00'  # Date of first status change
-                }
-            ]
-            
-            Note: The first entry will always be a creation record (factType=1) with synthetic historyId.
-            Subsequent entries represent actual changes from the JIRA changelog.
+                },
+                
+                # Complete status transition history
+                'status_transitions': [
+                    {
+                        'from_status': 'Open',
+                        'to_status': 'In progress', 
+                        'transition_date': '2024-01-02T10:00:00+00:00',
+                        'minutes_in_previous_status': 1440,
+                        'is_forward_transition': True,
+                        'is_backflow': False,
+                        'author': 'John Doe'
+                    }
+                ],
+                
+                # Non-status changes history (all other field changes)
+                'field_changes': [
+                    {
+                        'change_date': '2023-01-04T14:30:00+00:00',
+                        'author': 'Jane Smith',
+                        'changes': [
+                            {
+                                'field': 'assignee',
+                                'fieldtype': 'jira',
+                                'from': 'John Doe',
+                                'to': 'Jane Smith'
+                            }
+                        ]
+                    }
+                ]            }
         """
         try:
             # Get basic issue data using the data extractor
             issue_data = self.data_extractor.extract_issue_data(issue)
             
-            changelog_entries = []
-              # Extract description and comments
+            # Extract description and comments
             issue_description = self._extract_description(issue, issue_key)
             issue_comments = self._extract_comments(issue, issue_key)
-              # Create creation record
-            creation_record = self._create_creation_record(
-                issue, issue_key, issue_data, issue_description, issue_comments
-            )
-            changelog_entries.append(creation_record)
             
             # Extract and process changelog information
+            status_transitions = []
+            field_changes = []
+            
             if hasattr(issue, 'changelog') and hasattr(issue.changelog, 'histories'):
                 # Process status change history for calculations
                 status_change_history = self._extract_status_change_history(issue)
@@ -151,25 +145,50 @@ class IssueHistoryExtractor:
                 # Calculate status-related metrics
                 status_metrics = self._calculate_status_metrics(issue_data, status_change_history)
                 
-                # Find todo exit date (first status change)
-                todo_exit_date = self._find_todo_exit_date(status_change_history)
+                # Extract status transitions with detailed information
+                status_transitions = self._extract_detailed_status_transitions(issue)
                 
-                # Process each changelog history entry
-                histories = list(issue.changelog.histories)
-                for history in histories:                    
-                    history_record = self._create_history_record(
-                        history, issue, issue_key, issue_data, status_metrics,
-                        status_change_history, todo_exit_date, issue_description, issue_comments
-                    )
-                    changelog_entries.append(history_record)
+                # Extract non-status field changes
+                field_changes = self._extract_field_changes(issue)
+            else:
+                # No changelog available, create minimal metrics
+                status_metrics = {
+                    'working_minutes_from_create': 0,
+                    'working_minutes_in_current_status': 0,
+                    'working_minutes_from_first_move': 0,
+                    'backlog_minutes': 0,
+                    'processing_minutes': 0,
+                    'waiting_minutes': 0,
+                    'previous_status': None,
+                    'total_transitions': 0,
+                    'backflow_count': 0,
+                    'unique_statuses_visited': [issue_data.get('status', 'Unknown')],
+                    'todo_exit_date': None
+                }
             
-            # Sort by history date
-            changelog_entries.sort(key=lambda x: x['historyDate'])
+            # Build comprehensive issue record
+            comprehensive_record = {
+                # Current issue data (latest state)
+                'issue_data': issue_data,
+                
+                # Content fields
+                'issue_description': issue_description,
+                'issue_comments': issue_comments,
+                
+                # Current time metrics (as of latest update)
+                'metrics': status_metrics,
+                
+                # Complete status transition history
+                'status_transitions': status_transitions,
+                
+                # Non-status changes history (all other field changes)
+                'field_changes': field_changes
+            }
             
-            return changelog_entries
+            return comprehensive_record
             
         except Exception as e:
-            self.logger.error(f"Error extracting changelog for issue {issue_key}: {str(e)}")
+            self.logger.error(f"Error extracting comprehensive issue data for {issue_key}: {str(e)}")
             raise
     
     def _extract_description(self, issue, issue_key: str) -> Optional[str]:
@@ -538,18 +557,26 @@ class IssueHistoryExtractor:
             'previous_status': previous_status,
             'total_transitions': len(transitions),
             'backflow_count': backflow_count,
-            'unique_statuses_visited': list(unique_statuses),
-            'current_status_minutes': current_status_minutes
+            'unique_statuses_visited': list(unique_statuses),            'current_status_minutes': current_status_minutes
         }
 
     def _calculate_status_metrics(self, issue_data: Dict[str, Any], 
                                 status_change_history: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Calculate status-related metrics for the issue."""
+        creation_date = issue_data.get('created')
+        update_date = issue_data.get('updated')
+        
+        # Calculate total working minutes from creation
+        working_minutes_from_create = 0
+        if creation_date and update_date:
+            working_minutes_from_create = calculate_working_minutes_between(creation_date, update_date)
+        
+        # Find current status change date and calculate minutes in current status
         status_name = issue_data['status']
         status_change_date = None
-        working_minutes_in_status = None
-          # Find the most recent status change to the current status
-        # Iterate in reverse order to find the LAST occurrence
+        working_minutes_in_current_status = 0
+        
+        # Find the most recent status change to the current status
         for history in reversed(status_change_history):
             for change in history['changes']:
                 if change['field'] == 'status' and change['to'] == status_name:
@@ -558,20 +585,29 @@ class IssueHistoryExtractor:
             if status_change_date:
                 break
         
-        # If we found a status change date, calculate working minutes in status
+        # Calculate working minutes in current status
         if status_change_date:
-            working_minutes_in_status = calculate_working_minutes_between(status_change_date, now())        # Calculate categorized time metrics
-        creation_date = issue_data.get('created')
-        update_date = issue_data.get('updated')
+            working_minutes_in_current_status = calculate_working_minutes_between(status_change_date, update_date)
+        else:
+            # If no status change found, time in status equals total time from creation
+            working_minutes_in_current_status = working_minutes_from_create
+        
+        # Calculate working minutes from first move (todo exit date)
+        todo_exit_date = self._find_todo_exit_date(status_change_history)
+        working_minutes_from_first_move = 0
+        if todo_exit_date and update_date:
+            working_minutes_from_first_move = calculate_working_minutes_between(todo_exit_date, update_date)
+        
+        # Calculate categorized time metrics
         categorized_metrics = self._calculate_categorized_time_metrics(status_change_history, creation_date, update_date)
         
         # Calculate status transition metrics
         transition_metrics = self._calculate_status_transition_metrics(status_change_history, creation_date, update_date)
         
         return {
-            'status_name': status_name,
-            'status_change_date': status_change_date,
-            'working_minutes_in_status': working_minutes_in_status,
+            'working_minutes_from_create': working_minutes_from_create,
+            'working_minutes_in_current_status': working_minutes_in_current_status,
+            'working_minutes_from_first_move': working_minutes_from_first_move,
             'backlog_minutes': categorized_metrics['backlog_minutes'],
             'processing_minutes': categorized_metrics['processing_minutes'],
             'waiting_minutes': categorized_metrics['waiting_minutes'],
@@ -579,7 +615,8 @@ class IssueHistoryExtractor:
             'total_transitions': transition_metrics['total_transitions'],
             'backflow_count': transition_metrics['backflow_count'],
             'unique_statuses_visited': transition_metrics['unique_statuses_visited'],
-            'status_transitions': transition_metrics['status_transitions']        }
+            'todo_exit_date': to_iso8601(todo_exit_date) if todo_exit_date else None
+        }
     
     def _find_todo_exit_date(self, status_change_history: List[Dict[str, Any]]) -> Optional[Any]:
         """Find the date when the issue first changed status from its initial status."""
@@ -711,22 +748,184 @@ class IssueHistoryExtractor:
             'todo_exit_date': to_iso8601(todo_exit_date) if todo_exit_date else None
         }
     
-    def _is_in_category(self, status_name, category_set):
-        """Check if a status belongs to a category in a case-insensitive way."""
-        if not status_name:
-            return False
-        return status_name.lower().strip() in category_set
-    
-    def safe_get_field(self, obj, field_name, default=None):
-        """Helper function to safely get a field from an object regardless of its type.
-        Delegates to JiraFieldManager's safe_get_field method to avoid code duplication.
+    def _extract_detailed_status_transitions(self, issue) -> List[Dict[str, Any]]:
+        """
+        Extract detailed status transitions with author information and timing.
         
         Args:
-            obj: The object to extract a field from
-            field_name: The name of the field to extract
-            default: Default value to return if the field doesn't exist
+            issue: JIRA issue object with changelog
             
         Returns:
-            The value of the field or the default value
+            List of status transition records with detailed information
         """
-        return self.field_manager.safe_get_field(obj, field_name, default)
+        transitions = []
+        
+        if not (hasattr(issue, 'changelog') and hasattr(issue.changelog, 'histories')):
+            return transitions
+        
+        # Get status change history for timing calculations
+        status_change_history = self._extract_status_change_history(issue)
+        
+        # Track timing for each transition
+        previous_status_start = issue.fields.created if hasattr(issue.fields, 'created') else None
+        
+        for i, history in enumerate(status_change_history):
+            for change in history['changes']:
+                if change['field'] == 'status':
+                    # Calculate time spent in previous status
+                    minutes_in_previous = 0
+                    if previous_status_start:
+                        minutes_in_previous = calculate_working_minutes_between(
+                            previous_status_start, history['historyDate']
+                        )
+                    
+                    # Find the original history record for author information
+                    author_name = None
+                    author_display = None
+                    for orig_history in issue.changelog.histories:
+                        if parse_date(orig_history.created) == history['historyDate']:
+                            if hasattr(orig_history, 'author'):
+                                author_name = orig_history.author.name if hasattr(orig_history.author, 'name') else None
+                                author_display = orig_history.author.displayName if hasattr(orig_history.author, 'displayName') else None
+                            break
+                    
+                    # Determine if this is a forward or backward transition
+                    is_forward, is_backflow = self._analyze_transition_direction(
+                        change['from'], change['to']
+                    )
+                    
+                    transition_record = {
+                        'from_status': change['from'],
+                        'to_status': change['to'],
+                        'transition_date': to_iso8601(history['historyDate']),
+                        'minutes_in_previous_status': minutes_in_previous,
+                        'is_forward_transition': is_forward,
+                        'is_backflow': is_backflow,
+                        'author': author_display or author_name
+                    }
+                    
+                    transitions.append(transition_record)
+                    
+                    # Update for next iteration
+                    previous_status_start = history['historyDate']
+                    break
+        
+        return transitions
+    
+    def _extract_field_changes(self, issue) -> List[Dict[str, Any]]:
+        """
+        Extract all non-status field changes from the changelog.
+        
+        Args:
+            issue: JIRA issue object with changelog
+            
+        Returns:
+            List of field change records grouped by change date
+        """
+        field_changes = []
+        
+        if not (hasattr(issue, 'changelog') and hasattr(issue.changelog, 'histories')):
+            return field_changes
+        
+        for history in issue.changelog.histories:
+            # Collect all non-status changes for this history entry
+            non_status_changes = []
+            
+            for item in history.items:
+                if item.field != 'status':  # Exclude status changes
+                    change_record = {
+                        'field': item.field,
+                        'fieldtype': getattr(item, 'fieldtype', 'jira'),
+                        'from': item.fromString,
+                        'to': item.toString
+                    }
+                    non_status_changes.append(change_record)
+            
+            # Only add if there are non-status changes
+            if non_status_changes:
+                # Get author information
+                author_name = None
+                author_display = None
+                if hasattr(history, 'author'):
+                    author_name = history.author.name if hasattr(history.author, 'name') else None
+                    author_display = history.author.displayName if hasattr(history.author, 'displayName') else None
+                
+                field_change_record = {
+                    'change_date': to_iso8601(parse_date(history.created)),
+                    'author': author_display or author_name,
+                    'changes': non_status_changes
+                }
+                
+                field_changes.append(field_change_record)
+        
+        # Sort by change date
+        field_changes.sort(key=lambda x: x['change_date'])
+        
+        return field_changes
+    
+    def _analyze_transition_direction(self, from_status: str, to_status: str) -> Tuple[bool, bool]:
+        """
+        Analyze whether a status transition is forward or backward in the workflow.
+        
+        Args:
+            from_status: Source status
+            to_status: Target status
+            
+        Returns:
+            Tuple of (is_forward_transition, is_backflow)
+        """
+        # Define typical workflow order for backflow detection (case-insensitive)
+        workflow_order = {
+            'backlog': 1,
+            'draft': 2,
+            'open': 3,
+            'hold': 4,
+            'planned': 5,
+            'selected for development': 6,
+            'do poprawy': 7,
+            'in progress': 8,
+            'ready for review': 9,
+            'in review': 10,
+            'ready for testing': 11,
+            'testy wewnętrzne': 12,
+            'testing': 13,
+            'do akceptacji klienta': 14,
+            'awaiting production release': 15,
+            'customer notification': 16,
+            'closed': 17,
+            'canceled': 18,
+            'completed': 19,
+            'done': 20
+        }
+        
+        def get_order(status):
+            if not status:
+                return 0
+            return workflow_order.get(status.lower().strip(), 999)  # Unknown statuses get high number
+        
+        from_order = get_order(from_status)
+        to_order = get_order(to_status)
+        
+        # Forward transition: moving to higher order number
+        is_forward = to_order > from_order
+          # Backflow: moving to significantly lower order number (not just adjacent)
+        is_backflow = from_order > to_order and (from_order - to_order) > 1
+        
+        return is_forward, is_backflow
+    
+    def _is_in_category(self, status: str, status_list: List[str]) -> bool:
+        """
+        Check if a status is in a given category list (case-insensitive).
+        
+        Args:
+            status: Status name to check
+            status_list: List of status names in the category
+            
+        Returns:
+            bool: True if status is in the category
+        """
+        if not status or not status_list:
+            return False
+        
+        status_lower = status.lower().strip()
+        return any(status_lower == cat_status.lower().strip() for cat_status in status_list)

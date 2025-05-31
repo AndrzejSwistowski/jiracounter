@@ -101,99 +101,40 @@ class TestIssueHistoryExtractor(unittest.TestCase):
         result = self.extractor._extract_comments(issue, "TEST-123")
         self.assertIsNone(result)
 
-    def test_create_creation_record(self):
-        """Test creation of issue creation record."""
-        # Mock issue data
-        issue = Mock()
-        issue.id = "12345"
-        issue.fields = Mock()
-        issue.fields.project = Mock()
-        issue.fields.project.key = "TEST"
-        issue.fields.project.name = "Test Project"
-        issue_data = {
-            'created': '2023-01-01T10:00:00+00:00',
-            'issue_type': 'Story',
-            'assignee': {
-                'display_name': 'John Doe',
-                'key': 'jdoe',
-                'name': 'jdoe',
-                'email_address': 'jdoe@example.com'
-            },
-            'reporter': {
-                'display_name': 'Jane Smith',
-                'key': 'jsmith',
-                'name': 'jsmith',
-                'email_address': 'jsmith@example.com'
-            },
-            'allocation_code': 'NEW',
+    def test_field_manager_integration(self):
+        """Test that extractor properly uses field manager through data extractor."""
+        # Set up mock issue data extraction
+        self.data_extractor.extract_issue_data.return_value = {
+            'key': 'TEST-123',
             'summary': 'Test Issue',
-            'labels': ['test'],
-            'components': [],
-            'parent_issue': None,
-            'epic_issue': None,
-            'status_change_date': None,
-            'updated': '2023-01-01T10:00:00+00:00'        }
+            'status': 'Open'
+        }
         
-        description_text = "Test description"
-        comment_text = [
-            {
-                'created_at': '2023-01-02T10:00:00+00:00',
-                'body': 'Test comment 1',
-                'author': 'John Doe'
-            },
-            {
-                'created_at': '2023-01-03T14:30:00+00:00', 
-                'body': 'Test comment 2',
-                'author': 'Jane Smith'
-            }
-        ]
+        # Create a mock issue with proper changelog structure
+        issue = Mock()
+        issue.fields = Mock()
+        issue.fields.description = "Test description"
+        issue.fields.comment = Mock()
+        issue.fields.comment.comments = []
         
-        result = self.extractor._create_creation_record(
-            issue, "TEST-123", issue_data, description_text, comment_text
-        )
+        # Mock changelog structure to avoid iteration error
+        issue.changelog = Mock()
+        issue.changelog.histories = []  # Empty list instead of Mock
         
-        # Verify the creation record structure
-        self.assertEqual(result['factType'], 1)  # 1 = create
+        # Test that extract_issue_changelog uses the data extractor
+        result = self.extractor.extract_issue_changelog(issue, "TEST-123")
         
-        # Verify issue_data field contains all the issue information
+        # Verify that data extractor was called
+        self.data_extractor.extract_issue_data.assert_called_once_with(issue)
+        
+        # Verify the structure of the result
+        self.assertIsInstance(result, dict)
         self.assertIn('issue_data', result)
-        issue_data_result = result['issue_data']
-        self.assertEqual(issue_data_result['created'], '2023-01-01T10:00:00+00:00')
-        self.assertEqual(issue_data_result['issue_type'], 'Story')
-        self.assertEqual(issue_data_result['allocation_code'], 'NEW')
-        self.assertEqual(issue_data_result['summary'], 'Test Issue')
-        
-        # Verify assignee and reporter structure
-        self.assertEqual(issue_data_result['assignee']['display_name'], 'John Doe')
-        self.assertEqual(issue_data_result['assignee']['name'], 'jdoe')
-        self.assertEqual(issue_data_result['reporter']['display_name'], 'Jane Smith')
-        self.assertEqual(issue_data_result['reporter']['name'], 'jsmith')
-        
-        # Verify other fields
-        self.assertEqual(result['working_minutes_from_create'], 0)
-        self.assertEqual(result['working_minutes_in_status'], 0)
-        self.assertEqual(result['backlog_minutes'], 0)
-        self.assertEqual(result['processing_minutes'], 0)
-        self.assertEqual(result['waiting_minutes'], 0)
-        self.assertEqual(result['description_text'], description_text)
-        self.assertEqual(result['comment_text'], comment_text)
-        
-        # Verify changes include description
-        self.assertEqual(len(result['changes']), 1)
-        self.assertEqual(result['changes'][0]['field'], 'description')
-        self.assertEqual(result['changes'][0]['to'], description_text)
-
-    def test_safe_get_field_delegation(self):
-        """Test that safe_get_field properly delegates to field manager."""
-        # Set up mock return value
-        self.field_manager.safe_get_field.return_value = "test_value"
-        
-        # Call the method
-        result = self.extractor.safe_get_field("test_obj", "test_field", "default")
-        
-        # Verify delegation
-        self.field_manager.safe_get_field.assert_called_once_with("test_obj", "test_field", "default")
-        self.assertEqual(result, "test_value")
+        self.assertIn('issue_description', result)
+        self.assertIn('issue_comments', result)
+        self.assertIn('metrics', result)
+        self.assertIn('status_transitions', result)
+        self.assertIn('field_changes', result)
 
 
 def run_basic_test():

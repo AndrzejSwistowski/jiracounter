@@ -202,10 +202,9 @@ class JiraService:
             raise
         except Exception as e:
             logger.error(f"Error retrieving changelog for issue {issue_key}: {str(e)}")
-            raise
-
+            raise    
     def get_issue_history(self, start_date=None, end_date=None, max_issues=None) -> List[Dict[str, Any]]:
-        """Retrieve issue history records for issues updated within a date range.
+        """Retrieve comprehensive issue records for issues updated within a date range.
         
         Args:
             start_date: The start date for the search (datetime or str)
@@ -213,7 +212,7 @@ class JiraService:
             max_issues: Maximum number of issues to process
             
         Returns:
-            List of history records with standardized format
+            List of comprehensive issue records with current state, metrics, and history
         """
         # Format dates for JQL consistently using time_utils function
         if start_date:
@@ -245,21 +244,18 @@ class JiraService:
             for issue_data in issues:
                 issue_key = issue_data['key']
                 logger.debug(f"Processing changelog for issue {issue_key}")
-                
-                # Get detailed changelog using the enhanced get_issue_changelog method
+                  # Get detailed changelog using the enhanced get_issue_changelog method
                 issue_history = self.get_issue_changelog(issue_key)
                 
-                # Don't filter history records by date - include all history
-                # This ensures we don't miss any records that might have been 
-                # updated during processing or that belong to a previous period
-                # The consumer of this data can handle deduplication as needed
-                all_history_records.extend(issue_history)
+                # The new structure returns a single comprehensive record per issue
+                # instead of multiple history records
+                all_history_records.append(issue_history)
                 
-                # Log the number of history records found for this issue            logger.debug(f"Found {len(issue_history)} history records for issue {issue_key}")
-            
-            # Sort by history date
-            all_history_records.sort(key=lambda x: x['created'])
-            logger.info(f"Extracted {len(all_history_records)} history records")
+                # Log that we processed this issue
+                logger.debug(f"Processed comprehensive history record for issue {issue_key}")
+              # Sort by issue created date (from issue_data section)
+            all_history_records.sort(key=lambda x: x['issue_data']['created'])
+            logger.info(f"Extracted {len(all_history_records)} comprehensive issue records")
             return all_history_records
             
         except Exception as e:

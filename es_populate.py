@@ -269,13 +269,16 @@ class JiraElasticsearchPopulator:
         # Call bulk_insert_issue_history with a single record
         result = self.bulk_insert_issue_history([history_record])
         return result > 0
-    
-    def bulk_insert_issue_history(self, history_records):
+      def bulk_insert_issue_history(self, history_records):
         """
         Inserts multiple issue history records into Elasticsearch in a single bulk operation.
         
+        This method now supports both the old individual history record format and 
+        the new comprehensive record format.
+        
         Args:
-            history_records: List of dictionaries containing issue history data
+            history_records: List of dictionaries containing either individual history data
+                           or comprehensive issue records
             
         Returns:
             int: Number of records successfully inserted
@@ -291,16 +294,23 @@ class JiraElasticsearchPopulator:
             actions = []
             for record in history_records:
                 try:
-                    # Check if historyId exists and is valid
-                    if 'historyId' not in record:
-                        logger.warning(f"Record missing historyId, skipping: {record.get('issueKey', 'unknown')}")
-                        continue
-                        
-                    # Format the record for Elasticsearch
-                    doc = self.format_changelog_entry(record)
-                    
-                    # Generate a unique ID for the document
-                    doc_id = f"{record.get('issueKey', 'unknown')}_{record['historyId']}"
+                    # Detect record type and format accordingly
+                    if self._is_comprehensive_record(record):
+                        # New comprehensive record format
+                        doc = self.format_comprehensive_record(record)
+                        # Generate a unique ID for the comprehensive document
+                        issue_key = record.get('issue_data', {}).get('key', 'unknown')
+                        doc_id = f"{issue_key}_comprehensive"
+                    else:
+                        # Old individual history record format
+                        if 'historyId' not in record:
+                            logger.warning(f"Record missing historyId, skipping: {record.get('issueKey', 'unknown')}")
+                            continue
+                            
+                        # Format the record for Elasticsearch using the old method
+                        doc = self.format_changelog_entry(record)
+                        # Generate a unique ID for the document
+                        doc_id = f"{record.get('issueKey', 'unknown')}_{record['historyId']}"
                     
                     # Add the action
                     actions.append({
@@ -310,7 +320,8 @@ class JiraElasticsearchPopulator:
                     })
                 except Exception as e:
                     logger.error(f"Error processing record: {e}")
-                    logger.debug(f"Problematic record: {record.get('historyId', 'unknown')} for issue {record.get('issueKey', 'unknown')}")
+                    issue_id = self._extract_issue_identifier(record)
+                    logger.debug(f"Problematic record: {issue_id}")
                     continue
               # Execute the bulk operation
             if actions:
@@ -415,17 +426,19 @@ class JiraElasticsearchPopulator:
                     all_bulk_operations_succeeded = False
                     logger.warning(f"Batch insert failed - 0 records inserted out of {len(batch)}")
                     break
-                
-                # Update the last successful date if records were inserted
+                  # Update the last successful date if records were inserted
                 if inserted_count > 0 and batch:
                     last_record = batch[-1]
-                    if last_record.get('historyDate'):
+                    # For the new comprehensive record structure, use issue_data.updated as the tracking date
+                    if last_record.get('issue_data', {}).get('updated'):
                         try:
-                            record_date = datetime.fromisoformat(last_record['historyDate']) if isinstance(last_record['historyDate'], str) else last_record['historyDate']
+                            record_date = last_record['issue_data']['updated']
+                            if isinstance(record_date, str):
+                                record_date = datetime.fromisoformat(record_date)
                             if isinstance(record_date, datetime):
                                 last_successful_date = record_date
                         except (ValueError, TypeError):
-                            logger.debug(f"Could not parse historyDate: {last_record.get('historyDate')}")
+                            logger.debug(f"Could not parse updated date: {last_record.get('issue_data', {}).get('updated')}")
             
             logger.info(f"Successfully inserted {total_inserted} out of {len(history_records)} records")
             success_count = total_inserted
@@ -708,6 +721,50 @@ class JiraElasticsearchPopulator:
             logger.error(f"Error during bulk operation: {e}")
             return 0, len(actions) if actions else 0
             
+    def _is_comprehensive_record(self, record):
+        """
+        Detect if a record is a comprehensive record or an individual history record.
+        
+        Args:
+            record: Dictionary containing record data
+            
+        Returns:
+            bool: True if it's a comprehensive record, False if it's an individual history record
+        """
+        # Comprehensive records have these specific top-level keys
+        comprehensive_keys = {'issue_data', 'metrics', 'status_transitions', 'field_changes'}
+        
+        # Check if at least 2 of the comprehensive keys are present
+        present_keys = set(record.keys()) & comprehensive_keys
+        return len(present_keys) >= 2
+    
+    def _extract_issue_identifier(self, record):
+        """
+        Extract issue identifier from either record type for logging purposes.
+        
+        Args:
+            record: Dictionary containing record data
+            
+        Returns:
+            str: Issue identifier for logging
+        """
+        if self._is_comprehensive_record(record):
+            return record.get('issue_data', {}).get('key', 'unknown')
+        else:
+            return f"{record.get('historyId', 'unknown')} for issue {record.get('issueKey', 'unknown')}"
+
+    def format_comprehensive_record(self, comprehensive_record):
+        """
+        Format a comprehensive record for insertion into Elasticsearch.
+        
+        Args:
+            comprehensive_record: Dictionary containing the comprehensive issue data
+            
+        Returns:
+            Dict containing the formatted data for Elasticsearch
+        """
+        return ElasticsearchDocumentFormatter.format_comprehensive_record(comprehensive_record)
+        
 # Example usage
 if __name__ == "__main__":
     # Configure logging
