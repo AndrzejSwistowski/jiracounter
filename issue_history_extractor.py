@@ -10,7 +10,7 @@ from typing import Dict, Any, Optional, List, Tuple
 from time_utils import (
     to_iso8601, parse_date, calculate_working_days_between, now,
     find_status_change_date, calculate_working_minutes_since_date,
-    calculate_working_minutes_between
+    calculate_working_minutes_between, format_working_minutes_to_text
 )
 from jira_field_manager import JiraFieldManager
 
@@ -793,12 +793,18 @@ class IssueHistoryExtractor:
                     is_forward, is_backflow = self._analyze_transition_direction(
                         change['from'], change['to']
                     )
+                      # Calculate days and time period string for minutes_in_previous_status
+                    # Using 8-hour working days (60 * 8 = 480 minutes per day)
+                    days_in_previous = int(minutes_in_previous / 480) if minutes_in_previous else 0
+                    period_text = format_working_minutes_to_text(minutes_in_previous) if minutes_in_previous else None
                     
                     transition_record = {
                         'from_status': change['from'],
                         'to_status': change['to'],
                         'transition_date': to_iso8601(history['historyDate']),
                         'minutes_in_previous_status': minutes_in_previous,
+                        'days_in_previous_status': days_in_previous,
+                        'period_in_previous_status': period_text,
                         'is_forward_transition': is_forward,
                         'is_backflow': is_backflow,
                         'author': author_display or author_name
@@ -873,25 +879,40 @@ class IssueHistoryExtractor:
             
         Returns:
             Tuple of (is_forward_transition, is_backflow)
-        """
-        # Define typical workflow order for backflow detection (case-insensitive)
+        """        # Define typical workflow order for backflow detection (case-insensitive)
         workflow_order = {
+            # Backlog/planning phase
             'backlog': 1,
             'draft': 2,
             'open': 3,
             'hold': 4,
             'planned': 5,
+            
+            # Development selection phase - handle legacy names
             'selected for development': 6,
+            'to do': 6,  # Legacy name for 'selected for development'
+            
+            # Development phase
             'do poprawy': 7,
             'in progress': 8,
+            'w trakcie': 8,      # Legacy name for 'in progress' 
+            'in progress2': 8,   # Legacy name for 'in progress'
+            
+            # Review phase
             'ready for review': 9,
             'in review': 10,
+            
+            # Testing phase
             'ready for testing': 11,
             'testy wewnętrzne': 12,
             'testing': 13,
+            
+            # Approval and release phase
             'do akceptacji klienta': 14,
             'awaiting production release': 15,
             'customer notification': 16,
+            
+            # Completion phase
             'closed': 17,
             'canceled': 18,
             'completed': 19,

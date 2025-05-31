@@ -130,12 +130,13 @@ CHANGELOG_MAPPING = {
             "backflow_count": {"type": "integer"},
             "unique_statuses_visited": {"type": "keyword"},
             "status_transitions": {
-                "type": "nested",  # Keep as nested for multiple transitions
-                "properties": {
+                "type": "nested",  # Keep as nested for multiple transitions                "properties": {
                     "from_status": {"type": "keyword"},
                     "to_status": {"type": "keyword"},
                     "transition_date": {"type": "date"},
                     "minutes_in_previous_status": {"type": "integer"},
+                    "days_in_previous_status": {"type": "integer"},
+                    "period_in_previous_status": {"type": "text"},
                     "is_forward_transition": {"type": "boolean"},
                     "is_backflow": {"type": "boolean"},
                     "author": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
@@ -159,7 +160,7 @@ CHANGELOG_MAPPING = {
             }
         }
     }
-}
+
 
 # Settings index mapping (same as original)
 SETTINGS_MAPPING = {
