@@ -18,8 +18,7 @@ from jira_field_manager import JiraFieldManager
 class IssueHistoryExtractor:
     """
     Handles extraction of issue history data from JIRA issues.
-    This class follows the Single Responsibility Principle by focusing solely on history data extraction.
-    """
+    This class follows the Single Responsibility Principle by focusing solely on history data extraction.    """
     
     def __init__(self, field_manager: JiraFieldManager, data_extractor):
         """
@@ -32,7 +31,7 @@ class IssueHistoryExtractor:
         self.field_manager = field_manager
         self.data_extractor = data_extractor
         self.logger = logging.getLogger(__name__)
-    
+
     def extract_issue_changelog(self, issue, issue_key: str) -> List[Dict[str, Any]]:
         """
         Extract comprehensive changelog data from a JIRA issue.
@@ -54,35 +53,30 @@ class IssueHistoryExtractor:
                     'historyDate': '2023-01-01T10:00:00+00:00',  # Date of the change (ISO 8601)
                     'factType': 1,                         # 1=create, 2=transition, 3=update
                     
-                    # Issue identification
-                    'issueId': '12345',                    # JIRA issue ID
-                    'issueKey': 'PROJECT-123',            # JIRA issue key
-                    'typeName': 'Story',                   # Issue type
-                    'statusName': 'In Progress',           # Status at this point in history
+                    # Issue data (contains all basic issue information)
+                    'issue_data': {
+                        'issueId': '12345',
+                        'issueKey': 'PROJECT-123',
+                        'type': 'Story',
+                        'status': 'In Progress',
+                        'assignee': {'username': 'jdoe', 'display_name': 'John Doe'},
+                        'reporter': {'username': 'jsmith', 'display_name': 'Jane Smith'},
+                        'allocation_code': 'NEW',
+                        'project_key': 'PROJECT',
+                        'project_name': 'Project Name',
+                        'parent_issue': {'key': 'PROJECT-122', 'summary': 'Parent Issue'},
+                        'epic_issue': {'key': 'PROJECT-100', 'name': 'Feature Epic'},
+                        'summary': 'Issue title',
+                        'labels': ['label1', 'label2'],
+                        'components': [{'id': '1001', 'name': 'Frontend'}],
+                        'created': datetime_object,
+                        'updated': datetime_object,
+                        'status_change_date': datetime_object
+                    },
                     
-                    # People information
-                    'assigneeUserName': 'jdoe',           # Assignee username
-                    'assigneeDisplayName': 'John Doe',    # Assignee display name
-                    'reporterUserName': 'jsmith',         # Reporter username
-                    'reporterDisplayName': 'Jane Smith',  # Reporter display name
+                    # Change author information (different from issue assignee/reporter)
                     'authorUserName': 'admin',            # Change author username
                     'authorDisplayName': 'Admin User',    # Change author display name
-                    
-                    # Project and hierarchy
-                    'allocationCode': 'NEW',              # Work allocation code
-                    'projectKey': 'PROJECT',              # Project key
-                    'projectName': 'Project Name',        # Project name
-                    'parentKey': 'PROJECT-122',           # Parent issue key (if any)
-                    'parent_issue': {                     # Full parent issue info
-                        'id': '12344',
-                        'key': 'PROJECT-122',
-                        'summary': 'Parent Issue'
-                    },
-                    'parent_summary': 'Parent Issue',     # Parent issue summary
-                    'epic_issue': {                       # Epic information
-                        'key': 'PROJECT-100',
-                        'name': 'Feature Epic'
-                    },
                     
                     # Change details
                     'changes': [                          # List of field changes in this history
@@ -91,34 +85,22 @@ class IssueHistoryExtractor:
                             'fieldtype': 'jira',
                             'from': 'Open',
                             'to': 'In Progress'
-                        },
-                        {
-                            'field': 'assignee',
-                            'fieldtype': 'jira',
-                            'from': 'jsmith',
-                            'to': 'jdoe'
                         }
                     ],
                     
-                    # Issue content
-                    'summary': 'Issue title',            # Issue summary
-                    'labels': ['label1', 'label2'],      # Issue labels
-                    'components': [                      # Issue components
-                        {
-                            'id': '1001',
-                            'name': 'Frontend',
-                            'description': 'UI components'
-                        }
-                    ],
+                    # Content fields
                     'description_text': 'Issue description...',  # Full description text
-                    'comment_text': '[2023-01-02T10:00:00+00:00 by John Doe] Comment text...',  # All comments                    # Time metrics (calculated at this history point)
+                    'comment_text': '[2023-01-02T10:00:00+00:00 by John Doe] Comment text...',  # All comments
+                    
+                    # Time metrics (calculated at this history point)
                     'working_minutes_from_create': 7200, # Working minutes from creation to this history point
                     'working_minutes_in_status': 2880,   # Working minutes in current status at this point
                     'working_minutes_from_move_at_point': 4320, # Working minutes from first status change
-                      # Categorized time metrics (working minutes spent in status categories)
+                    
+                    # Categorized time metrics (working minutes spent in status categories)
                     'backlog_minutes': 1440,            # Working minutes spent in 'Backlog' status
-                    'processing_minutes': 5760,         # Working minutes spent in processing statuses ('In progress', 'In review', 'testing')
-                    'waiting_minutes': 2880,            # Working minutes spent in waiting statuses (all others except completed/backlog)
+                    'processing_minutes': 5760,         # Working minutes spent in processing statuses
+                    'waiting_minutes': 2880,            # Working minutes spent in waiting statuses
                     
                     # Status transition metrics (for workflow analysis)
                     'previous_status': 'In progress',   # Previous status before current one
@@ -136,12 +118,7 @@ class IssueHistoryExtractor:
                         }
                     ],
                     
-                    'todo_exit_date': '2023-01-03T09:00:00+00:00',  # Date of first status change
-                    
-                    # Date fields (ISO 8601 format)
-                    'status_change_date': '2023-01-10T09:00:00+00:00',  # Last status change date
-                    'created': '2023-01-01T10:00:00+00:00',             # Issue creation date
-                    'updated': '2023-01-15T14:30:00+00:00'              # Issue last update date
+                    'todo_exit_date': '2023-01-03T09:00:00+00:00'  # Date of first status change
                 }
             ]
             
@@ -227,10 +204,9 @@ class IssueHistoryExtractor:
                     comment_text = "\n\n".join(all_comments)
                     self.logger.debug(f"Found {len(all_comments)} comments for issue {issue_key}")
             except Exception as e:
-                self.logger.warning(f"Error processing comments for {issue_key}: {e}")
-                
+                self.logger.warning(f"Error processing comments for {issue_key}: {e}")                
         return comment_text
-    
+        
     def _create_creation_record(self, issue, issue_key: str, issue_data: Dict[str, Any], 
                               description_text: Optional[str], comment_text: Optional[str]) -> Dict[str, Any]:
         """Create a synthetic creation record for the issue."""
@@ -247,48 +223,48 @@ class IssueHistoryExtractor:
             })
             self.logger.debug(f"Added initial description to changes for issue {issue_key} (length: {len(description_text)})")
         
+        # Create a copy of issue_data for the creation record and set initial status
+        creation_issue_data = issue_data.copy()
+        creation_issue_data['status'] = 'Backlog'  # Assume issues start as Backlog
+        
         return {
             'historyId': int(f"{issue.id}00000"),  # Use a synthetic ID for creation
-            'historyDate': issue_data['created'],  # Store as ISO8601 format with timezone
+            'historyDate': to_iso8601(issue_data['created']),  # Store as ISO8601 format with timezone
             'factType': 1,  # 1 = create
-            'issueId': issue.id,
-            'issueKey': issue_key,
-            'typeName': issue_data['type'],            'statusName': 'Backlog',  # Assume issues start as Backlog
-            'assigneeUserName': issue_data['assignee'],
-            'assigneeDisplayName': issue_data['assignee'].get('display_name') if issue_data['assignee'] else None,
-            'reporterUserName': issue_data['reporter'],
-            'reporterDisplayName': issue_data['reporter'].get('display_name') if issue_data['reporter'] else None,
-            'allocationCode': issue_data.get('allocation_code'),
-            'projectKey': issue.fields.project.key,
-            'projectName': issue.fields.project.name,
-            'parentKey': issue_data.get('parent_issue', {}).get('key') if issue_data.get('parent_issue') else None,
-            'authorUserName': issue_data['reporter'],
-            'authorDisplayName': issue_data['reporter'].get('display_name') if issue_data['reporter'] else None,
+            
+            # Include complete issue data
+            'issue_data': creation_issue_data,
+            
+            # Author information (for creation record, author is the reporter)
+            'authorUserName': issue_data['reporter']['username'] if issue_data['reporter'] else None,
+            'authorDisplayName': issue_data['reporter']['display_name'] if issue_data['reporter'] else None,
+            
+            # Change details
             'changes': creation_changes,  # Include description as a change if it exists
-            'summary': issue_data['summary'],
-            'labels': issue_data['labels'],
-            'components': issue_data['components'],            
-            'parent_issue': issue_data.get('parent_issue'),
-            'parent_summary': issue_data.get('parent_issue', {}).get('summary') if issue_data.get('parent_issue') else None,
-            'epic_issue': issue_data.get('epic_issue'),            
+            
+            # Content fields
+            'description_text': description_text,  # Add description text field directly
+            'comment_text': comment_text,       # Add comments text field
+            
+            # Time metrics (all zero for creation record)
             'working_minutes_from_create': 0,  # Just created, so 0 minutes
             'working_minutes_in_status': 0,       # Just created, so 0 minutes in status
-            'working_minutes_from_move_at_point': None,    # No status change yet            
+            'working_minutes_from_move_at_point': None,    # No status change yet
+            
+            # Categorized time metrics (all zero for creation record)
             'backlog_minutes': 0,           # Just created, so 0 minutes in backlog
             'processing_minutes': 0,        # Just created, so 0 minutes in processing
             'waiting_minutes': 0,           # Just created, so 0 minutes waiting
+            
+            # Status transition metrics (initial values for creation record)
             'previous_status': None,        # Just created, so no previous status
             'total_transitions': 0,         # Just created, so no transitions yet
             'backflow_count': 0,           # Just created, so no backflows yet
             'unique_statuses_visited': ['Backlog'],  # Just created, only initial status
-            'status_transitions': [],       # Just created, no transitions yet            'todo_exit_date': None,
-            "status_change_date": to_iso8601(issue_data['status_change_date']) if issue_data['status_change_date'] else None,
-            "todo_exit_date": None,  # No todo exit date for creation record
-            "status_change_date": to_iso8601(issue_data['created']) if issue_data['created'] else None,  # For creation record, use creation date
-            "created": to_iso8601(issue_data['created']) if issue_data['created'] else None,
-            "updated": to_iso8601(issue_data['updated']) if issue_data['updated'] else None,
-            "description_text": description_text,  # Add description text field directly
-            "comment_text": comment_text       # Add comments text field
+            'status_transitions': [],       # Just created, no transitions yet
+            
+            # Date fields
+            'todo_exit_date': None  # No todo exit date for creation record
         }
       
     def _extract_status_change_history(self, issue) -> List[Dict[str, Any]]:
@@ -344,11 +320,10 @@ class IssueHistoryExtractor:
                 'processing_minutes': int, 
                 'waiting_minutes': int
             }
-        """
-        # Define status categories
-        processing_statuses = {'In progress', 'In review', 'testing'}
-        backlog_statuses = {'Backlog'}
-        completed_statuses = {'Completed', 'Done', 'Closed', 'Resolved'}
+        """        # Define status categories (case-insensitive)
+        processing_statuses = {'in progress', 'in review', 'testing'}
+        backlog_statuses = {'backlog'}
+        completed_statuses = {'completed', 'done', 'closed', 'resolved'}
         
         # Initialize counters
         backlog_minutes = 0
@@ -370,8 +345,7 @@ class IssueHistoryExtractor:
                 'processing_minutes': processing_minutes,
                 'waiting_minutes': waiting_minutes
             }
-        
-        # Find the initial status from the first status change
+          # Find the initial status from the first status change
         initial_status = None
         for history in status_change_history:
             for change in history['changes']:
@@ -380,7 +354,8 @@ class IssueHistoryExtractor:
                     break
             if initial_status:
                 break
-          # If we couldn't find initial status, assume 'Backlog'
+        
+        # If we couldn't find initial status, assume 'Backlog'
         if not initial_status:
             initial_status = 'Backlog'
         
@@ -391,13 +366,12 @@ class IssueHistoryExtractor:
             for change in history['changes']:
                 if change['field'] == 'status':
                     # Calculate time spent in previous status
-                    time_in_status = calculate_working_minutes_between(status_start_date, history['historyDate'])
-                      # Categorize the time based on the status we're leaving
-                    if current_status in backlog_statuses:
+                    time_in_status = calculate_working_minutes_between(status_start_date, history['historyDate'])                    # Categorize the time based on the status we're leaving
+                    if self._is_in_category(current_status, backlog_statuses):
                         backlog_minutes += time_in_status
-                    elif current_status in processing_statuses:
+                    elif self._is_in_category(current_status, processing_statuses):
                         processing_minutes += time_in_status
-                    elif current_status not in completed_statuses:
+                    elif not self._is_in_category(current_status, completed_statuses):
                         # Not in backlog, processing, or completed = waiting
                         waiting_minutes += time_in_status
                     # If in completed status, we don't count the time
@@ -405,15 +379,13 @@ class IssueHistoryExtractor:
                     # Update for next iteration
                     current_status = change['to']
                     status_start_date = history['historyDate']
-                    break
-        
-        # Calculate time spent in final status (from last change to update date)
-        if current_status not in completed_statuses:
+                    break        # Calculate time spent in final status (from last change to update date)
+        if not self._is_in_category(current_status, completed_statuses):
             time_in_final_status = calculate_working_minutes_between(status_start_date, update_date)
             
-            if current_status in backlog_statuses:
+            if self._is_in_category(current_status, backlog_statuses):
                 backlog_minutes += time_in_final_status
-            elif current_status in processing_statuses:
+            elif self._is_in_category(current_status, processing_statuses):
                 processing_minutes += time_in_final_status
             else:
                 waiting_minutes += time_in_final_status
@@ -460,30 +432,35 @@ class IssueHistoryExtractor:
         # Initialize result structure
         transitions = []
         unique_statuses = set()
-        backflow_count = 0
-          # Define typical workflow order for backflow detection
-        workflow_order = {
-            'Backlog': 1,
-            'Draft': 2,
-            'Open': 3,
-            'Hold': 4,
-            'Planned': 5,
-            'SELECTED FOR DEVELOPMENT': 6,
-            'Do poprawy': 7,
-            'In progress': 8,
-            'Ready for review': 9,
-            'In review': 10,
-            'READY FOR TESTING': 11,
-            'TESTY WEWNĘTRZNE': 12,
-            'Testing': 13,
-            'Do akceptacji klienta': 14,
-            'Awaiting production release': 15,
-            'CUSTOMER NOTIFICATION': 16,
-            'Closed': 17,
-            'Canceled': 18,
-            'Completed': 19,
-            'Done': 20
+        backflow_count = 0        # Define typical workflow order for backflow detection (case-insensitive)
+        workflow_order_base = {
+            'backlog': 1,
+            'draft': 2,
+            'open': 3,
+            'hold': 4,
+            'planned': 5,
+            'selected for development': 6,
+            'do poprawy': 7,
+            'in progress': 8,
+            'ready for review': 9,
+            'in review': 10,
+            'ready for testing': 11,
+            'testy wewnętrzne': 12,
+            'testing': 13,
+            'do akceptacji klienta': 14,
+            'awaiting production release': 15,
+            'customer notification': 16,
+            'closed': 17,
+            'canceled': 18,
+            'completed': 19,
+            'done': 20
         }
+        
+        def get_workflow_order(status_name):
+            """Get workflow order for a status name in a case-insensitive way."""
+            if not status_name:
+                return 0
+            return workflow_order_base.get(status_name.lower().strip(), 0)
         
         # Track current status and timing
         current_status = None
@@ -520,10 +497,9 @@ class IssueHistoryExtractor:
                     minutes_in_previous = calculate_working_minutes_between(
                         status_start_date, history['historyDate']
                     )
-                    
-                    # Determine if this is a backflow (moving to "earlier" status)
-                    from_order = workflow_order.get(current_status, 0)
-                    to_order = workflow_order.get(change['to'], 0)
+                      # Determine if this is a backflow (moving to "earlier" status)
+                    from_order = get_workflow_order(current_status)
+                    to_order = get_workflow_order(change['to'])
                     is_backflow = from_order > to_order and from_order > 0 and to_order > 0
                     is_forward = from_order < to_order and from_order > 0 and to_order > 0
                     
@@ -546,12 +522,10 @@ class IssueHistoryExtractor:
                     current_status = change['to']
                     unique_statuses.add(current_status)
                     status_start_date = history['historyDate']
-                    break
-        
-        # Calculate time in current status (if not completed)
-        completed_statuses = {'Completed', 'Done', 'Closed', 'Resolved'}
+                    break        # Calculate time in current status (if not completed)
+        completed_statuses_check = {'completed', 'done', 'closed', 'resolved'}
         current_status_minutes = 0
-        if current_status not in completed_statuses:
+        if not self._is_in_category(current_status, completed_statuses_check):
             current_status_minutes = calculate_working_minutes_between(status_start_date, update_date)
         
         return {
@@ -601,14 +575,14 @@ class IssueHistoryExtractor:
             'total_transitions': transition_metrics['total_transitions'],
             'backflow_count': transition_metrics['backflow_count'],
             'unique_statuses_visited': transition_metrics['unique_statuses_visited'],
-            'status_transitions': transition_metrics['status_transitions']
-        }
+            'status_transitions': transition_metrics['status_transitions']        }
     
     def _find_todo_exit_date(self, status_change_history: List[Dict[str, Any]]) -> Optional[Any]:
         """Find the date when the issue first changed status from its initial status."""
         todo_exit_date = None
         initial_status_found = False
-          # First, determine what the initial status was
+        
+        # First, determine what the initial status was
         initial_status = 'Backlog'  # Default assumption
         
         # If we have any status changes, check the first one to find the actual initial status
@@ -632,7 +606,7 @@ class IssueHistoryExtractor:
                 break
         
         return todo_exit_date
-    
+        
     def _create_history_record(self, history, issue, issue_key: str, issue_data: Dict[str, Any],
                              status_metrics: Dict[str, Any], status_change_history: List[Dict[str, Any]],
                              todo_exit_date: Optional[Any], description_text: Optional[str],
@@ -659,11 +633,14 @@ class IssueHistoryExtractor:
             })
             
             if item.field == 'status':
-                fact_type = 2  # 2 = transition        # Calculate time-based metrics as of this history point
+                fact_type = 2  # 2 = transition
+
+        # Calculate time-based metrics as of this history point
         working_minutes_from_creation_at_point = calculate_working_minutes_between(
             parse_date(issue_data['created']), history_date
         )
-          # For each history point, determine how long it had been in the current status
+
+        # For each history point, determine how long it had been in the current status
         status_in_this_history = status_metrics['status_name']  # Default to current status
         working_minutes_in_status_at_point = status_metrics['working_minutes_in_status']
         
@@ -680,55 +657,63 @@ class IssueHistoryExtractor:
                     )
                 status_in_this_history = change['to']
                 break
-          # Calculate working minutes from first status change at this history point
+
+        # Calculate working minutes from first status change at this history point
         working_minutes_from_move_at_point = None
         if todo_exit_date and history_date >= todo_exit_date:
             working_minutes_from_move_at_point = calculate_working_minutes_between(
                 todo_exit_date, history_date
             )
         
+        # Create a copy of issue_data and update the status for this history point
+        history_issue_data = issue_data.copy()
+        history_issue_data['status'] = status_in_this_history
+        
         return {
             'historyId': int(history.id),
             'historyDate': to_iso8601(history_date),
             'factType': fact_type,
-            'issueId': issue.id,
-            'issueKey': issue_key,
-            'typeName': issue_data['type'],            
-            'statusName': status_in_this_history,
-            'assigneeUserName': issue_data['assignee'],
-            'assigneeDisplayName': issue_data['assignee'].get('display_name') if issue_data['assignee'] else None,
-            'reporterUserName': issue_data['reporter'],
-            'reporterDisplayName': issue_data['reporter'].get('display_name') if issue_data['reporter'] else None,
-            'allocationCode': issue_data.get('allocation_code'),
-            'projectKey': issue.fields.project.key,
-            'projectName': issue.fields.project.name,
-            'parentKey': issue_data.get('parent_issue', {}).get('key') if issue_data.get('parent_issue') else None,
+            
+            # Include complete issue data
+            'issue_data': history_issue_data,
+            
+            # Author information
             'authorUserName': author_username,
             'authorDisplayName': author,
+            
+            # Change details
             'changes': changes,
-            'summary': issue_data['summary'],
-            'labels': issue_data['labels'],
-            'components': issue_data['components'],
-            'parent_issue': issue_data.get('parent_issue'),            
-            'parent_summary': issue_data.get('parent_issue', {}).get('summary') if issue_data.get('parent_issue') else None,
-            'epic_issue': issue_data.get('epic_issue'),            
+            
+            # Content fields
+            'description_text': description_text,  # Add description text to all records
+            'comment_text': comment_text,       # Add comments to all records
+            
+            # Time metrics
             'working_minutes_from_create': working_minutes_from_creation_at_point,
             'working_minutes_in_status': working_minutes_in_status_at_point,
-            'working_minutes_from_move_at_point': working_minutes_from_move_at_point,       
+            'working_minutes_from_move_at_point': working_minutes_from_move_at_point,
+            
+            # Categorized time metrics
             'backlog_minutes': status_metrics['backlog_minutes'],
             'processing_minutes': status_metrics['processing_minutes'],
             'waiting_minutes': status_metrics['waiting_minutes'],
+            
+            # Status transition metrics
             'previous_status': status_metrics['previous_status'],
             'total_transitions': status_metrics['total_transitions'],
             'backflow_count': status_metrics['backflow_count'],
             'unique_statuses_visited': status_metrics['unique_statuses_visited'],
-            'status_transitions': status_metrics['status_transitions'],            'todo_exit_date': to_iso8601(todo_exit_date) if todo_exit_date else None,
-            "status_change_date": to_iso8601(status_metrics['status_change_date']) if status_metrics['status_change_date'] else None,  # For history records, use actual status change date
-            "created": to_iso8601(issue_data['created']) if issue_data['created'] else None,
-            "updated": to_iso8601(issue_data['updated']) if issue_data['updated'] else None,
-            "description_text": description_text,  # Add description text to all records
-            "comment_text": comment_text       # Add comments to all records
+            'status_transitions': status_metrics['status_transitions'],
+            
+            # Date fields
+            'todo_exit_date': to_iso8601(todo_exit_date) if todo_exit_date else None
         }
+    
+    def _is_in_category(self, status_name, category_set):
+        """Check if a status belongs to a category in a case-insensitive way."""
+        if not status_name:
+            return False
+        return status_name.lower().strip() in category_set
     
     def safe_get_field(self, obj, field_name, default=None):
         """Helper function to safely get a field from an object regardless of its type.
