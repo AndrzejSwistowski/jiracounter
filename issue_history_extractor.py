@@ -87,10 +87,15 @@ class IssueHistoryExtractor:
                             'to': 'In Progress'
                         }
                     ],
-                    
-                    # Content fields
+                      # Content fields
                     'description_text': 'Issue description...',  # Full description text
-                    'comment_text': '[2023-01-02T10:00:00+00:00 by John Doe] Comment text...',  # All comments
+                    'comment_text': [  # Array of comment objects
+                        {
+                            'created_at': '2023-01-02T10:00:00+00:00',
+                            'body': 'Comment text...',
+                            'author': 'John Doe'
+                        }
+                    ],
                     
                     # Time metrics (calculated at this history point)
                     'working_minutes_from_create': 7200, # Working minutes from creation to this history point
@@ -181,34 +186,39 @@ class IssueHistoryExtractor:
                 log_desc = description_text[:1000] + "..." if len(description_text) > 1000 else description_text
                 self.logger.debug(f"Found description for issue {issue_key}: {log_desc}")
             except Exception as e:
-                self.logger.warning(f"Error processing description for {issue_key}: {e}")
-                
+                self.logger.warning(f"Error processing description for {issue_key}: {e}")        
         return description_text
-    
-    def _extract_comments(self, issue, issue_key: str) -> Optional[str]:
-        """Extract and combine all comments from the issue."""
-        comment_text = None
+
+    def _extract_comments(self, issue, issue_key: str) -> Optional[list]:
+        """Extract all comments from the issue as an array of comment objects."""
+        comments_array = None
         
         if hasattr(issue.fields, 'comment') and hasattr(issue.fields.comment, 'comments'):
             try:
-                # Combine all comments into a single text field
-                all_comments = []
+                # Extract comments as an array of objects
+                comments_array = []
                 for comment in issue.fields.comment.comments:
                     if hasattr(comment, 'body') and comment.body:
-                        comment_date = to_iso8601(comment.created) if hasattr(comment, 'created') else 'unknown'
-                        author = comment.author.displayName if hasattr(comment, 'author') and hasattr(comment.author, 'displayName') else 'unknown'
-                        comment_str = f"[{comment_date} by {author}] {comment.body}"
-                        all_comments.append(comment_str)
-                
-                if all_comments:
-                    comment_text = "\n\n".join(all_comments)
-                    self.logger.debug(f"Found {len(all_comments)} comments for issue {issue_key}")
+                        created_at = to_iso8601(comment.created) if hasattr(comment, 'created') else None
+                        author = comment.author.displayName if hasattr(comment, 'author') and hasattr(comment.author, 'displayName') else None
+                        
+                        comment_obj = {
+                            'created_at': created_at,
+                            'body': comment.body,
+                            'author': author
+                        }
+                        comments_array.append(comment_obj)
+                        
+                if comments_array:
+                    self.logger.debug(f"Found {len(comments_array)} comments for issue {issue_key}")
+                else:
+                    comments_array = None  # Return None if no comments found
             except Exception as e:
                 self.logger.warning(f"Error processing comments for {issue_key}: {e}")                
-        return comment_text
-        
+        return comments_array
+    
     def _create_creation_record(self, issue, issue_key: str, issue_data: Dict[str, Any], 
-                              description_text: Optional[str], comment_text: Optional[str]) -> Dict[str, Any]:
+                              description_text: Optional[str], comment_text: Optional[list]) -> Dict[str, Any]:
         """Create a synthetic creation record for the issue."""
         # Create changes list for creation record
         creation_changes = []
@@ -234,9 +244,8 @@ class IssueHistoryExtractor:
             
             # Include complete issue data
             'issue_data': creation_issue_data,
-            
-            # Author information (for creation record, author is the reporter)
-            'authorUserName': issue_data['reporter']['username'] if issue_data['reporter'] else None,
+              # Author information (for creation record, author is the reporter)
+            'authorUserName': issue_data['reporter']['name'] if issue_data['reporter'] else None,
             'authorDisplayName': issue_data['reporter']['display_name'] if issue_data['reporter'] else None,
             
             # Change details
@@ -594,8 +603,7 @@ class IssueHistoryExtractor:
                     break
             if initial_status_found:
                 break
-        
-        # Now find the first status change from this initial status
+          # Now find the first status change from this initial status
         for history_item in status_change_history:
             for change in history_item['changes']:
                 if change['field'] == 'status' and change['from'] == initial_status:
@@ -606,11 +614,11 @@ class IssueHistoryExtractor:
                 break
         
         return todo_exit_date
-        
+    
     def _create_history_record(self, history, issue, issue_key: str, issue_data: Dict[str, Any],
                              status_metrics: Dict[str, Any], status_change_history: List[Dict[str, Any]],
                              todo_exit_date: Optional[Any], description_text: Optional[str],
-                             comment_text: Optional[str]) -> Dict[str, Any]:
+                             comment_text: Optional[list]) -> Dict[str, Any]:
         """Create a history record from a changelog history entry."""
         # Extract author information
         author = history.author.displayName if hasattr(history.author, 'displayName') else history.author.name

@@ -36,7 +36,6 @@ class TestIssueHistoryExtractor(unittest.TestCase):
         issue = Mock()
         issue.fields = Mock()
         issue.fields.description = "This is a test description"
-        
         result = self.extractor._extract_description(issue, "TEST-123")
         
         self.assertEqual(result, "This is a test description")
@@ -75,11 +74,22 @@ class TestIssueHistoryExtractor(unittest.TestCase):
         
         result = self.extractor._extract_comments(issue, "TEST-123")
         
+        # Verify the result is a list with correct structure
         self.assertIsNotNone(result)
-        self.assertIn("First comment", result)
-        self.assertIn("Second comment", result)
-        self.assertIn("John Doe", result)
-        self.assertIn("Jane Smith", result)
+        self.assertIsInstance(result, list)
+        self.assertEqual(len(result), 2)
+        
+        # Check first comment
+        comment1_result = result[0]
+        self.assertEqual(comment1_result['body'], "First comment")
+        self.assertEqual(comment1_result['author'], "John Doe")
+        self.assertEqual(comment1_result['created_at'], "2023-01-01T10:00:00+00:00")
+        
+        # Check second comment
+        comment2_result = result[1]
+        self.assertEqual(comment2_result['body'], "Second comment")
+        self.assertEqual(comment2_result['author'], "Jane Smith")
+        self.assertEqual(comment2_result['created_at'], "2023-01-02T11:00:00+00:00")
 
     def test_extract_comments_with_no_comments(self):
         """Test comment extraction when no comments exist."""
@@ -88,9 +98,7 @@ class TestIssueHistoryExtractor(unittest.TestCase):
         issue.fields = Mock()
         issue.fields.comment = Mock()
         issue.fields.comment.comments = []
-        
         result = self.extractor._extract_comments(issue, "TEST-123")
-        
         self.assertIsNone(result)
 
     def test_create_creation_record(self):
@@ -102,12 +110,21 @@ class TestIssueHistoryExtractor(unittest.TestCase):
         issue.fields.project = Mock()
         issue.fields.project.key = "TEST"
         issue.fields.project.name = "Test Project"
-        
         issue_data = {
             'created': '2023-01-01T10:00:00+00:00',
-            'type': 'Story',
-            'assignee': 'jdoe',
-            'reporter': 'jsmith',
+            'issue_type': 'Story',
+            'assignee': {
+                'display_name': 'John Doe',
+                'key': 'jdoe',
+                'name': 'jdoe',
+                'email_address': 'jdoe@example.com'
+            },
+            'reporter': {
+                'display_name': 'Jane Smith',
+                'key': 'jsmith',
+                'name': 'jsmith',
+                'email_address': 'jsmith@example.com'
+            },
             'allocation_code': 'NEW',
             'summary': 'Test Issue',
             'labels': ['test'],
@@ -115,24 +132,44 @@ class TestIssueHistoryExtractor(unittest.TestCase):
             'parent_issue': None,
             'epic_issue': None,
             'status_change_date': None,
-            'updated': '2023-01-01T10:00:00+00:00'
-        }
+            'updated': '2023-01-01T10:00:00+00:00'        }
         
         description_text = "Test description"
-        comment_text = "Test comments"
+        comment_text = [
+            {
+                'created_at': '2023-01-02T10:00:00+00:00',
+                'body': 'Test comment 1',
+                'author': 'John Doe'
+            },
+            {
+                'created_at': '2023-01-03T14:30:00+00:00', 
+                'body': 'Test comment 2',
+                'author': 'Jane Smith'
+            }
+        ]
         
         result = self.extractor._create_creation_record(
             issue, "TEST-123", issue_data, description_text, comment_text
         )
         
         # Verify the creation record structure
-        self.assertEqual(result['factType'], 1)  # 1 = create        self.assertEqual(result['issueKey'], "TEST-123")
-        self.assertEqual(result['typeName'], 'Story')
-        self.assertEqual(result['statusName'], 'Backlog')
-        self.assertEqual(result['allocationCode'], 'NEW')
-        self.assertEqual(result['projectKey'], 'TEST')
-        self.assertEqual(result['projectName'], 'Test Project')
-        self.assertEqual(result['summary'], 'Test Issue')
+        self.assertEqual(result['factType'], 1)  # 1 = create
+        
+        # Verify issue_data field contains all the issue information
+        self.assertIn('issue_data', result)
+        issue_data_result = result['issue_data']
+        self.assertEqual(issue_data_result['created'], '2023-01-01T10:00:00+00:00')
+        self.assertEqual(issue_data_result['issue_type'], 'Story')
+        self.assertEqual(issue_data_result['allocation_code'], 'NEW')
+        self.assertEqual(issue_data_result['summary'], 'Test Issue')
+        
+        # Verify assignee and reporter structure
+        self.assertEqual(issue_data_result['assignee']['display_name'], 'John Doe')
+        self.assertEqual(issue_data_result['assignee']['name'], 'jdoe')
+        self.assertEqual(issue_data_result['reporter']['display_name'], 'Jane Smith')
+        self.assertEqual(issue_data_result['reporter']['name'], 'jsmith')
+        
+        # Verify other fields
         self.assertEqual(result['working_minutes_from_create'], 0)
         self.assertEqual(result['working_minutes_in_status'], 0)
         self.assertEqual(result['backlog_minutes'], 0)
