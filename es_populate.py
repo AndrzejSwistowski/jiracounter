@@ -269,7 +269,8 @@ class JiraElasticsearchPopulator:
         # Call bulk_insert_issue_history with a single record
         result = self.bulk_insert_issue_history([history_record])
         return result > 0
-      def bulk_insert_issue_history(self, history_records):
+    
+    def bulk_insert_issue_history(self, history_records):
         """
         Inserts multiple issue history records into Elasticsearch in a single bulk operation.
         

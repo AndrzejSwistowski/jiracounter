@@ -32,13 +32,10 @@ CHANGELOG_MAPPING_SIMPLE = {
                 }
             }
         }
-    },
-    "mappings": {
+    },    "mappings": {
         "properties": {
-            "historyId": {"type": "keyword"},
-            "historyDate": {"type": "date"},
-            "@timestamp": {"type": "date"},
-            "factType": {"type": "integer"},
+            "_id": {"type": "keyword"},  # Will use issue_data.issueId
+            "@timestamp": {"type": "date"},  # Will use issue_data.updated
             "issue": {
                 "properties": {
                     "id": {"type": "keyword"},
@@ -118,15 +115,7 @@ CHANGELOG_MAPPING_SIMPLE = {
                 "properties": {
                     "displayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
                 }
-            },
-            "todo_exit_at": {"type": "alias", "path": "selected_for_development_at"},
-            "changes": {
-                "type": "nested",
-                "properties": {
-                    "field": {"type": "keyword"},
-                    "to": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
-                }
-            },
+            },            "todo_exit_at": {"type": "alias", "path": "selected_for_development_at"},
             # Content fields with basic Polish text analysis
             "description": {
                 "type": "text",
@@ -135,26 +124,13 @@ CHANGELOG_MAPPING_SIMPLE = {
                     "keyword": {"type": "keyword", "ignore_above": 32766},
                     "english": {"type": "text", "analyzer": "english"},
                     "standard": {"type": "text", "analyzer": "standard"}
-                }            },
-            "comment": {
-                "type": "nested",
-                "properties": {
-                    "created_at": {"type": "date"},
-                    "body": {
-                        "type": "text",
-                        "analyzer": "polish_basic",
-                        "fields": {
-                            "keyword": {"type": "keyword", "ignore_above": 32766},
-                            "english": {"type": "text", "analyzer": "english"},
-                            "standard": {"type": "text", "analyzer": "standard"}
-                        }
-                    },
-                    "author": {
-                        "type": "text",
-                        "fields": {
-                            "keyword": {"type": "keyword"}
-                        }
-                    }
+                }            },            "comment": {
+                "type": "text",  # Changed from nested to simple text for concatenated comments
+                "analyzer": "polish_basic",
+                "fields": {
+                    "keyword": {"type": "keyword", "ignore_above": 32766},
+                    "english": {"type": "text", "analyzer": "english"},
+                    "standard": {"type": "text", "analyzer": "standard"}
                 }
             },
             "selected_for_development_at": {"type": "date"},
@@ -178,8 +154,7 @@ CHANGELOG_MAPPING_SIMPLE = {
                     "working_days": {"type": "integer"},
                     "period": {"type": "text"}
                 }
-            },
-            "from_selected_for_development": {
+            },            "from_selected_for_development": {
                 "properties": {
                     "working_minutes": {"type": "integer"},
                     "working_days": {"type": "integer"},
@@ -190,15 +165,33 @@ CHANGELOG_MAPPING_SIMPLE = {
             "backflow_count": {"type": "integer"},
             "unique_statuses_visited": {"type": "keyword"},
             "status_transitions": {
+                "type": "nested",  # Keep as nested for multiple transitions
                 "properties": {
                     "from_status": {"type": "keyword"},
                     "to_status": {"type": "keyword"},
                     "transition_date": {"type": "date"},
                     "minutes_in_previous_status": {"type": "integer"},
                     "is_forward_transition": {"type": "boolean"},
-                    "is_backflow": {"type": "boolean"}
+                    "is_backflow": {"type": "boolean"},
+                    "author": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
                 }
             },
+            "field_changes": {
+                "type": "nested",  # New field for non-status changes
+                "properties": {
+                    "change_date": {"type": "date"},
+                    "author": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                    "changes": {
+                        "type": "nested",
+                        "properties": {
+                            "field": {"type": "keyword"},
+                            "fieldtype": {"type": "keyword"},
+                            "from": {"type": "text", "fields": {"keyword": {"type": "keyword"}}},
+                            "to": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
+                        }
+                    }
+                }
+            }
         }
     }
 }

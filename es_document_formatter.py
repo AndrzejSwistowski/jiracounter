@@ -265,7 +265,6 @@ class ElasticsearchDocumentFormatter:
     def format_comprehensive_record(comprehensive_record):
         """
         Format a comprehensive issue record for insertion into Elasticsearch.
-        
         This method handles the new comprehensive record structure that contains
         all issue data, metrics, and history in a single record per issue.
         
@@ -278,159 +277,100 @@ class ElasticsearchDocumentFormatter:
             Dict containing the formatted data for Elasticsearch
         """
         from time_utils import format_working_minutes_to_text
-        
-        # Extract main components from the comprehensive record
         issue_data = comprehensive_record.get('issue_data', {})
         metrics = comprehensive_record.get('metrics', {})
         status_transitions = comprehensive_record.get('status_transitions', [])
         field_changes = comprehensive_record.get('field_changes', [])
-        
-        # Create the base document structure
         doc = {
-            # Use the issue key and current timestamp as identifiers
-            "historyId": f"{issue_data.get('key', 'unknown')}_comprehensive",
-            "historyDate": issue_data.get('updated'),
             "@timestamp": issue_data.get('updated'),
-            "factType": "COMPREHENSIVE_ISSUE",
             "issue": {
+                "id": issue_data.get('issueId'),
                 "key": issue_data.get('key'),
-                "type": {
-                    "name": issue_data.get('typeName')
-                },
+                "type": {"name": issue_data.get('type') or issue_data.get('typeName')},
                 "status": {
-                    "name": issue_data.get('statusName'),
-                    "change_at": metrics.get('current_status_since'),
+                    "name": issue_data.get('status') or issue_data.get('statusName'),
+                    "change_at": issue_data.get('status_change_date'),
                     "working_minutes": metrics.get('working_minutes_in_current_status'),
                     "working_days": int(metrics.get('working_minutes_in_current_status', 0) / (60 * 8)) if metrics.get('working_minutes_in_current_status') else None,
                     "period": format_working_minutes_to_text(metrics.get('working_minutes_in_current_status'))
                 },
                 "created_at": issue_data.get('created'),
-                "working_minutes": metrics.get('total_working_minutes'),
-                "working_days": int(metrics.get('total_working_minutes', 0) / (60 * 8)) if metrics.get('total_working_minutes') else None,
-                "period": format_working_minutes_to_text(metrics.get('total_working_minutes'))
+                "working_minutes": metrics.get('working_minutes_from_create'),
+                "working_days": int(metrics.get('working_minutes_from_create', 0) / (60 * 8)) if metrics.get('working_minutes_from_create') else None,
+                "period": format_working_minutes_to_text(metrics.get('working_minutes_from_create'))
             },
-            "project": {
-                "key": issue_data.get('projectKey'),
-            }    
+            "project": {"key": issue_data.get('project_key') or issue_data.get('projectKey')},
         }
-        
-        # Add allocation field
-        if issue_data.get('allocationCode'):
-            doc["allocation"] = issue_data['allocationCode']
-
-        # Add labels as keyword array
+        # Optional fields
+        if issue_data.get('allocation_code') or issue_data.get('allocationCode'):
+            doc["allocation"] = issue_data.get('allocation_code') or issue_data.get('allocationCode')
         if issue_data.get('labels'):
             doc["labels"] = issue_data['labels']
-        
-        # Add components
         if issue_data.get('components'):
-            component_names = ElasticsearchDocumentFormatter._extract_component_names(
-                issue_data.get('components'), 
-                issue_data.get('key')
-            )
-            if component_names:
-                doc["components"] = component_names
-
-        # Add summary field
+            doc["components"] = [c['name'] if isinstance(c, dict) and 'name' in c else c for c in issue_data['components']]
         if issue_data.get('summary'):
             doc["summary"] = issue_data['summary']
-            
-        # Add parent_issue with proper structure
         if issue_data.get('parent_issue'):
             doc["parent_issue"] = {
-                "key": issue_data.get('parentKey') or issue_data['parent_issue'].get('key'),
-                "summary": issue_data.get('parent_summary') or issue_data['parent_issue'].get('summary')
+                "key": issue_data['parent_issue'].get('key'),
+                "summary": issue_data['parent_issue'].get('summary')
             }
-            
-        # Add epic_issue with proper structure
         if issue_data.get('epic_issue'):
             doc["epic_issue"] = {
                 "key": issue_data['epic_issue'].get('key'),
-                "summary": issue_data['epic_issue'].get('summary')
+                "summary": issue_data['epic_issue'].get('name') or issue_data['epic_issue'].get('summary')
             }
-        
-        # Add reporter
-        if issue_data.get('reporterDisplayName'):
-            doc["reporter"] = {
-                "displayName": issue_data['reporterDisplayName']
-            }
-            
-        # Add assignee
-        if issue_data.get('assigneeDisplayName'):
-            doc["assignee"] = {
-                "displayName": issue_data['assigneeDisplayName']
-            }
-
-        # Add content text fields
+        if issue_data.get('reporter'):
+            doc["reporter"] = {"displayName": issue_data['reporter'].get('display_name') or issue_data['reporter'].get('displayName')}
+        if issue_data.get('assignee'):
+            doc["assignee"] = {"displayName": issue_data['assignee'].get('display_name') or issue_data['assignee'].get('displayName')}
+        # Content fields
         if comprehensive_record.get('issue_description'):
             doc["description"] = comprehensive_record['issue_description']
-            
-        # Process comments - convert array to concatenated text for ES indexing
         if comprehensive_record.get('issue_comments'):
             comments = comprehensive_record['issue_comments']
             if isinstance(comments, list) and comments:
-                # Concatenate all comment bodies for full-text search
-                comment_texts = []
-                for comment in comments:
-                    if isinstance(comment, dict) and comment.get('body'):
-                        comment_texts.append(comment['body'])
-                    elif isinstance(comment, str):
-                        comment_texts.append(comment)
-                
+                comment_texts = [c['body'] for c in comments if isinstance(c, dict) and c.get('body')]
                 if comment_texts:
                     doc["comment"] = " ".join(comment_texts)
-
-        # Add categorized time metrics from the metrics section
+        # Metrics: categorized time
         if metrics.get('backlog_minutes') is not None:
             doc["backlog"] = {
                 "working_minutes": metrics['backlog_minutes'],
                 "working_days": int(metrics['backlog_minutes'] / (60 * 8)),
                 "period": format_working_minutes_to_text(metrics['backlog_minutes'])
             }
-        
         if metrics.get('processing_minutes') is not None:
             doc["processing"] = {
                 "working_minutes": metrics['processing_minutes'],
                 "working_days": int(metrics['processing_minutes'] / (60 * 8)),
                 "period": format_working_minutes_to_text(metrics['processing_minutes'])
             }
-
         if metrics.get('waiting_minutes') is not None:
             doc["waiting"] = {
                 "working_minutes": metrics['waiting_minutes'],
                 "working_days": int(metrics['waiting_minutes'] / (60 * 8)),
                 "period": format_working_minutes_to_text(metrics['waiting_minutes'])
             }
-
-        # Add development selection date if available
+        # Metrics: development selection
         if metrics.get('todo_exit_date') is not None:
             doc["selected_for_development_at"] = metrics['todo_exit_date']
-            
-        # Add working minutes from development selection point
-        if metrics.get('working_minutes_from_todo_exit') is not None:
+        if metrics.get('working_minutes_from_first_move') is not None:
             doc["from_selected_for_development"] = {
-                "working_minutes": metrics['working_minutes_from_todo_exit'],
-                "working_days": int(metrics['working_minutes_from_todo_exit'] / (60 * 8)),
-                "period": format_working_minutes_to_text(metrics['working_minutes_from_todo_exit'])
+                "working_minutes": metrics['working_minutes_from_first_move'],
+                "working_days": int(metrics['working_minutes_from_first_move'] / (60 * 8)),
+                "period": format_working_minutes_to_text(metrics['working_minutes_from_first_move'])
             }
-
-        # Add status transition metrics
+        # Metrics: status transitions
         if metrics.get('total_transitions') is not None:
             doc["total_transitions"] = metrics['total_transitions']
-            
         if metrics.get('backflow_count') is not None:
             doc["backflow_count"] = metrics['backflow_count']
-            
         if metrics.get('unique_statuses_visited'):
             doc["unique_statuses_visited"] = metrics['unique_statuses_visited']
-            
-        # Store the most recent status transition
-        if status_transitions and len(status_transitions) > 0:
-            last_transition = status_transitions[-1]  # Get the last transition
-            doc["status_transitions"] = last_transition
-
-        # Store field changes as nested objects for analysis
+        # Status transitions and field changes
+        if status_transitions:
+            doc["status_transitions"] = status_transitions
         if field_changes:
-            doc["changes"] = field_changes
-
-        return doc
+            doc["field_changes"] = field_changes
+        return doc, issue_data.get('issueId')  # Return both document and ID for ES indexing
