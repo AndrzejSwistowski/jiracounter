@@ -85,11 +85,10 @@ class IssueHistoryExtractor:
                             'fieldtype': 'jira',
                             'from': 'Open',
                             'to': 'In Progress'
-                        }
-                    ],
+                        }                    ],
                       # Content fields
-                    'description_text': 'Issue description...',  # Full description text
-                    'comment_text': [  # Array of comment objects
+                    'issue_description': 'Issue description...',  # Full description text
+                    'issue_comments': [  # Array of comment objects
                         {
                             'created_at': '2023-01-02T10:00:00+00:00',
                             'body': 'Comment text...',
@@ -135,14 +134,12 @@ class IssueHistoryExtractor:
             issue_data = self.data_extractor.extract_issue_data(issue)
             
             changelog_entries = []
-            
-            # Extract description and comments
-            description_text = self._extract_description(issue, issue_key)
-            comment_text = self._extract_comments(issue, issue_key)
-            
-            # Create creation record
+              # Extract description and comments
+            issue_description = self._extract_description(issue, issue_key)
+            issue_comments = self._extract_comments(issue, issue_key)
+              # Create creation record
             creation_record = self._create_creation_record(
-                issue, issue_key, issue_data, description_text, comment_text
+                issue, issue_key, issue_data, issue_description, issue_comments
             )
             changelog_entries.append(creation_record)
             
@@ -159,10 +156,10 @@ class IssueHistoryExtractor:
                 
                 # Process each changelog history entry
                 histories = list(issue.changelog.histories)
-                for history in histories:
+                for history in histories:                    
                     history_record = self._create_history_record(
                         history, issue, issue_key, issue_data, status_metrics,
-                        status_change_history, todo_exit_date, description_text, comment_text
+                        status_change_history, todo_exit_date, issue_description, issue_comments
                     )
                     changelog_entries.append(history_record)
             
@@ -218,20 +215,19 @@ class IssueHistoryExtractor:
         return comments_array
     
     def _create_creation_record(self, issue, issue_key: str, issue_data: Dict[str, Any], 
-                              description_text: Optional[str], comment_text: Optional[list]) -> Dict[str, Any]:
+                              issue_description: Optional[str], issue_comments: Optional[list]) -> Dict[str, Any]:
         """Create a synthetic creation record for the issue."""
         # Create changes list for creation record
         creation_changes = []
-        
-        # Add description as a change item if it exists
-        if description_text:
+          # Add description as a change item if it exists
+        if issue_description:
             creation_changes.append({
                 'field': 'description',
                 'fieldtype': 'jira',
                 'from': None,
-                'to': description_text
+                'to': issue_description
             })
-            self.logger.debug(f"Added initial description to changes for issue {issue_key} (length: {len(description_text)})")
+            self.logger.debug(f"Added initial description to changes for issue {issue_key} (length: {len(issue_description)})")
         
         # Create a copy of issue_data for the creation record and set initial status
         creation_issue_data = issue_data.copy()
@@ -250,10 +246,9 @@ class IssueHistoryExtractor:
             
             # Change details
             'changes': creation_changes,  # Include description as a change if it exists
-            
-            # Content fields
-            'description_text': description_text,  # Add description text field directly
-            'comment_text': comment_text,       # Add comments text field
+              # Content fields
+            'issue_description': issue_description,  # Add description text field directly
+            'issue_comments': issue_comments,       # Add comments text field
             
             # Time metrics (all zero for creation record)
             'working_minutes_from_create': 0,  # Just created, so 0 minutes
@@ -617,8 +612,8 @@ class IssueHistoryExtractor:
     
     def _create_history_record(self, history, issue, issue_key: str, issue_data: Dict[str, Any],
                              status_metrics: Dict[str, Any], status_change_history: List[Dict[str, Any]],
-                             todo_exit_date: Optional[Any], description_text: Optional[str],
-                             comment_text: Optional[list]) -> Dict[str, Any]:
+                             todo_exit_date: Optional[Any], issue_description: Optional[str],
+                             issue_comments: Optional[list]) -> Dict[str, Any]:
         """Create a history record from a changelog history entry."""
         # Extract author information
         author = history.author.displayName if hasattr(history.author, 'displayName') else history.author.name
@@ -691,10 +686,9 @@ class IssueHistoryExtractor:
             
             # Change details
             'changes': changes,
-            
-            # Content fields
-            'description_text': description_text,  # Add description text to all records
-            'comment_text': comment_text,       # Add comments to all records
+              # Content fields
+            'issue_description': issue_description,  # Add description text to all records
+            'issue_comments': issue_comments,       # Add comments to all records
             
             # Time metrics
             'working_minutes_from_create': working_minutes_from_creation_at_point,
