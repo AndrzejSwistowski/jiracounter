@@ -31,10 +31,9 @@ CHANGELOG_MAPPING_SIMPLE = {
                     ]
                 }
             }
-        }
-    },    "mappings": {
+        }    },
+    "mappings": {
         "properties": {
-            "_id": {"type": "keyword"},  # Will use issue_data.issueId
             "@timestamp": {"type": "date"},  # Will use issue_data.updated
             "issue": {
                 "properties": {

@@ -34,21 +34,22 @@ CHANGELOG_MAPPING_POLISH = {
                         "asciifolding",
                         "polish_stop"
                     ]
-                },                "polish_light": {
+                },                
+                "polish_light": {
                     "type": "custom",
                     "tokenizer": "standard",
                     "filter": [
                         "lowercase",
                         "asciifolding", 
-                        "polish_keywords",
+                        "polish_keywords",                        
                         "polish_stop"
                     ]
                 }
             }
         }
-    },    "mappings": {
+    },
+    "mappings": {
         "properties": {
-            "_id": {"type": "keyword"},  # Will use issue_data.issueId
             "@timestamp": {"type": "date"},  # Will use issue_data.updated
             "issue": {
                 "properties": {
@@ -184,7 +185,8 @@ CHANGELOG_MAPPING_POLISH = {
             "backflow_count": {"type": "integer"},
             "unique_statuses_visited": {"type": "keyword"},
             "status_transitions": {
-                "type": "nested",  # Keep as nested for multiple transitions                "properties": {
+                "type": "nested",  # Keep as nested for multiple transitions                
+                "properties": {
                     "from_status": {"type": "keyword"},
                     "to_status": {"type": "keyword"},
                     "transition_date": {"type": "date"},
@@ -214,7 +216,7 @@ CHANGELOG_MAPPING_POLISH = {
             }
         }
     }
-
+}
 # Settings index mapping (unchanged)
 SETTINGS_MAPPING_POLISH = {
     "mappings": {
