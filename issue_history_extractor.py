@@ -8,8 +8,7 @@ It follows the Single Responsibility Principle by focusing solely on history dat
 import logging
 from typing import Dict, Any, Optional, List, Tuple
 from time_utils import (
-    to_iso8601, parse_date, calculate_working_days_between, now,
-    find_status_change_date, calculate_working_minutes_since_date,
+    to_iso8601, parse_date, 
     calculate_working_minutes_between, format_working_minutes_to_text
 )
 from jira_field_manager import JiraFieldManager
@@ -735,7 +734,7 @@ class IssueHistoryExtractor:
             # Development selection phase - handle legacy names
             'selected for development': 6,
             'to do': 6,  # Legacy name for 'selected for development'
-            
+            'do zrobienia': 6,  # Legacy name for 'selected for development'
             # Development phase
             'do poprawy': 7,
             'in progress': 8,

@@ -178,19 +178,19 @@ def create_index(host=None, port=None, api_key=None, use_ssl=True, url=None,
             base_url = url.rstrip('/')
         else:
             base_url = f'{"https" if use_ssl else "http"}://{host}:{port}'
-            
-        # Prepare headers with API key authentication
+              # Prepare headers with API key authentication
         headers = {"Content-Type": "application/json"}
         if api_key:
             headers["Authorization"] = f"ApiKey {api_key}"
         
-        # Delete index if it exists
+        # Check if index already exists
         try:
-            delete_response = requests.delete(f"{base_url}/{index_name}", headers=headers)
-            if delete_response.status_code in [200, 404]:
-                logger.debug(f"Index {index_name} deleted (or didn't exist)")
+            index_check_response = requests.head(f"{base_url}/{index_name}", headers=headers)
+            if index_check_response.status_code == 200:
+                logger.info(f"Index {index_name} already exists, skipping creation")
+                return True
         except Exception as e:
-            logger.warning(f"Could not delete existing index {index_name}: {e}")
+            logger.warning(f"Error checking if index exists: {e}")
         
         # Create the index with mapping
         logger.info(f"Creating index {index_name} with explicit mapping...")
