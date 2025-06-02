@@ -93,7 +93,8 @@ class IssueHistoryExtractor:
                     'total_transitions': 3,                  # Total number of status transitions
                     'backflow_count': 1,                     # Number of backwards status transitions
                     'unique_statuses_visited': ['Open', 'In progress', 'In review'], # All statuses visited
-                    'todo_exit_date': '2023-01-03T09:00:00+00:00'  # Date of first status change
+                    'todo_exit_date': '2023-01-03T09:00:00+00:00'  # Date of first status change,
+                    'status_change_date': '2023-01-10T14:00:00+00:00'  # Date of last status change
                 },
                 
                 # Complete status transition history
@@ -534,6 +535,7 @@ class IssueHistoryExtractor:
         else:
             # If no status change found, time in status equals total time from creation
             working_minutes_in_current_status = working_minutes_from_create
+            status_change_date = creation_date  # Use creation date as fallback
         
         # Calculate working minutes from first move (todo exit date)
         todo_exit_date = self._find_todo_exit_date(status_change_history)
@@ -558,7 +560,8 @@ class IssueHistoryExtractor:
             'total_transitions': transition_metrics['total_transitions'],
             'backflow_count': transition_metrics['backflow_count'],
             'unique_statuses_visited': transition_metrics['unique_statuses_visited'],
-            'todo_exit_date': to_iso8601(todo_exit_date) if todo_exit_date else None
+            'todo_exit_date': to_iso8601(todo_exit_date) if todo_exit_date else None,
+            'status_change_date': to_iso8601(status_change_date) if status_change_date else None,
         }
     
     def _find_todo_exit_date(self, status_change_history: List[Dict[str, Any]]) -> Optional[Any]:
