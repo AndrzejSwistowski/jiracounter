@@ -36,9 +36,8 @@ import sys
 from datetime import datetime, timedelta
 from es_populate import JiraElasticsearchPopulator
 import config
-from es_mapping_polish import CHANGELOG_MAPPING_POLISH, SETTINGS_MAPPING_POLISH
 from logger_utils import setup_logging
-from es_utils import delete_index, create_index
+from es_utils import delete_index, create_index_with_auto_fallback
 
 # This function has been moved to es_utils.py
 # It is now imported at the top of the file
@@ -60,52 +59,35 @@ def get_last_sync_date_from_settings(populator, logger):
 # It is now imported at the top of the file
 
 def recreate_indices(populator, logger):
-    """Create the indices with updated mappings."""
+    """Create the indices with updated mappings using unified approach."""
     try:
-        logger.info("Creating indices with explicit mappings from es_mapping module")        # Try to create with full mapping first
-        result_changelog = create_index(populator=populator, index_name=config.INDEX_CHANGELOG, mapping=CHANGELOG_MAPPING_POLISH, logger=logger)
+        logger.info("Creating indices with automatic fallback mappings")
         
-        # If creating with Polish analyzer fails, try a fallback mapping
-        if not result_changelog:
-            logger.warning("Creating index with Polish analyzer failed. Trying fallback mapping...")
-              # Create a simplified version of the mapping without custom analyzers
-            simplified_mapping = {
-                "mappings": CHANGELOG_MAPPING_POLISH["mappings"]
-            }
-              # Modify text fields to use standard analyzer instead of polish
-            for field_name in ["summary", "description", "comment"]:
-                if field_name in simplified_mapping["mappings"]["properties"]:
-                    field_config = simplified_mapping["mappings"]["properties"][field_name]
-                    
-                    # Handle top-level text fields
-                    if "fields" in field_config:
-                        # Remove polish analyzer field
-                        if "polish" in field_config["fields"]:
-                            del field_config["fields"]["polish"]
-                    
-                    # Handle nested comment structure
-                    elif field_name == "comment" and field_config.get("type") == "nested":
-                        # Update nested comment body field
-                        if "properties" in field_config and "body" in field_config["properties"]:
-                            body_config = field_config["properties"]["body"]
-                            if "fields" in body_config and "polish" in body_config["fields"]:
-                                del body_config["fields"]["polish"]
-            
-            # Try with simplified mapping
-            result_changelog = create_index(populator=populator, index_name=config.INDEX_CHANGELOG, mapping=simplified_mapping, logger=logger)
-            
+        # Use the new unified function for changelog index
+        result_changelog = create_index_with_auto_fallback(
+            populator=populator, 
+            index_name=config.INDEX_CHANGELOG, 
+            logger=logger
+        )
+        
         if not result_changelog:
             logger.error(f"Failed to create index {config.INDEX_CHANGELOG}")
             return False
-              # Create the settings index with the proper mapping
-        result_settings = create_index(populator=populator, index_name=config.INDEX_SETTINGS, mapping=SETTINGS_MAPPING_POLISH, logger=logger)
+            
+        # Use the new unified function for settings index  
+        result_settings = create_index_with_auto_fallback(
+            populator=populator, 
+            index_name=config.INDEX_SETTINGS, 
+            logger=logger
+        )
+        
         if not result_settings:
             logger.error(f"Failed to create index {config.INDEX_SETTINGS}")
             return False
             
         return True
     except Exception as e:
-        logger.error(f"Error creating indices with explicit mappings: {e}")
+        logger.error(f"Error creating indices with unified approach: {e}")
         return False
 
 def restore_sync_date(populator, last_sync_date, logger):

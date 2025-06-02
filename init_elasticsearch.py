@@ -9,13 +9,8 @@ import json
 import time
 import sys
 import os
-try:
-    from es_mapping_polish import CHANGELOG_MAPPING_POLISH, SETTINGS_MAPPING_POLISH
-    from es_mapping_simple import CHANGELOG_MAPPING_SIMPLE, SETTINGS_MAPPING_SIMPLE
-    POLISH_MAPPING_AVAILABLE = True
-except ImportError:
-    from es_mapping_simple import CHANGELOG_MAPPING_SIMPLE, SETTINGS_MAPPING_SIMPLE
-    POLISH_MAPPING_AVAILABLE = False
+from es_utils import create_index_with_auto_fallback
+from es_populate import JiraElasticsearchPopulator
 import config
 
 def wait_for_elasticsearch(host="localhost", port=9200, timeout=300):
@@ -97,24 +92,22 @@ def create_index_with_mapping(host, port, index_name, mapping):
         print(f"✗ Error creating index {index_name}: {e}")
         return False
 
-def create_index_with_fallback(host, port, index_name):
-    """Create an index with Polish mapping, falling back to simple mapping if needed."""
-    # Try Polish mapping first (if available)
-    if POLISH_MAPPING_AVAILABLE:
-        print(f"Attempting to create {index_name} with Polish Stempel analyzer...")
-        if index_name == config.INDEX_CHANGELOG:
-            if create_index_with_mapping(host, port, index_name, CHANGELOG_MAPPING_POLISH):
-                return True
+def create_index_unified(populator, index_name):
+    """Create an index using the unified approach from es_utils."""
+    try:
+        success = create_index_with_auto_fallback(
+            populator=populator,
+            index_name=index_name,
+            logger=None  # Function handles its own logging
+        )
+        if success:
+            print(f"✓ Index {index_name} created successfully with unified approach")
         else:
-            if create_index_with_mapping(host, port, index_name, SETTINGS_MAPPING_POLISH):
-                return True
-    
-    # Fall back to simple mapping
-    print(f"Falling back to simple Polish mapping for {index_name}...")
-    if index_name == config.INDEX_CHANGELOG:
-        return create_index_with_mapping(host, port, index_name, CHANGELOG_MAPPING_SIMPLE)
-    else:
-        return create_index_with_mapping(host, port, index_name, SETTINGS_MAPPING_SIMPLE)
+            print(f"✗ Failed to create index {index_name}")
+        return success
+    except Exception as e:
+        print(f"✗ Error creating index {index_name}: {e}")
+        return False
 
 def test_polish_analyzer(host, port, index_name):
     """Test the Polish analyzer with sample text."""
@@ -176,19 +169,37 @@ def main():
     # Check plugins
     if not install_plugins(host, port):
         print("Warning: Some required plugins may be missing")
-      # Create changelog index
-    print(f"\nCreating index: {config.INDEX_CHANGELOG}")
-    if not create_index_with_fallback(host, port, config.INDEX_CHANGELOG):
-        print("Failed to create changelog index")
-        return 1
     
-    # Create settings index
-    print(f"\nCreating index: {config.INDEX_SETTINGS}")
-    if not create_index_with_fallback(host, port, config.INDEX_SETTINGS):
-        print("Failed to create settings index")
-        return 1
-      # Test Polish analyzer
-    test_polish_analyzer(host, port, config.INDEX_CHANGELOG)
+    # Create populator for unified approach
+    populator = JiraElasticsearchPopulator(
+        agent_name="InitElasticsearch",
+        host=host,
+        port=port,
+        api_key=es_config.get('api_key'),
+        use_ssl=es_config.get('use_ssl', False),
+        url=es_config.get('url')
+    )
+    
+    try:
+        populator.connect()
+        
+        # Create changelog index
+        print(f"\nCreating index: {config.INDEX_CHANGELOG}")
+        if not create_index_unified(populator, config.INDEX_CHANGELOG):
+            print("Failed to create changelog index")
+            return 1
+        
+        # Create settings index
+        print(f"\nCreating index: {config.INDEX_SETTINGS}")
+        if not create_index_unified(populator, config.INDEX_SETTINGS):
+            print("Failed to create settings index")
+            return 1
+        
+        # Test Polish analyzer
+        test_polish_analyzer(host, port, config.INDEX_CHANGELOG)
+        
+    finally:
+        populator.close()
     
     print(f"\n✓ Elasticsearch initialization completed!")
     

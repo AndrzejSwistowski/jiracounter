@@ -7,7 +7,8 @@ This will show us what fields already exist in the index.
 import os
 import sys
 import logging
-from elasticsearch import Elasticsearch
+import requests
+import json
 
 # Add parent directory to path to import config
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -23,36 +24,43 @@ def main():
     
     # Build the connection URL
     if es_config['url']:
-        elastic_url = es_config['url']
+        url = es_config['url'].rstrip('/')
     else:
-        elastic_url = f"http://{es_config['host']}:{es_config['port']}"
+        url = f"http://{es_config['host']}:{es_config['port']}"
     
-    # Connect to Elasticsearch
-    headers = {}
+    # Prepare headers for HTTP requests
+    headers = {"Content-Type": "application/json"}
     if es_config['api_key']:
         headers["Authorization"] = f"ApiKey {es_config['api_key']}"
         logger.info("Using API key authentication")
     
     try:
-        es = Elasticsearch(
-            [elastic_url], 
-            headers=headers
-        )
+        # Test the connection
+        response = requests.get(f"{url}/_cluster/health", headers=headers, timeout=10)
+        if response.status_code != 200:
+            raise ConnectionError(f"Could not connect to Elasticsearch: {response.status_code}")
+        
+        logger.info("Successfully connected to Elasticsearch")
         
         # Check if jira-changelog index exists
-        if es.indices.exists(index="jira-changelog"):
+        index_response = requests.head(f"{url}/jira-changelog", headers=headers)
+        if index_response.status_code == 200:
             logger.info("jira-changelog index exists")
             
             # Get the index mapping
-            mapping = es.indices.get_mapping(index="jira-changelog")
+            mapping_response = requests.get(f"{url}/jira-changelog/_mapping", headers=headers)
+            if mapping_response.status_code != 200:
+                logger.error(f"Failed to get mapping: {mapping_response.status_code}")
+                return
+            
+            mapping = mapping_response.json()
             
             # Print the mapping in a readable format
             logger.info("Index mapping structure:")
             
             # Convert the mapping to a Python dictionary and extract properties
-            mapping_dict = mapping.body
-            if "jira-changelog" in mapping_dict:
-                properties = mapping_dict["jira-changelog"]["mappings"]["properties"]
+            if "jira-changelog" in mapping:
+                properties = mapping["jira-changelog"]["mappings"]["properties"]
                 logger.info(f"Found {len(properties)} top-level properties in the mapping")
                 
                 # List all top-level properties
@@ -79,26 +87,35 @@ def main():
                 logger.warning("Unexpected mapping structure")
             
             # Get a sample document
-            result = es.search(
-                index="jira-changelog",
-                size=1,
-                sort=[{"historyDate": {"order": "desc"}}]
+            search_query = {
+                "size": 1,
+                "sort": [{"historyDate": {"order": "desc"}}]
+            }
+            
+            search_response = requests.post(
+                f"{url}/jira-changelog/_search",
+                headers=headers,
+                json=search_query
             )
             
-            if result["hits"]["total"]["value"] > 0:
-                sample_doc = result["hits"]["hits"][0]["_source"]
-                logger.info("Found a sample document")
-                logger.info("Sample document fields:")
-                for field_name in sample_doc.keys():
-                    logger.info(f"  - {field_name}")
-                
-                # Check for our specific fields in the sample document
-                logger.info("Checking for specific fields in the sample document:")
-                logger.info(f"  - summary: {'Present' if 'summary' in sample_doc else 'Missing'}")
-                logger.info(f"  - labels: {'Present' if 'labels' in sample_doc else 'Missing'}")
-                logger.info(f"  - components: {'Present' if 'components' in sample_doc else 'Missing'}")
+            if search_response.status_code == 200:
+                result = search_response.json()
+                if result["hits"]["total"]["value"] > 0:
+                    sample_doc = result["hits"]["hits"][0]["_source"]
+                    logger.info("Found a sample document")
+                    logger.info("Sample document fields:")
+                    for field_name in sample_doc.keys():
+                        logger.info(f"  - {field_name}")
+                    
+                    # Check for our specific fields in the sample document
+                    logger.info("Checking for specific fields in the sample document:")
+                    logger.info(f"  - summary: {'Present' if 'summary' in sample_doc else 'Missing'}")
+                    logger.info(f"  - labels: {'Present' if 'labels' in sample_doc else 'Missing'}")
+                    logger.info(f"  - components: {'Present' if 'components' in sample_doc else 'Missing'}")
+                else:
+                    logger.warning("No documents found in the index")
             else:
-                logger.warning("No documents found in the index")
+                logger.error(f"Failed to search documents: {search_response.status_code}")
         else:
             logger.warning("jira-changelog index does not exist")
     

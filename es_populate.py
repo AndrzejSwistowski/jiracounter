@@ -6,21 +6,23 @@ It replaces the SQL data warehouse implementation with Elasticsearch indices for
 and analysis capabilities.
 """
 
-import logging
-from typing import Dict, List, Any, Optional
-from datetime import datetime, timedelta
 import json
+import logging
+import time
 import warnings
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Tuple, Any
+
 import requests
-from elasticsearch import Elasticsearch
-from elasticsearch.helpers import bulk
+
+from config import ES_HOST, ES_PORT, DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
+from es_document_formatter import JiraElasticsearchDocumentFormatter
+from es_utils import create_index_with_auto_fallback
 from jiraservice import JiraService
+from logger_utils import get_logger
+from progress_tracker import ProgressTracker
 from utils import APP_TIMEZONE, parse_date_with_timezone
 import config
-from es_mapping import CHANGELOG_MAPPING, SETTINGS_MAPPING
-from es_document_formatter import ElasticsearchDocumentFormatter
-from progress_tracker import ProgressTracker
-from es_utils import create_index
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, "INFO"))
@@ -59,37 +61,36 @@ class JiraElasticsearchPopulator:
         """
         self.agent_name = agent_name
         self.jira_service = JiraService()
-        self.es = None
         self.host = host
         self.port = port
         self.api_key = api_key
         self.use_ssl = use_ssl
         self.url = url
-        
+        self.connected = False
+        self.base_url = None
+        self.headers = None
+    
     def connect(self):
-        """Establishes a connection to Elasticsearch."""
+        """Establishes a connection to Elasticsearch using HTTP requests."""
         try:
             # Remove trailing slash if present in URL
             if self.url:
                 self.url = self.url.rstrip('/')
             
-            # First, test the connection using requests library (which we know works)
-            import requests
-            
             # Build base URL
             if self.url:
-                base_url = self.url
+                self.base_url = self.url
             else:
-                base_url = f'{"https" if self.use_ssl else "http"}://{self.host}:{self.port}'
+                self.base_url = f'{"https" if self.use_ssl else "http"}://{self.host}:{self.port}'
                 
             # Prepare headers with API key authentication
-            headers = {"Content-Type": "application/json"}
+            self.headers = {"Content-Type": "application/json"}
             if self.api_key:
-                headers["Authorization"] = f"ApiKey {self.api_key}"
+                self.headers["Authorization"] = f"ApiKey {self.api_key}"
                 logger.info("Using API key authentication")
             
             # Test the connection by requesting cluster health
-            response = requests.get(f"{base_url}/_cluster/health", headers=headers)
+            response = requests.get(f"{self.base_url}/_cluster/health", headers=self.headers, timeout=10)
             
             if response.status_code != 200:
                 raise ConnectionError(f"Could not connect to Elasticsearch: {response.status_code} - {response.text}")
@@ -97,53 +98,45 @@ class JiraElasticsearchPopulator:
             health_data = response.json()
             logger.info(f"Successfully connected to Elasticsearch cluster: {health_data['cluster_name']} / Status: {health_data['status']}")
             
-            # Now, create the Elasticsearch client instance with the same connection params
-            connect_args = {'hosts': [base_url]}
+            # Store connection parameters for later use
+            self.connected = True
             
-            # Add API key authentication if provided - using headers like in requests
-            if self.api_key:
-                connect_args['headers'] = headers
-            
-            self.es = Elasticsearch(**connect_args)
-            
-            # We won't check with ping() since we already verified the connection works
-            
-            return self.es
+            return True
         except Exception as e:
             logger.error(f"Error connecting to Elasticsearch: {e}")
             raise
     
     def close(self):
         """Closes the Elasticsearch connection."""
-        if self.es:
-            self.es.close()
+        if self.connected:
+            self.connected = False
             logger.info("Elasticsearch connection closed")
     
     def create_indices(self):
-        """Create the necessary indices with proper mappings."""
+        """Create the necessary indices with proper mappings using unified approach."""
         try:
-            # Create changelog index with the improved mapping
-            self.es.indices.create(
-                index=INDEX_CHANGELOG,
-                body=CHANGELOG_MAPPING,
-                ignore=400  # Ignore error if index already exists
+            # Create changelog index using unified approach
+            result1 = create_index_with_auto_fallback(
+                populator=self,
+                index_name=INDEX_CHANGELOG,
+                logger=logger
             )
             
-            # Create settings index
-            self.es.indices.create(
-                index=INDEX_SETTINGS,
-                body=SETTINGS_MAPPING,
-                ignore=400  # Ignore error if index already exists
+            # Create settings index using unified approach
+            result2 = create_index_with_auto_fallback(
+                populator=self,
+                index_name=INDEX_SETTINGS,
+                logger=logger
             )
             
-            return True
+            return result1 and result2
         except Exception as e:
-            logging.error(f"Error creating indices: {e}")
+            logger.error(f"Error creating indices: {e}")
             return False
     
     def get_last_sync_date(self):
         """
-        Gets the last date when data was fetched from JIRA API.
+        Gets the last date when data was fetched from JIRA API using HTTP requests.
         
         Returns:
             datetime: The date of the last sync, or None if no previous sync
@@ -161,7 +154,14 @@ class JiraElasticsearchPopulator:
                 }
             }
             
-            result = self.es.search(index=INDEX_SETTINGS, body=query)
+            response = requests.post(f"{self.base_url}/{INDEX_SETTINGS}/_search", 
+                                   headers=self.headers, json=query, timeout=10)
+            
+            if response.status_code != 200:
+                logger.warning(f"Failed to query settings index: {response.status_code}")
+                return None
+                
+            result = response.json()
             
             if result["hits"]["total"]["value"] > 0:
                 # Return the last_sync_date value
@@ -179,10 +179,13 @@ class JiraElasticsearchPopulator:
                     ]
                 }
                 
-                result = self.es.search(index=INDEX_CHANGELOG, body=query)
+                response = requests.post(f"{self.base_url}/{INDEX_CHANGELOG}/_search", 
+                                       headers=self.headers, json=query, timeout=10)
                 
-                if result["hits"]["total"]["value"] > 0:
-                    return datetime.fromisoformat(result["hits"]["hits"][0]["_source"]["historyDate"]).astimezone(APP_TIMEZONE)
+                if response.status_code == 200:
+                    result = response.json()
+                    if result["hits"]["total"]["value"] > 0:
+                        return datetime.fromisoformat(result["hits"]["hits"][0]["_source"]["historyDate"]).astimezone(APP_TIMEZONE)
                 
                 # If still no date, return None
                 return None
@@ -193,7 +196,7 @@ class JiraElasticsearchPopulator:
     
     def update_sync_date(self, sync_date):
         """
-        Updates the last sync date in Elasticsearch.
+        Updates the last sync date in Elasticsearch using HTTP requests.
         
         Args:
             sync_date: The datetime to save as the last sync date
@@ -215,19 +218,33 @@ class JiraElasticsearchPopulator:
                     "term": {
                         "agent_name": self.agent_name
                     }
-                }            }
+                }
+            }
             
-            result = self.es.search(index=INDEX_SETTINGS, body=query)
+            response = requests.post(f"{self.base_url}/{INDEX_SETTINGS}/_search", 
+                                   headers=self.headers, json=query, timeout=10)
             
-            if result["hits"]["total"]["value"] > 0:
-                # Update the existing document
-                doc_id = result["hits"]["hits"][0]["_id"]
-                self.es.update(index=INDEX_SETTINGS, id=doc_id, body={"doc": doc})
+            if response.status_code == 200:
+                result = response.json()
+                
+                if result["hits"]["total"]["value"] > 0:
+                    # Update the existing document
+                    doc_id = result["hits"]["hits"][0]["_id"]
+                    update_body = {"doc": doc}
+                    response = requests.post(f"{self.base_url}/{INDEX_SETTINGS}/_update/{doc_id}", 
+                                           headers=self.headers, json=update_body, timeout=10)
+                else:
+                    # Insert a new document
+                    response = requests.post(f"{self.base_url}/{INDEX_SETTINGS}/_doc", 
+                                           headers=self.headers, json=doc, timeout=10)
+                
+                if response.status_code in [200, 201]:
+                    logger.info(f"Updated last sync date to {sync_date}")
+                else:
+                    logger.error(f"Failed to update sync date: {response.status_code} - {response.text}")
             else:
-                # Insert a new document
-                self.es.index(index=INDEX_SETTINGS, body=doc)
-            
-            logger.info(f"Updated last sync date to {sync_date}")
+                logger.error(f"Failed to query for existing settings: {response.status_code}")
+                
         except Exception as e:
             logger.error(f"Error updating sync date: {e}")
     
@@ -246,8 +263,6 @@ class JiraElasticsearchPopulator:
         """
         raise NotImplementedError("format_changelog_entry is no longer supported. Use comprehensive records only.")
     
-    # Remove the _get_allocation_name method as it's already handled by ElasticsearchDocumentFormatter
-    
     def insert_issue_history(self, history_record):
         """
         Inserts an issue history record into Elasticsearch.
@@ -261,7 +276,6 @@ class JiraElasticsearchPopulator:
         Returns:
             bool: True if successful, False otherwise
         """
-        import warnings
         warnings.warn(
             "insert_issue_history is deprecated. Use bulk_insert_issue_history instead.", 
             DeprecationWarning, 
@@ -274,14 +288,10 @@ class JiraElasticsearchPopulator:
     
     def bulk_insert_issue_history(self, history_records):
         """
-        Inserts multiple issue history records into Elasticsearch in a single bulk operation.
-        
-        This method now supports both the old individual history record format and 
-        the new comprehensive record format.
+        Inserts multiple issue history records into Elasticsearch using HTTP bulk operations.
         
         Args:
-            history_records: List of dictionaries containing either individual history data
-                           or comprehensive issue records
+            history_records: List of dictionaries containing comprehensive issue records
             
         Returns:
             int: Number of records successfully inserted
@@ -291,23 +301,24 @@ class JiraElasticsearchPopulator:
                 return 0
                 
             # Make sure indices exist
-            self.create_indices()            # Prepare the bulk operation
-            actions = []
+            self.create_indices()
+            
+            # Prepare the bulk operation
+            bulk_body = []
             for record in history_records:
                 try:
-                    # All records are now issue records                    doc, doc_id = self.format_issue_record(record)
+                    # All records are now issue records
+                    doc, doc_id = self.format_issue_record(record)
                     # Use the actual issue ID returned by the formatter
                     if not doc_id:
                         # Fallback if no doc_id returned
                         issue_key = record.get('issue_data', {}).get('key', 'unknown')
                         doc_id = f"{issue_key}_issue"
-                    # Add the action - use index operation to support both insert and update
-                    actions.append({
-                        "_index": INDEX_CHANGELOG,
-                        "_id": doc_id,
-                        "_op_type": "index",  # Use index to support both insert and update
-                        "_source": doc
-                    })
+                    
+                    # Add the index action
+                    bulk_body.append(json.dumps({"index": {"_index": INDEX_CHANGELOG, "_id": doc_id}}))
+                    bulk_body.append(json.dumps(doc))
+                    
                 except Exception as e:
                     logger.error(f"Error processing record: {e}")
                     issue_id = self._extract_issue_identifier(record)
@@ -315,28 +326,37 @@ class JiraElasticsearchPopulator:
                     continue
             
             # Execute the bulk operation
-            if actions:
+            if bulk_body:
                 try:
-                    success_count = 0
-                    failed_count = 0
+                    bulk_data = "\n".join(bulk_body) + "\n"
+                    response = requests.post(f"{self.base_url}/_bulk", 
+                                           headers=self.headers, 
+                                           data=bulk_data, 
+                                           timeout=30)
                     
-                    # Use the bulk helper from elasticsearch library - capture detailed errors
-                    success, errors = bulk(self.es, actions, stats_only=False, raise_on_error=False)
-                    
-                    success_count = len(success) if isinstance(success, list) else success
-                    failed_count = len(errors) if errors else 0
-                    
-                    if failed_count > 0:
-                        logger.warning(f"Bulk insert: {success_count} succeeded, {failed_count} failed")
-                        # Log detailed error information for the first few failures
-                        for i, error in enumerate(errors[:5]):  # Show first 5 errors only
-                            logger.error(f"Bulk error {i+1}: {error}")
-                        if len(errors) > 5:
-                            logger.error(f"... and {len(errors) - 5} more errors")
+                    if response.status_code == 200:
+                        result = response.json()
+                        success_count = 0
+                        failed_count = 0
+                        
+                        for item in result.get('items', []):
+                            if 'index' in item:
+                                if item['index'].get('status') in [200, 201]:
+                                    success_count += 1
+                                else:
+                                    failed_count += 1
+                                    logger.error(f"Bulk error: {item['index']}")
+                        
+                        if failed_count > 0:
+                            logger.warning(f"Bulk insert: {success_count} succeeded, {failed_count} failed")
+                        else:
+                            logger.debug(f"Bulk insert: {success_count} succeeded")
+                        
+                        return success_count
                     else:
-                        logger.debug(f"Bulk insert: {success_count} succeeded")
-                    
-                    return success_count
+                        logger.error(f"Bulk operation failed: {response.status_code} - {response.text}")
+                        return 0
+                        
                 except Exception as e:
                     logger.error(f"Error during bulk operation: {e}")
                     return 0
@@ -368,7 +388,7 @@ class JiraElasticsearchPopulator:
         Returns:
             int: Number of records successfully inserted
         """
-        if not self.es:
+        if not self.connected:
             self.connect()
         
         # If no start_date provided, get the last sync date
@@ -394,14 +414,9 @@ class JiraElasticsearchPopulator:
                 history_records = []
             else:
                 history_records = result
-					
+                
             # If we get here, JIRA authentication was successful
             jira_connected = True
-            
-            # Process records in bulk
-            bulk_data = []
-            current_bulk_idx = 0
-            total_inserted = 0
             
             # Track the last successfully processed history date
             last_successful_date = None
@@ -410,14 +425,15 @@ class JiraElasticsearchPopulator:
             for i in range(0, len(history_records), bulk_size):
                 batch = history_records[i:i+bulk_size]
                 inserted_count = self.bulk_insert_issue_history(batch)
-                total_inserted += inserted_count
+                success_count += inserted_count
                 
                 # If nothing was inserted in this batch, there might be an issue
                 if inserted_count == 0 and len(batch) > 0:
                     all_bulk_operations_succeeded = False
                     logger.warning(f"Batch insert failed - 0 records inserted out of {len(batch)}")
                     break
-                  # Update the last successful date if records were inserted
+                
+                # Update the last successful date if records were inserted
                 if inserted_count > 0 and batch:
                     last_record = batch[-1]
                     # For the new comprehensive record structure, use issue_data.updated as the tracking date
@@ -431,8 +447,7 @@ class JiraElasticsearchPopulator:
                         except (ValueError, TypeError):
                             logger.debug(f"Could not parse updated date: {last_record.get('issue_data', {}).get('updated')}")
             
-            logger.info(f"Successfully inserted {total_inserted} out of {len(history_records)} records")
-            success_count = total_inserted
+            logger.info(f"Successfully inserted {success_count} out of {len(history_records)} records")
             
         except Exception as e:
             logger.error(f"Error fetching data from JIRA: {e}")
@@ -466,7 +481,7 @@ class JiraElasticsearchPopulator:
       
     def get_database_summary(self, days=30):
         """
-        Gets a summary of the data in Elasticsearch.
+        Gets a summary of the data in Elasticsearch using HTTP requests.
         
         Args:
             days: Number of days to include in the summary (default: 30)
@@ -520,7 +535,14 @@ class JiraElasticsearchPopulator:
             }
             
             # Execute the query
-            result = self.es.search(index=INDEX_CHANGELOG, body=query)
+            response = requests.post(f"{self.base_url}/{INDEX_CHANGELOG}/_search", 
+                                   headers=self.headers, json=query, timeout=10)
+            
+            if response.status_code != 200:
+                logger.error(f"Failed to get database summary: {response.status_code}")
+                return None
+                
+            result = response.json()
             
             # Extract the results
             aggs = result.get('aggregations', {})
@@ -582,7 +604,8 @@ class JiraElasticsearchPopulator:
         
         # Ensure date fields are properly formatted
         for date_field in ['status_change_date', 'created', 'updated']:
-            if date_field in es_record and es_record[date_field]:                # Make sure it's properly formatted as ISO8601
+            if date_field in es_record and es_record[date_field]:
+                # Make sure it's properly formatted as ISO8601
                 try:
                     if not isinstance(es_record[date_field], str):
                         # Convert datetime object to string if needed
@@ -591,36 +614,6 @@ class JiraElasticsearchPopulator:
                     pass  # Keep as is if conversion fails
         
         return es_record
-        
-    def _execute_bulk(self, actions):
-        """Execute a bulk operation with proper error handling.
-        
-        Args:
-            actions: List of actions to perform in bulk
-            
-        Returns:
-            tuple: (success_count, failed_count)
-        """
-        if not actions:
-            return 0, 0
-            
-        try:
-            # Use the bulk helper from elasticsearch library
-            success, errors = bulk(self.es, actions, stats_only=True, raise_on_error=False)
-            
-            # Calculate failed count
-            failed_count = len(actions) - success if success <= len(actions) else 0
-            
-            if failed_count > 0:
-                logger.warning(f"Bulk operation: {success} succeeded, {failed_count} failed")
-            else:
-                logger.debug(f"Bulk operation: {success} succeeded")
-                
-            return success, failed_count
-                
-        except Exception as e:
-            logger.error(f"Error during bulk operation: {e}")
-            return 0, len(actions) if actions else 0
           
     def _extract_issue_identifier(self, record):
         """
@@ -644,7 +637,7 @@ class JiraElasticsearchPopulator:
         Returns:
             Tuple: (formatted_document, document_id) for Elasticsearch
         """
-        return ElasticsearchDocumentFormatter.format_issue_record(issue_record)
+        return JiraElasticsearchDocumentFormatter.format_issue_record(issue_record)
         
 # Example usage
 if __name__ == "__main__":
