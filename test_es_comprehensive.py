@@ -21,11 +21,11 @@ def test_issue_formatting():
     # Create a sample issue record
     sample_record = {
         'issue_data': {
-            'issueId': '12345',
+            'id': '12345',
             'key': 'TEST-123',
             'type': 'Story',
             'status': 'In Progress',
-            'project_key': 'TEST',
+            'project': {'key': 'TEST', 'name': 'Test Project', 'id': '10000'},
             'summary': 'Test issue summary',
             'created': '2024-01-01T10:00:00+00:00',
             'updated': '2024-01-15T15:30:00+00:00',
@@ -119,11 +119,11 @@ def test_edge_cases():
     # Test with minimal issue record
     minimal_record = {
         'issue_data': {
-            'issueId': '123',
+            'id': '123',
             'key': 'TEST-123',
             'type': 'Bug',
             'status': 'Open',
-            'project_key': 'TEST',
+            'project': {'key': 'TEST', 'name': 'Test Project', 'id': '10000'},
             'summary': 'Minimal test issue',
             'created': '2024-01-01T10:00:00+00:00',
             'updated': '2024-01-01T10:00:00+00:00'

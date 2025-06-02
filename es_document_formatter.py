@@ -118,7 +118,8 @@ class ElasticsearchDocumentFormatter:
             
         Returns:
             Dict containing the formatted data for Elasticsearch
-        """        
+        """
+        
         from time_utils import format_working_minutes_to_text
         issue_data = issue_record.get('issue_data', {})
         metrics = issue_record.get('metrics', {})
@@ -127,7 +128,7 @@ class ElasticsearchDocumentFormatter:
         doc = {
             "@timestamp": issue_data.get('updated'),
             "issue": {
-                "id": issue_data.get('issueId'),
+                "id": issue_data.get('id'),
                 "key": issue_data.get('key'),
                 "type": {"name": issue_data.get('type') or issue_data.get('typeName')},
                 "status": {
@@ -138,11 +139,10 @@ class ElasticsearchDocumentFormatter:
                     "period": format_working_minutes_to_text(metrics.get('working_minutes_in_current_status'))
                 },
                 "created_at": issue_data.get('created'),
-                "working_minutes": metrics.get('working_minutes_from_create'),
-                "working_days": int(metrics.get('working_minutes_from_create', 0) / (60 * 8)) if metrics.get('working_minutes_from_create') else None,
+                "working_minutes": metrics.get('working_minutes_from_create'),                "working_days": int(metrics.get('working_minutes_from_create', 0) / (60 * 8)) if metrics.get('working_minutes_from_create') else None,
                 "period": format_working_minutes_to_text(metrics.get('working_minutes_from_create'))
             },
-            "project": {"key": issue_data.get('project_key') or issue_data.get('projectKey')},
+            "project": {"key": issue_data.get('project', {}).get('key') },
         }
         
         # Optional fields
@@ -212,10 +212,9 @@ class ElasticsearchDocumentFormatter:
         if metrics.get('backflow_count') is not None:
             doc["backflow_count"] = metrics['backflow_count']
         if metrics.get('unique_statuses_visited'):
-            doc["unique_statuses_visited"] = metrics['unique_statuses_visited']
-        # Status transitions and field changes
+            doc["unique_statuses_visited"] = metrics['unique_statuses_visited']        # Status transitions and field changes
         if status_transitions:
             doc["status_transitions"] = status_transitions
         if field_changes:
             doc["field_changes"] = field_changes
-        return doc, issue_data.get('issueId')  # Return both document and ID for ES indexing
+        return doc, issue_data.get('id')  # Return both document and ID for ES indexing

@@ -311,9 +311,9 @@ class JiraElasticsearchPopulator:
                     doc, doc_id = self.format_issue_record(record)
                     # Use the actual issue ID returned by the formatter
                     if not doc_id:
-                        # Fallback if no doc_id returned
+                        # If no doc_id is found, raise an exception - we need a proper ID
                         issue_key = record.get('issue_data', {}).get('key', 'unknown')
-                        doc_id = f"{issue_key}_issue"
+                        raise ValueError(f"No document ID found for issue {issue_key}. Format_issue_record must return a valid ID.")
                     
                     # Add the index action
                     bulk_body.append(json.dumps({"index": {"_index": INDEX_CHANGELOG, "_id": doc_id}}))
