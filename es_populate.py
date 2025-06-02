@@ -215,8 +215,7 @@ class JiraElasticsearchPopulator:
                     "term": {
                         "agent_name": self.agent_name
                     }
-                }
-            }
+                }            }
             
             result = self.es.search(index=INDEX_SETTINGS, body=query)
             
@@ -236,13 +235,16 @@ class JiraElasticsearchPopulator:
         """
         Format a history record for insertion into Elasticsearch.
         
+        This method is deprecated as it relies on the removed format_changelog_entry
+        from ElasticsearchDocumentFormatter. Only comprehensive records are now supported.
+        
         Args:
             history_record: Dictionary containing the issue history data
             
         Returns:
             Dict containing the formatted data for Elasticsearch
         """
-        return ElasticsearchDocumentFormatter.format_changelog_entry(history_record)
+        raise NotImplementedError("format_changelog_entry is no longer supported. Use comprehensive records only.")
     
     # Remove the _get_allocation_name method as it's already handled by ElasticsearchDocumentFormatter
     
@@ -290,51 +292,31 @@ class JiraElasticsearchPopulator:
                 
             # Make sure indices exist
             self.create_indices()
-            
-            # Prepare the bulk operation
+              # Prepare the bulk operation
             actions = []
             for record in history_records:
-                try:                    # Detect record type and format accordingly
-                    if self._is_comprehensive_record(record):
-                        # New comprehensive record format
-                        doc, doc_id = self.format_comprehensive_record(record)
-                        # Use the actual issue ID returned by the formatter
-                        if not doc_id:
-                            # Fallback if no doc_id returned
-                            issue_key = record.get('issue_data', {}).get('key', 'unknown')
-                            doc_id = f"{issue_key}_comprehensive"
-                    else:
-                        # Old individual history record format
-                        if 'historyId' not in record:
-                            logger.warning(f"Record missing historyId, skipping: {record.get('issueKey', 'unknown')}")
-                            continue
-                            
-                        # Format the record for Elasticsearch using the old method
-                        doc = self.format_changelog_entry(record)
-                        # Generate a unique ID for the document
-                        doc_id = f"{record.get('issueKey', 'unknown')}_{record['historyId']}"
-                      # Add the action - use update for comprehensive records, index for legacy
-                    if self._is_comprehensive_record(record):
-                        # Use update operation for comprehensive records to support updates
-                        actions.append({
-                            "_index": INDEX_CHANGELOG,
-                            "_id": doc_id,
-                            "_op_type": "index",  # Use index to support both insert and update
-                            "_source": doc
-                        })
-                    else:
-                        # Use index operation for legacy records (append-only behavior)
-                        actions.append({
-                            "_index": INDEX_CHANGELOG,
-                            "_id": doc_id,
-                            "_source": doc
-                        })
+                try:
+                    # All records are now comprehensive records
+                    doc, doc_id = self.format_comprehensive_record(record)
+                    # Use the actual issue ID returned by the formatter
+                    if not doc_id:
+                        # Fallback if no doc_id returned
+                        issue_key = record.get('issue_data', {}).get('key', 'unknown')
+                        doc_id = f"{issue_key}_comprehensive"
+                      # Add the action - use index operation to support both insert and update
+                    actions.append({
+                        "_index": INDEX_CHANGELOG,
+                        "_id": doc_id,
+                        "_op_type": "index",  # Use index to support both insert and update
+                        "_source": doc
+                    })
                 except Exception as e:
                     logger.error(f"Error processing record: {e}")
                     issue_id = self._extract_issue_identifier(record)
                     logger.debug(f"Problematic record: {issue_id}")
                     continue
-              # Execute the bulk operation
+            
+            # Execute the bulk operation
             if actions:
                 try:
                     success_count = 0
@@ -483,7 +465,7 @@ class JiraElasticsearchPopulator:
             logger.warning("JIRA authorization failed. Not updating the sync date.")
         
         return success_count
-    
+      
     def get_database_summary(self, days=30):
         """
         Gets a summary of the data in Elasticsearch.
@@ -495,15 +477,15 @@ class JiraElasticsearchPopulator:
             dict: Summary statistics about the database
         """
         try:
-            # Calculate the date range
+            # Calculate the date range using the provided days parameter
             end_date = datetime.now(APP_TIMEZONE)
-            start_date = end_date - timedelta(days=30)
+            start_date = end_date - timedelta(days=days)
             
             # Build the query
             query = {
                 "query": {
                     "range": {
-                        "historyDate": {
+                        "@timestamp": {
                             "gte": start_date.isoformat(),
                             "lte": end_date.isoformat()
                         }
@@ -512,22 +494,22 @@ class JiraElasticsearchPopulator:
                 "aggs": {
                     "total_records": {
                         "value_count": {
-                            "field": "historyId"
+                            "field": "@timestamp"
                         }
                     },
                     "oldest_record": {
                         "min": {
-                            "field": "historyDate"
+                            "field": "@timestamp"
                         }
                     },
                     "newest_record": {
                         "max": {
-                            "field": "historyDate"
+                            "field": "@timestamp"
                         }
                     },
                     "unique_issues": {
                         "cardinality": {
-                            "field": "issue.id"
+                            "field": "issue.key.keyword"
                         }
                     },
                     "unique_projects": {
@@ -556,96 +538,6 @@ class JiraElasticsearchPopulator:
         except Exception as e:
             logger.error(f"Error getting database summary: {e}")
             return None
-
-    def prepare_changelog_document(self, issue_key, history):
-        """Prepare a document for the changelog index, with improved searchability."""
-        # Get issue summary from Jira if needed
-        issue_summary = ""
-        try:
-            # Try to get summary from Jira service if needed
-            issue_data = self.jira_service.get_issue(issue_key)
-            if issue_data and 'fields' in issue_data and 'summary' in issue_data['fields']:
-                issue_summary = issue_data['fields']['summary']
-        except Exception as e:
-            logger.warning(f"Could not get summary for issue {issue_key}: {e}")
-        
-        # Calculate working days if possible
-        working_days = None
-        try:
-            # Calculate working days between creation and the history date
-            issue_data = self.jira_service.get_issue(issue_key)
-            if issue_data and 'fields' in issue_data and 'created' in issue_data['fields']:
-                created_date = parse_date_with_timezone(issue_data['fields']['created'])
-                history_date = parse_date_with_timezone(history["created"])
-                
-                # Simple calculation (excluding weekends)
-                delta = history_date - created_date
-                working_days = max(0, delta.days - (delta.days // 7) * 2)
-                
-                # If created_date is on weekend, adjust accordingly
-                created_weekday = created_date.weekday()
-                if created_weekday > 4:  # 5=Saturday, 6=Sunday
-                    working_days -= (6 - created_weekday)
-        except Exception as e:
-            logger.warning(f"Could not calculate working days for issue {issue_key}: {e}")
-            
-        doc = {
-            "historyId": history["id"],
-            "historyDate": history["created"],
-            "@timestamp": history["created"],
-            "issueKey": issue_key,
-            "factType": "HISTORY"
-        }
-        
-        # Add summary if available
-        if issue_summary:
-            doc["summary"] = issue_summary
-            
-        # Add working days if calculated
-        if working_days is not None:
-            doc["workingDaysFromCreation"] = working_days
-            
-        # Extract specific fields for better searchability
-        description_text = ""
-        comment_text = ""
-        status_change = ""
-        assignee_change = ""
-        
-        # Process each change item
-        for item in history.get("items", []):
-            change = {
-                "field": item.get("field"),
-                "fieldtype": item.get("fieldtype"),
-                "from": item.get("from"),
-                "fromString": item.get("fromString"),
-                "to": item.get("to"),
-                "toString": item.get("toString")
-            }
-            
-            # Add to changes list
-            doc.setdefault("changes", []).append(change)
-            
-            # Extract specific fields for better searchability
-            if item.get("field") == "description":
-                description_text = item.get("toString", "")
-            elif item.get("field") == "comment":
-                comment_text = item.get("toString", "")
-            elif item.get("field") == "status":
-                status_change = f"{item.get('fromString', '')} → {item.get('toString', '')}"
-            elif item.get("field") == "assignee":
-                assignee_change = f"{item.get('fromString', '')} → {item.get('toString', '')}"
-            
-        # Add extracted fields for better searchability
-        if description_text:
-            doc["description_text"] = description_text
-        if comment_text:
-            doc["comment_text"] = comment_text
-        if status_change:
-            doc["status_changes"] = status_change
-        if assignee_change:
-            doc["assignee_changes"] = assignee_change
-            
-        return doc
 
     def transform_record_for_elasticsearch(self, record):
         """Transform a JIRA record to the format needed for Elasticsearch."""
@@ -731,37 +623,18 @@ class JiraElasticsearchPopulator:
         except Exception as e:
             logger.error(f"Error during bulk operation: {e}")
             return 0, len(actions) if actions else 0
-            
-    def _is_comprehensive_record(self, record):
-        """
-        Detect if a record is a comprehensive record or an individual history record.
-        
-        Args:
-            record: Dictionary containing record data
-            
-        Returns:
-            bool: True if it's a comprehensive record, False if it's an individual history record
-        """
-        # Comprehensive records have these specific top-level keys
-        comprehensive_keys = {'issue_data', 'metrics', 'status_transitions', 'field_changes'}
-          # Check if at least 2 of the comprehensive keys are present
-        present_keys = set(record.keys()) & comprehensive_keys
-        return len(present_keys) >= 2
-    
+          
     def _extract_issue_identifier(self, record):
         """
-        Extract issue identifier from either record type for logging purposes.
+        Extract issue identifier from comprehensive record for logging purposes.
         
         Args:
-            record: Dictionary containing record data
+            record: Dictionary containing comprehensive record data
             
         Returns:
             str: Issue identifier for logging
         """
-        if self._is_comprehensive_record(record):
-            return record.get('issue_data', {}).get('key', 'unknown')
-        else:
-            return f"{record.get('historyId', 'unknown')} for issue {record.get('issueKey', 'unknown')}"
+        return record.get('issue_data', {}).get('key', 'unknown')
 
     def format_comprehensive_record(self, comprehensive_record):
         """

@@ -174,9 +174,8 @@ def test_comprehensive_flow():
         
         populator = JiraElasticsearchPopulator()
         
-        # Test record detection
-        is_comprehensive = populator._is_comprehensive_record(comprehensive_record)
-        assert is_comprehensive, "Should detect as comprehensive record"
+        # All records are now comprehensive by default, no detection needed
+        print("✅ Using comprehensive record format")
         
         # Test document formatting through populator
         formatted_doc, formatted_id = populator.format_comprehensive_record(comprehensive_record)

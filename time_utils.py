@@ -57,7 +57,7 @@ def parse_date(date_string):
     Parse a date string into a datetime object with timezone.
     
     Args:
-        date_string: Date string in any reasonable format
+        date_string: Date string in any reasonable format or datetime object
         
     Returns:
         datetime: Datetime object with timezone information
@@ -66,7 +66,13 @@ def parse_date(date_string):
         return None
         
     try:
-        dt = dateutil.parser.parse(date_string)
+        # If it's already a datetime object, just ensure timezone
+        if isinstance(date_string, datetime):
+            dt = date_string
+        else:
+            # Parse string input
+            dt = dateutil.parser.parse(date_string)
+        
         # Ensure timezone information is present
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=DEFAULT_TIMEZONE)

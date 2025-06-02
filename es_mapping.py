@@ -10,7 +10,8 @@ CHANGELOG_MAPPING = {
                 # Polish analyzer removed temporarily until proper support is added
             }
         }
-    },     "mappings": {
+    },     
+    "mappings": {
         "properties": {
             "_id": {"type": "keyword"},  # Will use issue_data.issueId
             "@timestamp": {"type": "date"},  # Will use issue_data.updated
@@ -81,7 +82,8 @@ CHANGELOG_MAPPING = {
               "properties": {
                   "displayName": {"type": "text", "fields": {"keyword": {"type": "keyword"}}}
                 }
-            },            "todo_exit_at": {"type": "alias", "path": "selected_for_development_at"},
+            },            
+            "todo_exit_at": {"type": "alias", "path": "selected_for_development_at"},
             # Content fields with comprehensive text analysis for searching
             "description": {
                 "type": "text",

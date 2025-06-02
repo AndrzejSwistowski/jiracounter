@@ -97,7 +97,7 @@ def test_get_issue(service=None):
     # Try to get an issue from previous search results if available
     try:
         # Search for any issue to use as a test
-        issues = service.search_issues("updated >= -3d")
+        issues = service.search_issues("key = BZPB-25")
         if not issues:
             print("[ERROR] No issues found to test issue retrieval")
             return
@@ -132,6 +132,9 @@ def test_get_issue(service=None):
     except Exception as e:
         print(f"[ERROR] Issue retrieval failed: {str(e)}")
 
+
+
+
 def test_get_issue_changelog(service=None):
     """Test retrieving changelog for a specific issue."""
     if service is None:
@@ -149,22 +152,39 @@ def test_get_issue_changelog(service=None):
         test_issue_key = issues[0]["key"]
         print(f"Using issue {test_issue_key} for changelog testing...")
         
-        changelog = service.get_issue_changelog(test_issue_key)
+        changelog_data = service.get_issue_changelog(test_issue_key)
         print(f"[SUCCESS] Successfully retrieved changelog for issue: {test_issue_key}")
         
-        if changelog:
-            print(f"  Found {len(changelog)} changelog entries")
+        if changelog_data:
+            # Display basic issue information
+            issue_data = changelog_data.get('issue_data', {})
+            print(f"  Issue: {issue_data.get('issueKey', 'Unknown')} - {issue_data.get('summary', 'No summary')}")
+            print(f"  Status: {issue_data.get('status', 'Unknown')}")
             
-            # Display a few recent changelog entries
-            for entry in changelog:  # Show first 3 entries
-                print(f"  - History ID: {entry['historyId']} | Changed by {entry['authorDisplayName']} on {entry['created']}")
-                
-                # Show the changes in this entry
-                for change in entry['changes']:  # Show first 2 changes per entry
-                    print(f"    - {change['field']}: {change['from']} → {change['to']}")
+            # Display metrics summary
+            metrics = changelog_data.get('metrics', {})
+            print(f"  Transitions: {metrics.get('total_transitions', 0)}")
+            print(f"  Working minutes from creation: {metrics.get('working_minutes_from_create', 0)}")
+            
+            # Display status transitions
+            status_transitions = changelog_data.get('status_transitions', [])
+            if status_transitions:
+                print(f"  Found {len(status_transitions)} status transitions:")
+                for transition in status_transitions[:3]:  # Show first 3 transitions
+                    print(f"    - {transition.get('from_status', 'Unknown')} → {transition.get('to_status', 'Unknown')} "
+                          f"by {transition.get('author', 'Unknown')} on {transition.get('transition_date', 'Unknown')}")
+            
+            # Display field changes
+            field_changes = changelog_data.get('field_changes', [])
+            if field_changes:
+                print(f"  Found {len(field_changes)} field change events:")
+                for change_event in field_changes[:3]:  # Show first 3 change events
+                    print(f"    - Changed by {change_event.get('author', 'Unknown')} on {change_event.get('change_date', 'Unknown')}")
+                    for change in change_event.get('changes', [])[:2]:  # Show first 2 changes per event
+                        print(f"      - {change.get('field', 'Unknown')}: {change.get('from', 'N/A')} → {change.get('to', 'N/A')}")
                     
         else:
-            print("  No changelog entries found for this issue")
+            print("  No changelog data found for this issue")
     except Exception as e:
         print(f"[ERROR] Changelog retrieval failed: {str(e)}")
 

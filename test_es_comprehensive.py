@@ -102,12 +102,8 @@ def test_comprehensive_formatting():
         
         print("✅ All assertions passed!")
         
-        # Test the ES populator detection
-        populator = JiraElasticsearchPopulator()
-        is_comprehensive = populator._is_comprehensive_record(sample_record)
-        assert is_comprehensive, "Record should be detected as comprehensive"
-        
-        print("✅ Comprehensive record detection works!")
+        # Note: Record detection is no longer needed since all records are comprehensive
+        print("✅ Comprehensive record formatting works correctly!")
         
         return True
         
@@ -118,27 +114,37 @@ def test_comprehensive_formatting():
         return False
 
 def test_legacy_record_detection():
-    """Test that legacy records are still detected correctly."""
-    print("\nTesting legacy record detection...")
+    """Test that comprehensive record formatting handles edge cases."""
+    print("\nTesting edge cases for comprehensive records...")
     
-    legacy_record = {
-        'historyId': 123,
-        'historyDate': '2024-01-01T10:00:00+00:00',
-        'factType': 2,
-        'issueKey': 'TEST-123',
-        'changes': []
+    # Test with minimal comprehensive record
+    minimal_record = {
+        'issue_data': {
+            'issueId': '123',
+            'key': 'TEST-123',
+            'type': 'Bug',
+            'status': 'Open',
+            'project_key': 'TEST',
+            'summary': 'Minimal test issue',
+            'created': '2024-01-01T10:00:00+00:00',
+            'updated': '2024-01-01T10:00:00+00:00'
+        },
+        'metrics': {},
+        'status_transitions': [],
+        'field_changes': []
     }
     
     try:
-        populator = JiraElasticsearchPopulator()
-        is_comprehensive = populator._is_comprehensive_record(legacy_record)
-        assert not is_comprehensive, "Legacy record should not be detected as comprehensive"
+        # Test that minimal comprehensive records work
+        doc, doc_id = ElasticsearchDocumentFormatter.format_comprehensive_record(minimal_record)
+        assert doc_id == '123', f"Expected doc_id '123', got '{doc_id}'"
+        assert doc['issue']['key'] == 'TEST-123', "Issue key not set correctly"
         
-        print("✅ Legacy record detection works!")
+        print("✅ Minimal comprehensive record formatting works!")
         return True
         
     except Exception as e:
-        print(f"❌ Error testing legacy record detection: {e}")
+        print(f"❌ Error testing edge cases: {e}")
         return False
 
 if __name__ == "__main__":
@@ -150,7 +156,7 @@ if __name__ == "__main__":
     
     success = True
     success &= test_comprehensive_formatting()
-    success &= test_legacy_record_detection()
+    success &= test_legacy_record_detection()  # Now tests edge cases instead
     
     print("\n" + "=" * 50)
     if success:
