@@ -144,6 +144,7 @@ class ElasticsearchDocumentFormatter:
             },
             "project": {"key": issue_data.get('project_key') or issue_data.get('projectKey')},
         }
+        
         # Optional fields
         if issue_data.get('allocation_code') or issue_data.get('allocationCode'):
             doc["allocation"] = issue_data.get('allocation_code') or issue_data.get('allocationCode')
@@ -166,7 +167,9 @@ class ElasticsearchDocumentFormatter:
         if issue_data.get('reporter'):
             doc["reporter"] = {"displayName": issue_data['reporter'].get('display_name') or issue_data['reporter'].get('displayName')}
         if issue_data.get('assignee'):
-            doc["assignee"] = {"displayName": issue_data['assignee'].get('display_name') or issue_data['assignee'].get('displayName')}        # Content fields
+            doc["assignee"] = {"displayName": issue_data['assignee'].get('display_name') or issue_data['assignee'].get('displayName')}
+        
+        # Content fields
         if issue_record.get('issue_description'):
             doc["description"] = issue_record['issue_description']
         if issue_record.get('issue_comments'):
