@@ -126,13 +126,16 @@ class ElasticsearchDocumentFormatter:
         status_transitions = issue_record.get('status_transitions', [])
         field_changes = issue_record.get('field_changes', [])
         doc = {
-            "@timestamp": issue_data.get('updated'),
-            "issue": {
+            "@timestamp": issue_data.get('updated'),            "issue": {
                 "id": issue_data.get('id'),
                 "key": issue_data.get('key'),
-                "type": {"name": issue_data.get('type') or issue_data.get('typeName')},
+                "type": {
+                    "name": issue_data.get('type') or issue_data.get('typeName'),
+                    "name_lower": (issue_data.get('type') or issue_data.get('typeName') or '').lower()
+                },
                 "status": {
                     "name": issue_data.get('status') or issue_data.get('statusName'),
+                    "name_lower": (issue_data.get('status') or issue_data.get('statusName') or '').lower(),
                     "change_at": issue_data.get('status_chage_date') or metrics.get('status_change_date'),
                     "working_minutes": metrics.get('working_minutes_in_current_status'),
                     "working_days": int(metrics.get('working_minutes_in_current_status', 0) / (60 * 8)) if metrics.get('working_minutes_in_current_status') else None,
@@ -168,16 +171,12 @@ class ElasticsearchDocumentFormatter:
             doc["reporter"] = {"displayName": issue_data['reporter'].get('display_name') or issue_data['reporter'].get('displayName')}
         if issue_data.get('assignee'):
             doc["assignee"] = {"displayName": issue_data['assignee'].get('display_name') or issue_data['assignee'].get('displayName')}
-        
-        # Content fields
-        if issue_record.get('issue_description'):
+          # Content fields        if issue_record.get('issue_description'):
             doc["description"] = issue_record['issue_description']
         if issue_record.get('issue_comments'):
             comments = issue_record['issue_comments']
             if isinstance(comments, list) and comments:
-                comment_texts = [c['body'] for c in comments if isinstance(c, dict) and c.get('body')]
-                if comment_texts:
-                    doc["comment"] = " ".join(comment_texts)
+                doc["comments"] = comments
         # Metrics: categorized time
         if metrics.get('backlog_minutes') is not None:
             doc["backlog"] = {
@@ -205,16 +204,27 @@ class ElasticsearchDocumentFormatter:
                 "working_minutes": metrics['working_minutes_from_first_move'],
                 "working_days": int(metrics['working_minutes_from_first_move'] / (60 * 8)),
                 "period": format_working_minutes_to_text(metrics['working_minutes_from_first_move'])
-            }
-        # Metrics: status transitions
+            }        # Metrics: status transitions
         if metrics.get('total_transitions') is not None:
             doc["total_transitions"] = metrics['total_transitions']
         if metrics.get('backflow_count') is not None:
             doc["backflow_count"] = metrics['backflow_count']
         if metrics.get('unique_statuses_visited'):
-            doc["unique_statuses_visited"] = metrics['unique_statuses_visited']        # Status transitions and field changes
+            doc["unique_statuses_visited"] = metrics['unique_statuses_visited']
+            # Add lowercase version for case-insensitive searches
+            doc["unique_statuses_visited_lower"] = [status.lower() for status in metrics['unique_statuses_visited']]        # Status transitions and field changes
         if status_transitions:
-            doc["status_transitions"] = status_transitions
+            # Add lowercase versions for case-insensitive searches
+            processed_transitions = []
+            for transition in status_transitions:
+                processed_transition = transition.copy()
+                # Add lowercase versions of status fields
+                if 'from_status' in processed_transition:
+                    processed_transition['from_status_lower'] = processed_transition['from_status'].lower() if processed_transition['from_status'] else ''
+                if 'to_status' in processed_transition:
+                    processed_transition['to_status_lower'] = processed_transition['to_status'].lower() if processed_transition['to_status'] else ''
+                processed_transitions.append(processed_transition)
+            doc["status_transitions"] = processed_transitions
         if field_changes:
             doc["field_changes"] = field_changes
         return doc, issue_data.get('id')  # Return both document and ID for ES indexing
