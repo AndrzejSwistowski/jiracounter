@@ -17,6 +17,7 @@ import logging
 from typing import List, Dict, Any
 from jiraservice import JiraService
 from utils import calculate_days_since_date, format_date_polish
+from time_utils import format_working_minutes_to_text, calculate_working_minutes_since_date
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -47,23 +48,24 @@ class EpicOpenedReport:
             
             # Process each epic to include additional information
             epics_with_details = []
-            for epic in raw_epics:
+            for issue_details in raw_epics:
                 try:
                     # Get the full issue to access all fields
-                    issue_key = epic["key"]
-                    issue_details = self.jira_service.get_issue(issue_key)
+                    issue_key = issue_details["key"]
+                    #issue_details = self.jira_service.get_issue(issue_key)
                     
                     # Create the epic information dictionary
                     epic_info = {
                         "idIssue": issue_key,
                         "summary": issue_details["summary"],
+                        "allocation_code": issue_details.get("allocation_code", None),
                         "status": issue_details["status"],
                         "created": issue_details["created"],
-                        "days_since_creation": issue_details["days_since_creation"],
-                        "Reporter": issue_details["reporter"],
-                        "Assignee": issue_details["assignee"],
+                        "minutes_since_creation": issue_details.get("minutes_since_creation", None),
+                        "Reporter": issue_details.get("reporter_display_name", None),
+                        "Assignee": issue_details.get("assignee_display_name", None),
                         "status_change_date": issue_details.get("status_change_date", None),
-                        "daysInCurrentStatus": issue_details.get("daysInCurrentStatus", None),
+                        "minutes_in_current_status": calculate_working_minutes_since_date(issue_details.get("status_change_date", None)) if issue_details.get("status_change_date") else None,
                     }
                     
                     epics_with_details.append(epic_info)
@@ -122,12 +124,18 @@ if __name__ == "__main__":
             print(f"\nProject: {project_name} ({project_key})")
             for epic in project_epics:
                 status_info = f"{epic['status']}"
-                if epic.get('daysInCurrentStatus') is not None:
-                    status_info += f" - {epic['daysInCurrentStatus']} days in current status"
-                
+                if epic.get('minutes_in_current_status') is not None:
+                    formatted_time = format_working_minutes_to_text(epic['minutes_in_current_status'])
+                    if formatted_time:
+                        status_info += f" - {formatted_time} in current status"
+                        
                 # Format the creation date in Polish
                 created_date_polish = format_date_polish(epic['created'])
                 
-                print(f"  {epic['idIssue']}: {epic['summary']} ({status_info}) - Created: {created_date_polish} ({epic['days_since_creation']} days ago) - Reporter: {epic['Reporter']} - Assignee: {epic['Assignee']}")
+                # Convert minutes to human-readable format
+                time_ago = format_working_minutes_to_text(epic.get('minutes_since_creation'))
+                time_ago_display = time_ago if time_ago else "N/A"
+                
+                print(f"  {epic['idIssue']}: {epic['allocation_code']} {epic['summary']}  ({status_info}) - Created: {created_date_polish} ({time_ago_display} ago) - Reporter: {epic['Reporter']} - Assignee: {epic['Assignee']}")
     except Exception as e:
         print(f"Error: {str(e)}")

@@ -13,120 +13,7 @@ class ElasticsearchDocumentFormatter:
     """
     Handles formatting of Jira data into Elasticsearch documents.
     """
-    
-    @staticmethod
-    def format_changelog_entry(history_record):
-        """
-        Format a history record for insertion into Elasticsearch.
-        
-        Args:
-            history_record: Dictionary containing the issue history data
-            
-        Returns:
-            Dict containing the formatted data for Elasticsearch
-        """
-        doc = {
-            "historyId": history_record['historyId'],
-            "historyDate": history_record['historyDate'],
-            "@timestamp": history_record['historyDate'],
-            "factType": history_record['factType'],
-            "issue": {
-                
-                "key": history_record['issueKey'],
-                "type": {
-                    "name": history_record['typeName']
-                },
-                "status": {
-                    "name": history_record['statusName'],
-                    "change_date": history_record.get('status_change_date') 
-                },
-                "created_at": history_record.get('created')
-            },
-            "project": {
-                "key": history_record['projectKey'],
-            },
-            "author": {
-                "displayName": history_record.get('authorDisplayName')
-            }
-        }
-        
-        # Add allocation field (as keyword according to mapping)
-        if history_record.get('allocationCode'):
-            doc["allocation"] = history_record['allocationCode']
-        
-        # Add summary field with text analysis according to mapping
-        if history_record.get('summary'):
-            doc["summary"] = history_record['summary']
-            
-        # Add labels as keyword array according to mapping
-        if history_record.get('labels'):
-            doc["labels"] = history_record['labels']
-            
-        # Add components as keyword array according to mapping
-        if history_record.get('components'):
-            component_names = ElasticsearchDocumentFormatter._extract_component_names(
-                history_record.get('components'), 
-                history_record.get('issueKey')
-            )
-            if component_names:
-                doc["components"] = component_names
-                logger.debug(f"Added {len(component_names)} components: {component_names}")
-            
-        # Add parent_issue with proper structure according to mapping
-        if history_record.get('parent_issue'):
-            doc["parent_issue"] = {
-                "key": history_record.get('parentKey') or history_record['parent_issue'].get('key'),
-                "summary":history_record.get('parent_summary') or history_record['parent_issue'].get('summary')
-            }
-            
-        # Add epic_issue with proper structure according to mapping
-        if history_record.get('epic_issue'):
-            doc["epic_issue"] = {
-                "key": history_record['epic_issue'].get('key'),
-                "summary": history_record['epic_issue'].get('summary')
-            }
-        
-        # Add reporter with proper structure according to mapping
-        if history_record.get('reporterDisplayName'):
-            doc["reporter"] = {
-                "displayName": history_record['reporterDisplayName']
-            }
-        
-        # Add time-based fields
-        if history_record.get('workingDaysFromCreation') is not None:
-            doc["days_since_creation"] = float(history_record['workingDaysFromCreation'])
-            
-        if history_record.get('todo_exit_date') is not None:
-            doc["todo_exit_date"] = history_record['todo_exit_date']
-            
-        if history_record.get('workingDaysInStatus') is not None:
-            doc["days_in_status"] = float(history_record['workingDaysInStatus'])
-            
-        # Add working_days_from_move_at_point field based on available data
-        if history_record.get('working_days_from_move_at_point') is not None:
-            doc["working_days_from_move_at_point"] = float(history_record['working_days_from_move_at_point'])
-        elif history_record.get('workingDaysFromToDo') is not None:
-            doc["working_days_from_move_at_point"] = float(history_record['workingDaysFromToDo'])
-        
-        # Add assignee with proper structure according to mapping
-        if history_record.get('assigneeDisplayName'):
-            doc["assignee"] = {
-                "displayName": history_record['assigneeDisplayName']
-            }
-        
-        # Add changes as nested objects according to mapping
-        if history_record.get('changes'):
-            doc["changes"] = history_record['changes']
-        
-        # Add content text fields with comprehensive text analysis
-        if history_record.get('description_text'):
-            doc["description_text"] = history_record['description_text']
-            
-        if history_record.get('comment_text'):
-            doc["comment_text"] = history_record['comment_text']
-        
-        return doc
-    
+
     @staticmethod
     def _extract_component_names(components_data, issue_key=None):
         """
@@ -216,3 +103,128 @@ class ElasticsearchDocumentFormatter:
         }
         
         return allocation_mapping.get(code, 'Unknown')
+    
+    @staticmethod
+    def format_issue_record(issue_record):
+        """
+        Format an issue record for insertion into Elasticsearch.
+        This method handles the issue record structure that contains
+        all issue data, metrics, and history in a single record per issue.
+        
+        Args:
+            issue_record: Dictionary containing the issue data
+                         with keys: issue_data, issue_description, issue_comments,
+                         metrics, status_transitions, field_changes
+            
+        Returns:
+            Dict containing the formatted data for Elasticsearch
+        """
+        
+        from time_utils import format_working_minutes_to_text
+        issue_data = issue_record.get('issue_data', {})
+        metrics = issue_record.get('metrics', {})
+        status_transitions = issue_record.get('status_transitions', [])
+        field_changes = issue_record.get('field_changes', [])
+        doc = {
+            "@timestamp": issue_data.get('updated'),            "issue": {
+                "id": issue_data.get('id'),
+                "key": issue_data.get('key'),
+                "type": {
+                    "name": issue_data.get('type') or issue_data.get('typeName'),
+                    "name_lower": (issue_data.get('type') or issue_data.get('typeName') or '').lower()
+                },
+                "status": {
+                    "name": issue_data.get('status') or issue_data.get('statusName'),
+                    "name_lower": (issue_data.get('status') or issue_data.get('statusName') or '').lower(),
+                    "change_at": issue_data.get('status_chage_date') or metrics.get('status_change_date'),
+                    "working_minutes": metrics.get('working_minutes_in_current_status'),
+                    "working_days": int(metrics.get('working_minutes_in_current_status', 0) / (60 * 8)) if metrics.get('working_minutes_in_current_status') else None,
+                    "period": format_working_minutes_to_text(metrics.get('working_minutes_in_current_status'))
+                },
+                "created_at": issue_data.get('created'),
+                "working_minutes": metrics.get('working_minutes_from_create'),                "working_days": int(metrics.get('working_minutes_from_create', 0) / (60 * 8)) if metrics.get('working_minutes_from_create') else None,
+                "period": format_working_minutes_to_text(metrics.get('working_minutes_from_create'))
+            },
+            "project": {"key": issue_data.get('project', {}).get('key') },
+        }
+        
+        # Optional fields
+        if issue_data.get('allocation_code') or issue_data.get('allocationCode'):
+            doc["allocation"] = issue_data.get('allocation_code') or issue_data.get('allocationCode')
+        if issue_data.get('labels'):
+            doc["labels"] = issue_data['labels']
+        if issue_data.get('components'):
+            doc["components"] = [c['name'] if isinstance(c, dict) and 'name' in c else c for c in issue_data['components']]
+        if issue_data.get('summary'):
+            doc["summary"] = issue_data['summary']
+        if issue_data.get('parent_issue'):
+            doc["parent_issue"] = {
+                "key": issue_data['parent_issue'].get('key'),
+                "summary": issue_data['parent_issue'].get('summary')
+            }
+        if issue_data.get('epic_issue'):
+            doc["epic_issue"] = {
+                "key": issue_data['epic_issue'].get('key'),
+                "summary": issue_data['epic_issue'].get('name') or issue_data['epic_issue'].get('summary')
+            }
+        if issue_data.get('reporter'):
+            doc["reporter"] = {"displayName": issue_data['reporter'].get('display_name') or issue_data['reporter'].get('displayName')}
+        if issue_data.get('assignee'):
+            doc["assignee"] = {"displayName": issue_data['assignee'].get('display_name') or issue_data['assignee'].get('displayName')}
+          # Content fields        if issue_record.get('issue_description'):
+            doc["description"] = issue_record['issue_description']
+        if issue_record.get('issue_comments'):
+            comments = issue_record['issue_comments']
+            if isinstance(comments, list) and comments:
+                doc["comments"] = comments
+        # Metrics: categorized time
+        if metrics.get('backlog_minutes') is not None:
+            doc["backlog"] = {
+                "working_minutes": metrics['backlog_minutes'],
+                "working_days": int(metrics['backlog_minutes'] / (60 * 8)),
+                "period": format_working_minutes_to_text(metrics['backlog_minutes'])
+            }
+        if metrics.get('processing_minutes') is not None:
+            doc["processing"] = {
+                "working_minutes": metrics['processing_minutes'],
+                "working_days": int(metrics['processing_minutes'] / (60 * 8)),
+                "period": format_working_minutes_to_text(metrics['processing_minutes'])
+            }
+        if metrics.get('waiting_minutes') is not None:
+            doc["waiting"] = {
+                "working_minutes": metrics['waiting_minutes'],
+                "working_days": int(metrics['waiting_minutes'] / (60 * 8)),
+                "period": format_working_minutes_to_text(metrics['waiting_minutes'])
+            }
+        # Metrics: development selection
+        if metrics.get('todo_exit_date') is not None:
+            doc["selected_for_development_at"] = metrics['todo_exit_date']
+        if metrics.get('working_minutes_from_first_move') is not None:
+            doc["from_selected_for_development"] = {
+                "working_minutes": metrics['working_minutes_from_first_move'],
+                "working_days": int(metrics['working_minutes_from_first_move'] / (60 * 8)),
+                "period": format_working_minutes_to_text(metrics['working_minutes_from_first_move'])
+            }        # Metrics: status transitions
+        if metrics.get('total_transitions') is not None:
+            doc["total_transitions"] = metrics['total_transitions']
+        if metrics.get('backflow_count') is not None:
+            doc["backflow_count"] = metrics['backflow_count']
+        if metrics.get('unique_statuses_visited'):
+            doc["unique_statuses_visited"] = metrics['unique_statuses_visited']
+            # Add lowercase version for case-insensitive searches
+            doc["unique_statuses_visited_lower"] = [status.lower() for status in metrics['unique_statuses_visited']]        # Status transitions and field changes
+        if status_transitions:
+            # Add lowercase versions for case-insensitive searches
+            processed_transitions = []
+            for transition in status_transitions:
+                processed_transition = transition.copy()
+                # Add lowercase versions of status fields
+                if 'from_status' in processed_transition:
+                    processed_transition['from_status_lower'] = processed_transition['from_status'].lower() if processed_transition['from_status'] else ''
+                if 'to_status' in processed_transition:
+                    processed_transition['to_status_lower'] = processed_transition['to_status'].lower() if processed_transition['to_status'] else ''
+                processed_transitions.append(processed_transition)
+            doc["status_transitions"] = processed_transitions
+        if field_changes:
+            doc["field_changes"] = field_changes
+        return doc, issue_data.get('id')  # Return both document and ID for ES indexing

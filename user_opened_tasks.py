@@ -9,6 +9,7 @@ from jiraservice import JiraService
 from users import Users
 import config
 from utils import calculate_days_since_date, format_date_polish
+from time_utils import format_working_minutes_to_text
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, "INFO"))
@@ -38,27 +39,27 @@ class UserOpenedTasks:
         """
         try:
             # JQL query to find all issues assigned to the user that are opencl
-            jql = f'type NOT IN ( Epic, Spotkanie ) AND assignee = "{user_account_id}" AND status NOT IN (Backlog, \"TO DO\", \"DO ZROBIENIA\", Done, Canceled, Closed, Completed, Dotarło, Resolved) ORDER BY created DESC'
+            jql = f'type NOT IN ( Epic, Spotkanie ) AND assignee = "{user_account_id}" AND status NOT IN (Backlog, Done, Canceled, Closed, Completed, Dotarło, Resolved) ORDER BY created DESC'
             
             # Get raw issues data
             raw_tasks = self.jira_service.search_issues(jql)
             
             # Process each task to include additional information
             tasks_with_details = []
-            for task in raw_tasks:
+            for issue_details in raw_tasks:
                 try:
                     # Get the full issue to access all fields
-                    issue_key = task["key"]
-                    issue_details = self.jira_service.get_issue(issue_key)
+                    issue_key = issue_details["key"]
+                    #issue_details = self.jira_service.get_issue(issue_key)
                     
                     # Create the task information dictionary
                     task_info = {
                         "key": issue_key,
                         "summary": issue_details["summary"],
                         "status": issue_details["status"],
-                        "type": task.get("type", issue_details.get("type", "Unknown")),  # Try to get from task first, then issue_details
+                        "type": issue_details.get("type", issue_details.get("type", "Unknown")),  # Try to get from task first, then issue_details
                         "created": issue_details["created"],
-                        "days_since_creation": issue_details["days_since_creation"],
+                        "minutes_since_creation": issue_details["minutes_since_creation"],
                         "reporter": issue_details["reporter"],
                         "assignee": issue_details["assignee"],
                         "allocation_code": issue_details.get("allocation_code", "Undefined"),  # Default to "Undefined" if not found
@@ -180,13 +181,15 @@ if __name__ == "__main__":
                     if task.get('daysInCurrentStatus') == 0:
                         status_info = f"({task['status']} - since today)"
                     else:
-                        status_info = f"({task['status']} - {task['daysInCurrentStatus']} days)"
-                
-                # Format the creation date in Polish
+                        status_info = f"({task['status']} - {task['daysInCurrentStatus']} days)"                # Format the creation date in Polish
                 created_date_polish = format_date_polish(task['created'])
                 
+                # Convert minutes to human-readable format
+                time_ago = format_working_minutes_to_text(task.get('minutes_since_creation'))
+                time_ago_display = time_ago if time_ago else "N/A"
+                
                 print(f"  {task['key']}: [{task['type']}] {task['summary']} {status_info} - "
-                      f"Created {created_date_polish} ({task['days_since_creation']} days ago): [{task['allocation_code']}] ")
+                      f"Created {created_date_polish} ({time_ago_display} ago): [{task['allocation_code']}] ")
                 
         # If command line arguments are provided, use them to get tasks for a specific user
         import sys
@@ -201,13 +204,15 @@ if __name__ == "__main__":
                     if task.get('daysInCurrentStatus') == 0:
                         status_info = f"({task['status']} - since today)"
                     else:
-                        status_info = f"({task['status']} - {task['daysInCurrentStatus']} days)"
-                
-                # Format the creation date in Polish
+                        status_info = f"({task['status']} - {task['daysInCurrentStatus']} days)"                # Format the creation date in Polish
                 created_date_polish = format_date_polish(task['created'])
                 
+                # Convert minutes to human-readable format
+                time_ago = format_working_minutes_to_text(task.get('minutes_since_creation'))
+                time_ago_display = time_ago if time_ago else "N/A"
+                
                 print(f"  {task['key']}: TaskType:[{task['type']}|'Unknown'] {task['summary']} {status_info} - "
-                      f"Created {created_date_polish} ({task['days_since_creation']} days ago) [{task['allocation_code']}]")
+                      f"Created {created_date_polish} ({time_ago_display} ago) [{task['allocation_code']}]")
                 
     except Exception as e:
         print(f"Error: {str(e)}")

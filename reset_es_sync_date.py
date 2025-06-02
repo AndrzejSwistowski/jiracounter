@@ -15,7 +15,6 @@ import sys
 import json
 import requests
 from datetime import datetime, timedelta
-from elasticsearch import Elasticsearch
 import config
 
 # Configure logging
@@ -57,23 +56,20 @@ def connect_elasticsearch():
         health_data = response.json()
         logger.info(f"Successfully connected to Elasticsearch cluster: {health_data['cluster_name']} / Status: {health_data['status']}")
         
-        # Create the Elasticsearch client instance with the same connection params
-        connect_args = {'hosts': [url]}
-        
-        # Add API key authentication if provided
-        if es_config['api_key']:
-            connect_args['headers'] = headers
-        
-        es = Elasticsearch(**connect_args)
-        
-        return es, url, headers
+        return url, headers
     except Exception as e:
         logger.error(f"Error connecting to Elasticsearch: {e}")
         raise
 
-def get_current_sync_date(es, agent_name=AGENT_NAME):
+def get_current_sync_date(url, headers, agent_name=AGENT_NAME):
     """Get the current last_sync_date from the settings index."""
     try:
+        # Check if the settings index exists
+        index_response = requests.head(f"{url}/{config.INDEX_SETTINGS}", headers=headers)
+        if index_response.status_code != 200:
+            logger.warning(f"Settings index {config.INDEX_SETTINGS} does not exist")
+            return None, None
+        
         # Query to find the settings document for the specified agent
         query = {
             "query": {
@@ -82,12 +78,14 @@ def get_current_sync_date(es, agent_name=AGENT_NAME):
                 }
             }
         }
-          # Check if the settings index exists
-        if not es.indices.exists(index=config.INDEX_SETTINGS):
-            logger.warning(f"Settings index {config.INDEX_SETTINGS} does not exist")
-            return None, None
         
-        result = es.search(index=config.INDEX_SETTINGS, body=query)
+        search_response = requests.post(f"{url}/{config.INDEX_SETTINGS}/_search", headers=headers, json=query)
+        
+        if search_response.status_code != 200:
+            logger.error(f"Failed to search settings index: {search_response.status_code}")
+            return None, None
+            
+        result = search_response.json()
         
         if result["hits"]["total"]["value"] > 0:
             hit = result["hits"]["hits"][0]
@@ -101,21 +99,24 @@ def get_current_sync_date(es, agent_name=AGENT_NAME):
                 logger.warning("Document found but last_sync_date is not set")
                 return doc_id, None
         else:
-            logger.warning(f"No settings document found for agent {agent_name}")
+            logger.warning(f"No settings document found for agent: {agent_name}")
             return None, None
-            
     except Exception as e:
-        logger.error(f"Error getting current sync date: {e}")
+        logger.error(f"Error retrieving current sync date: {e}")
         return None, None
 
-def reset_sync_date(es, doc_id=None, new_date=None, delete_doc=False, agent_name=AGENT_NAME):
+def reset_sync_date(url, headers, doc_id=None, new_date=None, delete_doc=False, agent_name=AGENT_NAME):
     """Reset the last_sync_date in the settings index."""
     try:
         if delete_doc and doc_id:
             # Delete the document
-            es.delete(index=config.INDEX_SETTINGS, id=doc_id)
-            logger.info(f"Deleted settings document with ID {doc_id}")
-            return True
+            delete_response = requests.delete(f"{url}/{config.INDEX_SETTINGS}/_doc/{doc_id}", headers=headers)
+            if delete_response.status_code in [200, 404]:
+                logger.info(f"Deleted settings document with ID {doc_id}")
+                return True
+            else:
+                logger.error(f"Failed to delete document: {delete_response.status_code}")
+                return False
             
         elif doc_id:
             # Update the existing document with a new date
@@ -131,9 +132,13 @@ def reset_sync_date(es, doc_id=None, new_date=None, delete_doc=False, agent_name
                 }
             }
             
-            es.update(index=config.INDEX_SETTINGS, id=doc_id, body=update_doc)
-            logger.info(f"Updated last_sync_date to {new_date}")
-            return True
+            update_response = requests.post(f"{url}/{config.INDEX_SETTINGS}/_update/{doc_id}", headers=headers, json=update_doc)
+            if update_response.status_code == 200:
+                logger.info(f"Updated last_sync_date to {new_date}")
+                return True
+            else:
+                logger.error(f"Failed to update document: {update_response.status_code}")
+                return False
             
         elif not delete_doc:
             # Create a new document if one doesn't exist
@@ -143,9 +148,13 @@ def reset_sync_date(es, doc_id=None, new_date=None, delete_doc=False, agent_name
                 "last_updated": datetime.now().isoformat()
             }
             
-            es.index(index=config.INDEX_SETTINGS, body=doc)
-            logger.info(f"Created new settings document with last_sync_date: {doc['last_sync_date']}")
-            return True
+            create_response = requests.post(f"{url}/{config.INDEX_SETTINGS}/_doc", headers=headers, json=doc)
+            if create_response.status_code in [200, 201]:
+                logger.info(f"Created new settings document with last_sync_date: {doc['last_sync_date']}")
+                return True
+            else:
+                logger.error(f"Failed to create document: {create_response.status_code}")
+                return False
             
         return False
     except Exception as e:
@@ -167,10 +176,10 @@ def main():
     
     try:
         # Connect to Elasticsearch
-        es, url, headers = connect_elasticsearch()
+        url, headers = connect_elasticsearch()
         
         # Get the current sync date
-        doc_id, current_date = get_current_sync_date(es, args.agent)
+        doc_id, current_date = get_current_sync_date(url, headers, args.agent)
         
         if current_date:
             logger.info(f"Current sync date for agent '{args.agent}' is {current_date}")
@@ -200,7 +209,7 @@ def main():
                 return False
         
         # Reset the sync date
-        success = reset_sync_date(es, doc_id, new_date, args.delete, args.agent)
+        success = reset_sync_date(url, headers, doc_id, new_date, args.delete, args.agent)
         
         if success:
             logger.info("Successfully reset sync date")
@@ -213,13 +222,6 @@ def main():
     except Exception as e:
         logger.error(f"Error in main function: {e}")
         return False
-    finally:
-        # Clean up
-        try:
-            es.close()
-            logger.info("Elasticsearch connection closed")
-        except:
-            pass
 
 if __name__ == "__main__":
     success = main()

@@ -10,6 +10,7 @@ import dateutil.parser
 from jiraservice import JiraService
 import config
 from utils import calculate_days_since_date, validate_and_format_dates, format_date_polish
+from time_utils import format_working_minutes_to_text, calculate_working_minutes_since_date
 
 # Configure logging
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL, "INFO"))
@@ -50,15 +51,14 @@ class UpdatedIssuesReport:
             
             # Process each issue to include additional information
             issues_with_details = []
-            for issue in raw_issues:
+            for issue_details in raw_issues:
                 try:
                     # Get the full issue to access all fields
-                    issue_key = issue["key"]
-                    issue_details = self.jira_service.get_issue(issue_key)
-                    
-                    # Calculate days since update
+                    issue_key = issue_details["key"]
+                    #issue_details = self.jira_service.get_issue(issue_key)
+                      # Calculate minutes since update
                     updated_date = dateutil.parser.parse(issue_details["updated"])
-                    days_since_update = (datetime.now(updated_date.tzinfo) - updated_date).days
+                    minutes_since_update = int((datetime.now(updated_date.tzinfo) - updated_date).total_seconds() / 60)
                     
                     # Create the issue information dictionary
                     issue_info = {
@@ -66,16 +66,14 @@ class UpdatedIssuesReport:
                         "summary": issue_details["summary"],
                         "status": issue_details["status"],
                         "type": issue_details["type"],
-                        "project": issue_details["project"],
-                        "updated": issue_details["updated"],
-                        "days_since_update": days_since_update,
+                        "project": issue_details["project"],                        "updated": issue_details["updated"],
+                        "minutes_since_update": minutes_since_update,
                         "created": issue_details["created"],
-                        "days_since_creation": issue_details["days_since_creation"],
+                        "minutes_since_creation": issue_details["minutes_since_creation"],
                         "reporter": issue_details["reporter"],
-                        "assignee": issue_details["assignee"],
-                        "allocation_code": issue_details.get("allocation_code", "Undefined"),
+                        "assignee": issue_details["assignee"],                        "allocation_code": issue_details.get("allocation_code", "Undefined"),
                         "status_change_date": issue_details.get("status_change_date", None),
-                        "daysInCurrentStatus": calculate_days_since_date(issue_details.get("status_change_date", None)) if issue_details.get("status_change_date") else None
+                        "minutes_in_current_status": calculate_working_minutes_since_date(issue_details.get("status_change_date", None)) if issue_details.get("status_change_date") else None
                     }
                     
                     issues_with_details.append(issue_info)
@@ -126,9 +124,9 @@ if __name__ == "__main__":
     try:
         from datetime import datetime, timedelta
         
-        # Default: get issues updated in the last 7 days
+        # Default: get issues updated in the last 1 days
         today = datetime.now().strftime('%Y-%m-%d')
-        week_ago = (datetime.now() - timedelta(days=7)).strftime('%Y-%m-%d')
+        week_ago = (datetime.now() - timedelta(days=1)).strftime('%Y-%m-%d')
         
         # Parse command line arguments for date range if provided
         import sys
@@ -140,8 +138,7 @@ if __name__ == "__main__":
         
         report = UpdatedIssuesReport()
         issues_by_project = report.get_issues_by_project(week_ago, today)
-        
-        # Display the results
+          # Display the results
         total_issues = sum(len(issues) for issues in issues_by_project.values())
         print(f"Found {total_issues} updated issues across {len(issues_by_project)} projects:")
         
@@ -149,18 +146,21 @@ if __name__ == "__main__":
             print(f"\nProject: {project_key} - {len(project_issues)} updated issues:")
             for issue in project_issues:
                 status_info = f"({issue['status']})"
-                if issue.get('daysInCurrentStatus') is not None:
-                    if issue.get('daysInCurrentStatus') == 0:
+                if issue.get('minutes_in_current_status') is not None:
+                    if issue.get('minutes_in_current_status') == 0:
                         status_info = f"({issue['status']} - since today)"
                     else:
-                        status_info = f"({issue['status']} - {issue['daysInCurrentStatus']} days)"
-                        
-                # Format the dates in Polish
+                        formatted_time = format_working_minutes_to_text(issue['minutes_in_current_status'])
+                        status_info = f"({issue['status']} - {formatted_time})"
+                          # Format the dates in Polish
                 updated_date_polish = format_date_polish(issue['updated'])
                 created_date_polish = format_date_polish(issue['created'])
+                  # Convert minutes to human-readable format
+                time_ago = format_working_minutes_to_text(issue.get('minutes_since_creation'))
+                time_ago_display = time_ago if time_ago else "N/A"
                 
                 print(f"  {issue['key']}: [{issue['type']}] {issue['summary']} {status_info} - "
-                      f"Updated: {updated_date_polish} - Created: {created_date_polish} ({issue['days_since_creation']} days ago) [{issue['allocation_code']}]")
+                      f"Updated: {updated_date_polish} - Created: {created_date_polish} ({time_ago_display} ago) [{issue['allocation_code']}]")
                 
     except Exception as e:
         print(f"Error: {str(e)}")

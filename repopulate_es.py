@@ -15,7 +15,7 @@ def main():
     """Main entry point for the full repopulation process."""
     parser = argparse.ArgumentParser(description='Fully repopulate Elasticsearch with all historical Jira data')
     parser.add_argument('--days', type=int, default=3650,  # Default to ~10 years
-                        help='Number of days of history to fetch (default: 3650 - about 10 years)')
+                        help='Number of days of history to fetch (default: 720 - about 2 years)')
     parser.add_argument('--batch-size', type=int, default=30, 
                         help='Number of days to process in each batch (default: 30)')
     parser.add_argument('--max-issues', type=int, default=None, 
@@ -30,7 +30,8 @@ def main():
                         help='Continue processing other batches if one fails')
     
     args = parser.parse_args()
-      # Set up logging
+    
+    # Set up logging
     logger = setup_logging(
         verbose=True,
         log_prefix="jira_full_repopulate",
@@ -46,7 +47,6 @@ def main():
     try:
         # Connect to Elasticsearch
         populator.connect()
-        
         
         # Calculate the total date range
         end_date = datetime.now()
@@ -82,7 +82,20 @@ def main():
                     
                 except Exception as e:
                     logger.error(f"Error processing batch {batch_number}: {e}", exc_info=True)
-                    if not args.continue_on_error:
+                    
+                    # Check if it's an Elasticsearch connection issue and try to reconnect
+                    if "connection closed" in str(e).lower():
+                        logger.info("Detected connection closed error. Attempting to reconnect...")
+                        try:
+                            populator.close()  # Close the existing connection
+                            populator.connect()  # Establish a new connection
+                            logger.info("Successfully reconnected to Elasticsearch")
+                        except Exception as reconnect_error:
+                            logger.error(f"Failed to reconnect to Elasticsearch: {reconnect_error}", exc_info=True)
+                            if not args.continue_on_error:
+                                logger.error("Stopping due to reconnection failure. Use --continue-on-error to process remaining batches.")
+                                return 1
+                    elif not args.continue_on_error:
                         logger.error("Stopping due to error. Use --continue-on-error to process remaining batches.")
                         return 1
             

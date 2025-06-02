@@ -24,21 +24,41 @@ import os
 import sys
 from datetime import datetime, timedelta
 import requests
-from elasticsearch import Elasticsearch
+import json
 
 # Import from existing modules
-from reset_es_sync_date import connect_elasticsearch
 from es_mapping import CHANGELOG_MAPPING, SETTINGS_MAPPING
-from populate_es import recreate_indices
 from es_populate import JiraElasticsearchPopulator
 from logger_utils import setup_logging
-from es_utils import delete_index
+from es_utils import delete_index, create_index_with_auto_fallback
 import config
 
-# This function has been moved to es_utils.py
-# It is now imported at the top of the file
 
-def verify_field_mappings(es, url, headers, index_name, logger):
+def recreate_indices(populator, logger):
+    """Recreate Elasticsearch indices using the unified approach."""
+    try:
+        # Create indices using the unified auto-fallback approach
+        success_changelog = create_index_with_auto_fallback(
+            url=populator.url,
+            api_key=populator.api_key,
+            index_name=config.INDEX_CHANGELOG,
+            logger=logger
+        )
+        
+        success_settings = create_index_with_auto_fallback(
+            url=populator.url,
+            api_key=populator.api_key,
+            index_name=config.INDEX_SETTINGS,
+            logger=logger
+        )
+        
+        return success_changelog and success_settings
+    except Exception as e:
+        logger.error(f"Error recreating indices: {e}")
+        return False
+
+
+def verify_field_mappings(url, headers, index_name, logger):
     """Verify key fields in the mapping and sample data."""
     try:
         # Check the mapping
@@ -90,6 +110,7 @@ def verify_field_mappings(es, url, headers, index_name, logger):
         logger.error(f"Error verifying field mappings: {e}")
         return False
 
+
 def main():
     """Main entry point for updating Elasticsearch indices."""
     parser = argparse.ArgumentParser(description='Update Elasticsearch indices for JIRA data')
@@ -105,7 +126,8 @@ def main():
                         help='Enable verbose logging')
     
     args = parser.parse_args()
-      # Set up logging
+    
+    # Set up logging
     logger = setup_logging(
         verbose=args.verbose,
         log_prefix="update_es_indices"
@@ -114,8 +136,27 @@ def main():
     logger.info("Starting Elasticsearch index update process")
     
     try:
-        # Connect to Elasticsearch
-        es, url, headers = connect_elasticsearch()
+        # Connect to Elasticsearch using config
+        es_config = config.get_elasticsearch_config()
+        
+        # Build the connection URL
+        if es_config['url']:
+            url = es_config['url'].rstrip('/')
+        else:
+            url = f"http://{es_config['host']}:{es_config['port']}"
+        
+        # Prepare headers for HTTP requests
+        headers = {"Content-Type": "application/json"}
+        if es_config['api_key']:
+            headers["Authorization"] = f"ApiKey {es_config['api_key']}"
+            logger.info("Using API key authentication")
+        
+        # Test the connection
+        response = requests.get(f"{url}/_cluster/health", headers=headers, timeout=10)
+        if response.status_code != 200:
+            raise ConnectionError(f"Could not connect to Elasticsearch: {response.status_code}")
+        
+        logger.info("Successfully connected to Elasticsearch")
         
         # Log that we're using expanded text field limits
         logger.info("Using expanded text field limits for description and comment fields (up to 32KB)")
@@ -128,7 +169,8 @@ def main():
                 logger.debug("Current mapping before update retrieved successfully")
         except Exception as e:
             logger.debug(f"Could not retrieve current mapping: {e}")
-          # Get confirmation for index deletion if not already provided
+        
+        # Get confirmation for index deletion if not already provided
         if not args.confirm:
             confirmation = input(f"WARNING: This will delete indices '{config.INDEX_CHANGELOG}' and '{config.INDEX_SETTINGS}'. "
                                f"All data will be lost. Type 'yes' to continue: ")
@@ -139,13 +181,12 @@ def main():
         # Delete the indices
         indices_to_delete = [config.INDEX_CHANGELOG, config.INDEX_SETTINGS]
         for index_name in indices_to_delete:
-            delete_result = delete_index(url=url, api_key=None, index_name=index_name, logger=logger)
+            delete_result = delete_index(url=url, api_key=es_config['api_key'], index_name=index_name, logger=logger)
             if not delete_result:
                 logger.error(f"Failed to delete index {index_name}, aborting")
                 return 1
         
         # Create the Elasticsearch populator for recreating indices
-        es_config = config.get_elasticsearch_config()
         populator = JiraElasticsearchPopulator(
             agent_name="JiraETLAgent",
             host=es_config['host'],
@@ -183,7 +224,7 @@ def main():
         # Verify field mappings and data
         if count > 0:
             logger.info("Verifying field mappings and data...")
-            verify_field_mappings(es, url, headers, config.INDEX_CHANGELOG, logger)
+            verify_field_mappings(url, headers, config.INDEX_CHANGELOG, logger)
         
         # Get and log database summary
         summary = populator.get_database_summary()
@@ -200,12 +241,13 @@ def main():
     finally:
         # Always ensure connection is closed
         try:
-            es.close()
-            populator.close()
+            if 'populator' in locals():
+                populator.close()
         except:
             pass
     
     return 0
+
 
 if __name__ == "__main__":
     sys.exit(main())
