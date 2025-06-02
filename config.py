@@ -31,6 +31,8 @@ os.makedirs(DATA_DIR, exist_ok=True)
 # Elasticsearch connection settings
 ELASTIC_URL = os.environ.get('ELASTIC_URL')
 ELASTIC_APIKEY = os.environ.get('ELASTIC_APIKEY')
+ELASTIC_USERNAME = os.environ.get('ELASTIC_USERNAME')
+ELASTIC_PASSWORD = os.environ.get('ELASTIC_PASSWORD')
 
 # Kibana connection settings
 KIBANA_URL = os.environ.get('KIBANA_URL')
@@ -87,14 +89,16 @@ def get_elasticsearch_config() -> dict:
     """Return Elasticsearch connection configuration as a dictionary.
     
     Returns:
-        dict: Configuration containing url, host, port, use_ssl, api_key
+        dict: Configuration containing url, host, port, use_ssl, api_key, username, password
     """
     return {
         'url': ELASTIC_URL,
         'host': ES_HOST,
         'port': ES_PORT,
         'use_ssl': ES_USE_SSL,
-        'api_key': ELASTIC_APIKEY
+        'api_key': ELASTIC_APIKEY,
+        'username': ELASTIC_USERNAME,
+        'password': ELASTIC_PASSWORD
     }
 
 def get_kibana_config() -> dict:

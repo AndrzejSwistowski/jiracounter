@@ -13,18 +13,39 @@ from es_utils import create_index_with_auto_fallback
 from es_populate import JiraElasticsearchPopulator
 import config
 
-def wait_for_elasticsearch(host="localhost", port=9200, timeout=300):
+def wait_for_elasticsearch(host="localhost", port=9200, timeout=300, auth=None, api_key=None, use_ssl=False):
     """Wait for Elasticsearch to be ready."""
-    print(f"Waiting for Elasticsearch at {host}:{port}...")
+    protocol = "https" if use_ssl else "http"
+    print(f"Waiting for Elasticsearch at {protocol}://{host}:{port}...")
+    
+    # Prepare authentication headers
+    headers = {"Content-Type": "application/json"}
+    auth_tuple = None
+    
+    if api_key:
+        headers["Authorization"] = f"ApiKey {api_key}"
+        print("Using API key authentication")
+    elif auth and len(auth) == 2:
+        auth_tuple = auth
+        print(f"Using basic authentication with user: {auth[0]}")
     
     start_time = time.time()
     while time.time() - start_time < timeout:
         try:
-            response = requests.get(f"http://{host}:{port}/_cluster/health", timeout=5)
+            response = requests.get(
+                f"{protocol}://{host}:{port}/_cluster/health", 
+                headers=headers,
+                auth=auth_tuple,
+                timeout=5,
+                verify=False  # Disable SSL verification for development
+            )
             if response.status_code == 200:
                 health = response.json()
                 print(f"Elasticsearch is ready! Cluster status: {health.get('status', 'unknown')}")
                 return True
+            elif response.status_code == 401:
+                print(f"\nAuthentication failed: {response.status_code}")
+                return False
         except requests.exceptions.RequestException:
             pass
         
@@ -34,10 +55,27 @@ def wait_for_elasticsearch(host="localhost", port=9200, timeout=300):
     print(f"\nTimeout waiting for Elasticsearch after {timeout} seconds")
     return False
 
-def install_plugins(host="localhost", port=9200):
+def install_plugins(host="localhost", port=9200, auth=None, api_key=None, use_ssl=False):
     """Check if required plugins are installed."""
     try:
-        response = requests.get(f"http://{host}:{port}/_nodes/plugins", timeout=10)
+        protocol = "https" if use_ssl else "http"
+        
+        # Prepare authentication headers
+        headers = {"Content-Type": "application/json"}
+        auth_tuple = None
+        
+        if api_key:
+            headers["Authorization"] = f"ApiKey {api_key}"
+        elif auth and len(auth) == 2:
+            auth_tuple = auth
+            
+        response = requests.get(
+            f"{protocol}://{host}:{port}/_nodes/plugins", 
+            headers=headers,
+            auth=auth_tuple,
+            timeout=10,
+            verify=False
+        )
         if response.status_code == 200:
             plugins_data = response.json()
             installed_plugins = []
@@ -58,6 +96,9 @@ def install_plugins(host="localhost", port=9200):
             else:
                 print("All required plugins are installed!")
                 return True
+        else:
+            print(f"Error checking plugins: {response.status_code} - {response.text}")
+            return False
                 
     except Exception as e:
         print(f"Error checking plugins: {e}")
@@ -109,9 +150,19 @@ def create_index_unified(populator, index_name):
         print(f"✗ Error creating index {index_name}: {e}")
         return False
 
-def test_polish_analyzer(host, port, index_name):
+def test_polish_analyzer(host, port, index_name, auth=None, api_key=None, use_ssl=False):
     """Test the Polish analyzer with sample text."""
-    url = f"http://{host}:{port}/{index_name}/_analyze"
+    protocol = "https" if use_ssl else "http"
+    url = f"{protocol}://{host}:{port}/{index_name}/_analyze"
+    
+    # Prepare authentication headers
+    headers = {"Content-Type": "application/json"}
+    auth_tuple = None
+    
+    if api_key:
+        headers["Authorization"] = f"ApiKey {api_key}"
+    elif auth and len(auth) == 2:
+        auth_tuple = auth
     
     test_texts = [
         "Aplikacja działa poprawnie",
@@ -129,7 +180,14 @@ def test_polish_analyzer(host, port, index_name):
                 "text": text
             }
             
-            response = requests.post(url, json=payload, timeout=10)
+            response = requests.post(
+                url, 
+                json=payload, 
+                headers=headers,
+                auth=auth_tuple,
+                timeout=10,
+                verify=False
+            )
             if response.status_code == 200:
                 tokens = response.json()
                 analyzed_tokens = [token["token"] for token in tokens.get("tokens", [])]
@@ -140,7 +198,14 @@ def test_polish_analyzer(host, port, index_name):
                     "analyzer": "polish_basic",
                     "text": text
                 }
-                response = requests.post(url, json=payload, timeout=10)
+                response = requests.post(
+                    url, 
+                    json=payload, 
+                    headers=headers,
+                    auth=auth_tuple,
+                    timeout=10,
+                    verify=False
+                )
                 if response.status_code == 200:
                     tokens = response.json()
                     analyzed_tokens = [token["token"] for token in tokens.get("tokens", [])]
@@ -157,17 +222,35 @@ def main():
     es_config = config.get_elasticsearch_config()
     host = es_config.get('host', 'localhost')
     port = es_config.get('port', 9200)
+    api_key = es_config.get('api_key')
+    use_ssl = es_config.get('use_ssl', False)
+    username = es_config.get('username')
+    password = es_config.get('password')
+    
+    # Set up authentication
+    auth = None
+    if username and password:
+        auth = (username, password)
+        print(f"Found Elasticsearch credentials for user: {username}")
     
     print("Initializing Elasticsearch with Polish language support...")
-    print(f"Target: {host}:{port}")
+    protocol = "https" if use_ssl else "http"
+    print(f"Target: {protocol}://{host}:{port}")
+    
+    if auth:
+        print(f"Authentication: Basic auth with user '{auth[0]}'")
+    elif api_key:
+        print("Authentication: API Key")
+    else:
+        print("Authentication: None (assuming no authentication required)")
     
     # Wait for Elasticsearch to be ready
-    if not wait_for_elasticsearch(host, port):
+    if not wait_for_elasticsearch(host, port, auth=auth, api_key=api_key, use_ssl=use_ssl):
         print("Failed to connect to Elasticsearch")
         return 1
     
     # Check plugins
-    if not install_plugins(host, port):
+    if not install_plugins(host, port, auth=auth, api_key=api_key, use_ssl=use_ssl):
         print("Warning: Some required plugins may be missing")
     
     # Create populator for unified approach
@@ -175,8 +258,8 @@ def main():
         agent_name="InitElasticsearch",
         host=host,
         port=port,
-        api_key=es_config.get('api_key'),
-        use_ssl=es_config.get('use_ssl', False),
+        api_key=api_key,
+        use_ssl=use_ssl,
         url=es_config.get('url')
     )
     
@@ -196,7 +279,7 @@ def main():
             return 1
         
         # Test Polish analyzer
-        test_polish_analyzer(host, port, config.INDEX_CHANGELOG)
+        test_polish_analyzer(host, port, config.INDEX_CHANGELOG, auth=auth, api_key=api_key, use_ssl=use_ssl)
         
     finally:
         populator.close()
@@ -209,7 +292,7 @@ def main():
     kibana_url = kibana_config['url'] or f"{kibana_protocol}://{kibana_config['host']}:{kibana_config['port']}"
     
     print(f"Access Kibana at: {kibana_url}")
-    print(f"Access Elasticsearch at: http://{host}:{port}")
+    print(f"Access Elasticsearch at: {protocol}://{host}:{port}")
     
     return 0
 
