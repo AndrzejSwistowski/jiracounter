@@ -40,8 +40,10 @@ python init_elasticsearch.py
 ## Services Access
 
 - Elasticsearch: http://localhost:9200
-- Kibana: http://localhost:5601
+- Kibana: Configured via `KIBANA_URL` environment variable (default: http://localhost:5601)
 - Elasticsearch Head: http://localhost:9100
+
+> **Note**: Kibana URL can be customized by setting the `KIBANA_URL` environment variable or by configuring `KIBANA_HOST`, `KIBANA_PORT`, and `KIBANA_USE_SSL` in the configuration.
 
 ## Polish Language Features
 

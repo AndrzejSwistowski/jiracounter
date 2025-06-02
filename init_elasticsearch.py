@@ -187,12 +187,17 @@ def main():
     if not create_index_with_fallback(host, port, config.INDEX_SETTINGS):
         print("Failed to create settings index")
         return 1
-    
-    # Test Polish analyzer
+      # Test Polish analyzer
     test_polish_analyzer(host, port, config.INDEX_CHANGELOG)
     
     print(f"\n✓ Elasticsearch initialization completed!")
-    print(f"Access Kibana at: http://localhost:5601")
+    
+    # Get Kibana configuration
+    kibana_config = config.get_kibana_config()
+    kibana_protocol = 'https' if kibana_config['use_ssl'] else 'http'
+    kibana_url = kibana_config['url'] or f"{kibana_protocol}://{kibana_config['host']}:{kibana_config['port']}"
+    
+    print(f"Access Kibana at: {kibana_url}")
     print(f"Access Elasticsearch at: http://{host}:{port}")
     
     return 0

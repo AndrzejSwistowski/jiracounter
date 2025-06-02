@@ -52,8 +52,13 @@ echo.
 echo ========================================
 echo Services are now running:
 echo ========================================
+
+REM Get Kibana URL from config
+for /f "delims=" %%i in ('python -c "import config; kibana_config = config.get_kibana_config(); protocol = 'https' if kibana_config['use_ssl'] else 'http'; print(kibana_config['url'] or f'{protocol}://{kibana_config[\"host\"]}:{kibana_config[\"port\"]}')" 2^>nul') do set KIBANA_URL=%%i
+if "%KIBANA_URL%"=="" set KIBANA_URL=http://localhost:5601
+
 echo Elasticsearch: http://localhost:9200
-echo Kibana:        http://localhost:5601
+echo Kibana:        %KIBANA_URL%
 echo ES Head:       http://localhost:9100
 echo.
 echo To stop services: docker-compose down

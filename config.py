@@ -32,10 +32,20 @@ os.makedirs(DATA_DIR, exist_ok=True)
 ELASTIC_URL = os.environ.get('ELASTIC_URL')
 ELASTIC_APIKEY = os.environ.get('ELASTIC_APIKEY')
 
+# Kibana connection settings
+KIBANA_URL = os.environ.get('KIBANA_URL')
+KIBANA_USERNAME = os.environ.get('KIBANA_USERNAME')
+KIBANA_PASSWORD = os.environ.get('KIBANA_PASSWORD')
+
 # Default Elasticsearch connection settings if environment variables not set
 ES_HOST = "localhost"
 ES_PORT = 9200
 ES_USE_SSL = False
+
+# Default Kibana connection settings if environment variables not set
+KIBANA_HOST = "localhost"
+KIBANA_PORT = 5601
+KIBANA_USE_SSL = False
 
 # Parse ELASTIC_URL if provided to extract host, port, and protocol
 if ELASTIC_URL:
@@ -48,6 +58,18 @@ if ELASTIC_URL:
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(f"Error parsing ELASTIC_URL: {e}. Using defaults.")
+
+# Parse KIBANA_URL if provided to extract host, port, and protocol
+if KIBANA_URL:
+    try:
+        from urllib.parse import urlparse
+        parsed_url = urlparse(KIBANA_URL)
+        KIBANA_HOST = parsed_url.hostname or KIBANA_HOST
+        KIBANA_PORT = parsed_url.port or KIBANA_PORT
+        KIBANA_USE_SSL = parsed_url.scheme == 'https'
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Error parsing KIBANA_URL: {e}. Using defaults.")
 
 # Elasticsearch index names
 INDEX_CHANGELOG = "jira-changelog"
@@ -75,6 +97,21 @@ def get_elasticsearch_config() -> dict:
         'api_key': ELASTIC_APIKEY
     }
 
+def get_kibana_config() -> dict:
+    """Return Kibana connection configuration as a dictionary.
+    
+    Returns:
+        dict: Configuration containing url, host, port, use_ssl, username, password
+    """
+    return {
+        'url': KIBANA_URL,
+        'host': KIBANA_HOST,
+        'port': KIBANA_PORT,
+        'use_ssl': KIBANA_USE_SSL,
+        'username': KIBANA_USERNAME,
+        'password': KIBANA_PASSWORD
+    }
+
 # If this module is run directly, print the current configuration
 if __name__ == "__main__":
     print("Current Jira configuration:")
@@ -89,3 +126,9 @@ if __name__ == "__main__":
     print(f"  ES_USE_SSL: {ES_USE_SSL}")
     print(f"  INDEX_CHANGELOG: {INDEX_CHANGELOG}")
     print(f"  INDEX_SETTINGS: {INDEX_SETTINGS}")
+    print("\nKibana configuration:")
+    print(f"  KIBANA_URL: {KIBANA_URL}")
+    print(f"  KIBANA_HOST: {KIBANA_HOST}")
+    print(f"  KIBANA_PORT: {KIBANA_PORT}")
+    print(f"  KIBANA_USE_SSL: {KIBANA_USE_SSL}")
+    print(f"  KIBANA_USERNAME: {KIBANA_USERNAME}")
