@@ -133,7 +133,7 @@ class ElasticsearchDocumentFormatter:
                 "type": {"name": issue_data.get('type') or issue_data.get('typeName')},
                 "status": {
                     "name": issue_data.get('status') or issue_data.get('statusName'),
-                    "change_at": issue_data.get('status_change_date'),
+                    "change_at": issue_data.get('status_chage_date') or metrics.get('status_change_date'),
                     "working_minutes": metrics.get('working_minutes_in_current_status'),
                     "working_days": int(metrics.get('working_minutes_in_current_status', 0) / (60 * 8)) if metrics.get('working_minutes_in_current_status') else None,
                     "period": format_working_minutes_to_text(metrics.get('working_minutes_in_current_status'))

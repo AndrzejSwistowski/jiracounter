@@ -80,7 +80,8 @@ class JiraIssueWorkingTimeAnalyzer:
             if status_change_date:
                 metrics['working_minutes_in_current_status'] = calculate_working_minutes_since_date(status_change_date)
                 metrics['working_days_in_current_status'] = self._minutes_to_days(metrics['working_minutes_in_current_status'])
-        
+                metrics['status_change_date'] = status_change_date
+         
         return metrics
     
     def _minutes_to_days(self, minutes):
