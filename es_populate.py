@@ -15,11 +15,11 @@ from typing import Dict, List, Optional, Tuple, Any
 
 import requests
 
-from config import ES_HOST, ES_PORT, DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD
-from es_document_formatter import JiraElasticsearchDocumentFormatter
+from config import ES_HOST, ES_PORT 
+from es_document_formatter import ElasticsearchDocumentFormatter
 from es_utils import create_index_with_auto_fallback
 from jiraservice import JiraService
-from logger_utils import get_logger
+from logger_utils import setup_logging
 from progress_tracker import ProgressTracker
 from utils import APP_TIMEZONE, parse_date_with_timezone
 import config
@@ -637,7 +637,7 @@ class JiraElasticsearchPopulator:
         Returns:
             Tuple: (formatted_document, document_id) for Elasticsearch
         """
-        return JiraElasticsearchDocumentFormatter.format_issue_record(issue_record)
+        return ElasticsearchDocumentFormatter.format_issue_record(issue_record)
         
 # Example usage
 if __name__ == "__main__":
