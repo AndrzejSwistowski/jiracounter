@@ -291,19 +291,17 @@ class JiraElasticsearchPopulator:
                 return 0
                 
             # Make sure indices exist
-            self.create_indices()
-              # Prepare the bulk operation
+            self.create_indices()            # Prepare the bulk operation
             actions = []
             for record in history_records:
                 try:
-                    # All records are now comprehensive records
-                    doc, doc_id = self.format_comprehensive_record(record)
+                    # All records are now issue records                    doc, doc_id = self.format_issue_record(record)
                     # Use the actual issue ID returned by the formatter
                     if not doc_id:
                         # Fallback if no doc_id returned
                         issue_key = record.get('issue_data', {}).get('key', 'unknown')
-                        doc_id = f"{issue_key}_comprehensive"
-                      # Add the action - use index operation to support both insert and update
+                        doc_id = f"{issue_key}_issue"
+                    # Add the action - use index operation to support both insert and update
                     actions.append({
                         "_index": INDEX_CHANGELOG,
                         "_id": doc_id,
@@ -636,17 +634,17 @@ class JiraElasticsearchPopulator:
         """
         return record.get('issue_data', {}).get('key', 'unknown')
 
-    def format_comprehensive_record(self, comprehensive_record):
+    def format_issue_record(self, issue_record):
         """
-        Format a comprehensive record for insertion into Elasticsearch.
+        Format an issue record for insertion into Elasticsearch.
         
         Args:
-            comprehensive_record: Dictionary containing the comprehensive issue data
+            issue_record: Dictionary containing the issue data
             
         Returns:
             Tuple: (formatted_document, document_id) for Elasticsearch
         """
-        return ElasticsearchDocumentFormatter.format_comprehensive_record(comprehensive_record)
+        return ElasticsearchDocumentFormatter.format_issue_record(issue_record)
         
 # Example usage
 if __name__ == "__main__":

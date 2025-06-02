@@ -81,7 +81,7 @@ def test_issue_formatting():
     
     try:
         # Test the formatter
-        doc, doc_id = ElasticsearchDocumentFormatter.format_comprehensive_record(sample_record)
+        doc, doc_id = ElasticsearchDocumentFormatter.format_issue_record(sample_record)
         
         print(f"✅ Document ID: {doc_id}")
         print(f"✅ Document keys: {list(doc.keys())}")
@@ -135,7 +135,7 @@ def test_edge_cases():
     
     try:
         # Test that minimal issue records work
-        doc, doc_id = ElasticsearchDocumentFormatter.format_comprehensive_record(minimal_record)
+        doc, doc_id = ElasticsearchDocumentFormatter.format_issue_record(minimal_record)
         assert doc_id == '123', f"Expected doc_id '123', got '{doc_id}'"
         assert doc['issue']['key'] == 'TEST-123', "Issue key not set correctly"
         

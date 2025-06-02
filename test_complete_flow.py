@@ -157,7 +157,7 @@ def test_comprehensive_flow():
         # Step 2: Format for ES
         print("Step 2: Formatting for Elasticsearch...")
         
-        doc, doc_id = ElasticsearchDocumentFormatter.format_comprehensive_record(comprehensive_record)
+        doc, doc_id = ElasticsearchDocumentFormatter.format_issue_record(comprehensive_record)
         
         print(f"✅ Formatted document with ID: {doc_id}")
         print(f"✅ Document has {len(doc)} fields")
@@ -174,11 +174,11 @@ def test_comprehensive_flow():
         
         populator = JiraElasticsearchPopulator()
         
-        # All records are now comprehensive by default, no detection needed
-        print("✅ Using comprehensive record format")
+        # All records are now issue records by default, no detection needed
+        print("✅ Using issue record format")
         
         # Test document formatting through populator
-        formatted_doc, formatted_id = populator.format_comprehensive_record(comprehensive_record)
+        formatted_doc, formatted_id = populator.format_issue_record(comprehensive_record)
         assert formatted_doc == doc, "Populator should return same formatted document"
         assert formatted_id == doc_id, "Populator should return same document ID"
         
