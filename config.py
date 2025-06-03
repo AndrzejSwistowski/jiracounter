@@ -40,12 +40,14 @@ KIBANA_USERNAME = os.environ.get('KIBANA_USERNAME')
 KIBANA_PASSWORD = os.environ.get('KIBANA_PASSWORD')
 
 # Default Elasticsearch connection settings if environment variables not set
-ES_HOST = "localhost"
+# Use 'elasticsearch' as default host for Docker containers, fallback to localhost for local development
+ES_HOST = os.environ.get('ES_HOST', 'elasticsearch' if os.environ.get('DOCKER_ENV') else 'localhost')
 ES_PORT = 9200
 ES_USE_SSL = False
 
-# Default Kibana connection settings if environment variables not set
-KIBANA_HOST = "localhost"
+# Default Kibana connection settings if environment variables not set  
+# Use 'kibana' as default host for Docker containers, fallback to localhost for local development
+KIBANA_HOST = os.environ.get('KIBANA_HOST', 'kibana' if os.environ.get('DOCKER_ENV') else 'localhost')
 KIBANA_PORT = 5601
 KIBANA_USE_SSL = False
 

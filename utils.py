@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 # Define a single, application-wide timezone (using UTC as the standard)
 # All internal processing will use UTC, only converting for display/user-facing output
-APP_TIMEZONE = timezone.utc
+APP_TIMEZONE = pytz.timezone('Europe/Warsaw')  # Change to your preferred timezone, e.g., pytz.timezone('Europe/Warsaw')
 
 def parse_date_with_timezone(date_str: str) -> datetime:
     """
@@ -56,7 +56,7 @@ def calculate_days_since_date(date_str: str) -> int:
     try:
         # Parse date and ensure it's in UTC
         parsed_date = parse_date_with_timezone(date_str)
-        # Get current time in UTC
+        # Get current time in APP_TIMEZONE
         now = datetime.now(APP_TIMEZONE)
         # Calculate days
         days_since = (now - parsed_date).days

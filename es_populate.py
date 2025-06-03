@@ -129,11 +129,12 @@ class JiraElasticsearchPopulator:
                 logger=logger
             )
             
-            return result1 and result2
+            return result1 and result2        
         except Exception as e:
+
             logger.error(f"Error creating indices: {e}")
             return False
-    
+
     def get_last_sync_date(self):
         """
         Gets the last date when data was fetched from JIRA API using HTTP requests.
@@ -172,7 +173,7 @@ class JiraElasticsearchPopulator:
                     "size": 1,
                     "sort": [
                         {
-                            "historyDate": {
+                            "@timestamp": {
                                 "order": "desc"
                             }
                         }
@@ -185,7 +186,9 @@ class JiraElasticsearchPopulator:
                 if response.status_code == 200:
                     result = response.json()
                     if result["hits"]["total"]["value"] > 0:
-                        return datetime.fromisoformat(result["hits"]["hits"][0]["_source"]["historyDate"]).astimezone(APP_TIMEZONE)
+                        # Use the @timestamp field from the latest record
+                        timestamp_str = result["hits"]["hits"][0]["_source"]["@timestamp"]
+                        return datetime.fromisoformat(timestamp_str).astimezone(APP_TIMEZONE)
                 
                 # If still no date, return None
                 return None
@@ -324,8 +327,7 @@ class JiraElasticsearchPopulator:
                     issue_id = self._extract_issue_identifier(record)
                     logger.debug(f"Problematic record: {issue_id}")
                     continue
-            
-            # Execute the bulk operation
+              # Execute the bulk operation
             if bulk_body:
                 try:
                     bulk_data = "\n".join(bulk_body) + "\n"
@@ -363,7 +365,6 @@ class JiraElasticsearchPopulator:
             else:
                 logger.debug("No new records to insert")
                 return 0
-                
         except Exception as e:
             logger.error(f"Error in bulk insert: {e}")
             return 0
@@ -373,11 +374,13 @@ class JiraElasticsearchPopulator:
         Fetches data from JIRA and populates Elasticsearch.
         
         IMPORTANT REQUIREMENT: 
-        1. If any bulk operation fails, the function should save the last successfully 
-           processed history date as the sync date (rather than the requested end_date).
-        2. If no records were successfully processed, the function should exit without 
-           updating the sync date.
-        3. Early exit is required after a bulk operation failure to prevent further processing.
+        1. Always save the last successfully processed record date as the sync date,
+           since we cannot guarantee that all records were fetched from JIRA due to 
+           pagination limits, API limits, timeouts, etc.
+        2. Only use the requested end_date if no records were processed but the operation
+           succeeded (indicating the date range had no data).
+        3. If no records were successfully processed, exit without updating the sync date.
+        4. Early exit is required after a bulk operation failure to prevent further processing.
         
         Args:
             start_date: The date to start fetching from (default: last sync date)
@@ -386,8 +389,7 @@ class JiraElasticsearchPopulator:
             bulk_size: Number of records to insert in each bulk operation
             
         Returns:
-            int: Number of records successfully inserted
-        """
+            int: Number of records successfully inserted        """
         if not self.connected:
             self.connect()
         
@@ -461,17 +463,18 @@ class JiraElasticsearchPopulator:
         # Determine what date to use for the sync
         if jira_connected:
             try:
-                if all_bulk_operations_succeeded:
-                    # Use the end_date if all operations succeeded
+                # Always use the last successful record date when available, since we don't know
+                # if all records were fetched from JIRA (due to pagination, API limits, etc.)
+                if last_successful_date:
+                    self.update_sync_date(last_successful_date)
+                    logger.info(f"Updated last sync date to last successful record date: {last_successful_date}")
+                elif all_bulk_operations_succeeded and success_count == 0:
+                    # Only use end_date if no records were processed but operations succeeded
+                    # This handles the case where the date range had no data
                     self.update_sync_date(end_date)
-                    logger.info(f"Updated last sync date to {end_date}")
+                    logger.info(f"No records found in date range. Updated last sync date to {end_date}")
                 else:
-                    # Use the last successful history date if any operation failed
-                    if last_successful_date:
-                        self.update_sync_date(last_successful_date)
-                        logger.info(f"Bulk operations had failures. Updated last sync date to last successful record date: {last_successful_date}")
-                    else:
-                        logger.warning("Could not determine last successful date. Not updating the sync date.")
+                    logger.warning("Could not determine last successful date. Not updating the sync date.")
             except Exception as e:
                 logger.error(f"Error updating sync date: {e}")
         else:

@@ -1,0 +1,45 @@
+services:
+  jira-etl:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: jira-etl-cron
+    restart: unless-stopped
+    environment:
+      # Jira Configuration
+      - JIRA_BASE_URL=${JIRA_BASE_URL:-https://voyager-team.atlassian.net}
+      - JIRA_USERNAME=${JIRA_USERNAME:-andrzej.swistowski@voyager.pl}
+      - JIRA_API_TOKEN=${JIRA_API_TOKEN}
+
+      # Elasticsearch Configuration  
+      - ELASTIC_URL=${ELASTIC_URL:-http://elasticsearch:9200}
+      - ELASTIC_APIKEY=${ELASTIC_APIKEY}
+      - ELASTIC_USERNAME=${ELASTIC_USERNAME}
+      - ELASTIC_PASSWORD=${ELASTIC_PASSWORD}
+
+      # Docker environment flag
+      - DOCKER_ENV=true
+
+      # Timezone
+      - TZ=${TZ:-Europe/Warsaw}
+
+      # Logging
+      - JIRA_LOG_LEVEL=${JIRA_LOG_LEVEL:-INFO} # Python path
+      - PYTHONPATH=/app
+    volumes:
+      # Mount logs directory to persist logs
+      - ./logs:/app/logs
+      # Optional: mount config if you want to override it
+      # - ./config.py:/app/config.py:ro
+    networks:
+      - elastic
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+networks:
+  elastic:
+    external: true
+    name: jiracouter_elastic

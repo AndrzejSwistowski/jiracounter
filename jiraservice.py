@@ -254,7 +254,7 @@ class JiraService:
                 # Log that we processed this issue
                 logger.debug(f"Processed comprehensive history record for issue {issue_key}")
               # Sort by issue created date (from issue_data section)
-            all_history_records.sort(key=lambda x: x['issue_data']['created'])
+            all_history_records.sort(key=lambda x: x['issue_data']['updated'])
             logger.info(f"Extracted {len(all_history_records)} comprehensive issue records")
             return all_history_records
             
