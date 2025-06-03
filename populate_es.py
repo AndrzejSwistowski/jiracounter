@@ -7,7 +7,6 @@ Usage:
   python populate_es.py [options]
 
 Options:
-  --days DAYS         Number of days of history to fetch (default: 7)
   --max-issues NUM    Maximum number of issues to process (default: no limit)
   --agent NAME        Name of the ETL agent (default: "JiraETLAgent")
   --host HOST         Elasticsearch host (default: from ELASTIC_URL env var or "localhost")
@@ -95,9 +94,7 @@ def main():
     es_config = config.get_elasticsearch_config()
     
     parser = argparse.ArgumentParser(description='Populate Elasticsearch with JIRA data')
-    parser.add_argument('--days', type=int, default=1, 
-                        help='Number of days of history to fetch (default: 1)')
-    parser.add_argument('--max-issues', type=int, default=None, 
+    parser.add_argument('--max-issues', type=int, default=1000, 
                         help='Maximum number of issues to process')
     parser.add_argument('--agent', type=str, default='JiraETLAgent', 
                         help='Name of the ETL agent')
@@ -172,22 +169,23 @@ def main():
             # Force full sync when recreating index
             args.full_sync = True
             logger.info("Index recreated successfully, proceeding with full sync")
-        
-        # Determine date range
+          # Determine date range
         end_date = datetime.now()
         
         if args.full_sync:
-            # For full sync, use the specified days
-            start_date = end_date - timedelta(days=args.days)
-            logger.info(f"Performing full sync for the last {args.days} days")
+            # For full sync, default to 7 days if no previous sync date
+            default_days = 7
+            start_date = end_date - timedelta(days=default_days)
+            logger.info(f"Performing full sync for the last {default_days} days")
         else:
             # For incremental sync, get the last sync date
             start_date = populator.get_last_sync_date()
             
             if start_date is None:
-                # If no previous sync, default to specified days
-                start_date = end_date - timedelta(days=args.days)
-                logger.info(f"No previous sync found, using last {args.days} days")
+                # If no previous sync, default to 7 days
+                default_days = 1200
+                start_date = end_date - timedelta(days=default_days)
+                logger.info(f"No previous sync found, using last {default_days} days")
             else:
                 logger.info(f"Performing incremental sync from last sync date: {start_date}")
 
