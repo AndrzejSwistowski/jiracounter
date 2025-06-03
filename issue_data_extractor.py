@@ -93,7 +93,9 @@ class IssueDataExtractor:
                     'key': 'PROJECT-122',
                     'summary': 'Parent Issue'
                 },
-                
+
+                'epic_issue': {'key': 'PROJECT-100', 'name': 'Feature Epic'},
+
                 # Custom fields (only for specific issue types)
                 'epic_link': 'PROJECT-100',     # For stories: link to epic
                 'epic_name': 'Feature Epic',    # For epics: epic name
@@ -325,7 +327,7 @@ class IssueDataExtractor:
             
             # Most fields are only relevant for stories or epics
             if issue_type_name in ['story', 'epic']:
-                relevant_fields.extend(['Epic Link', 'Epic Name', 'Story Points', 'Team', 'Sprint', 'Epic Color'])
+               relevant_fields.extend(['Epic Link', 'Epic Name', 'Story Points', 'Team', 'Sprint', 'Epic Color'])
             
             # Get cached fields to avoid unnecessary warnings
             cached_fields = self.field_manager.field_ids.keys()
@@ -470,6 +472,129 @@ class IssueDataExtractor:
             else:
                 self.logger.warning(f"Invalid allocation code: {allocation_code}. Must be one of {valid_codes}")
         return None
+
+    def epic_enricher(self, issue_data: Dict[str, Any], delegate_get_issue) -> None:
+        """
+        Enrich issue data with epic information by checking current issue and parent hierarchy.
+        
+        This function recursively searches for epic information by:
+        1. First checking if the current issue has epic_name (for epic issues)
+        2. If no epic found, checking parent issues recursively up the hierarchy
+        3. Using the delegate function to fetch parent issue data when needed
+        
+        Args:
+            issue_data: The issue data dictionary to enrich
+            delegate_get_issue: Function that takes issue_key and returns issue_data
+        """
+        try:
+            # First check if this issue already has epic information
+            if self._has_epic_info(issue_data):
+                self.logger.debug(f"Issue {issue_data.get('key')} already has epic information")
+                return
+            
+            # Check if current issue is an epic itself (has epic_name)
+            if self._extract_epic_from_current_issue(issue_data):
+                self.logger.debug(f"Issue {issue_data.get('key')} is an epic itself")
+                return
+            
+            # If no epic found, check parent hierarchy
+            self._check_parent_for_epic(issue_data, delegate_get_issue, max_depth=5)
+            
+        except Exception as e:
+            self.logger.error(f"Error in epic_enricher for issue {issue_data.get('key', 'unknown')}: {str(e)}")
+    
+    def _has_epic_info(self, issue_data: Dict[str, Any]) -> bool:
+        """Check if issue already has epic information."""
+        epic_issue = issue_data.get('epic_issue')
+        return epic_issue is not None and epic_issue.get('key') is not None
+    
+    def _extract_epic_from_current_issue(self, issue_data: Dict[str, Any]) -> bool:
+        """
+        Check if current issue is an epic and create epic_issue object if it has epic_name.
+        
+        Returns:
+            bool: True if epic information was extracted, False otherwise
+        """
+        epic_name = issue_data.get('epic_name')
+        if epic_name or issue_data.get('issue_type', '').lower() == 'epic':
+            # This issue is an epic, create epic_issue object pointing to itself
+            issue_data['epic_issue'] = {
+                'key': issue_data.get('key'),
+                'id': issue_data.get('id'),
+                'name': epic_name or issue_data.get('summary'),
+                'summary': issue_data.get('summary')
+            }
+            self.logger.debug(f"Issue {issue_data.get('key')} is an epic with name: {epic_name}")
+            return True
+        return False
+    
+    def _check_parent_for_epic(self, issue_data: Dict[str, Any], delegate_get_issue, max_depth: int = 5) -> bool:
+        """
+        Recursively check parent issues for epic information.
+        
+        Args:
+            issue_data: Current issue data
+            delegate_get_issue: Function to get issue data by key
+            max_depth: Maximum recursion depth to prevent infinite loops
+            
+        Returns:
+            bool: True if epic information was found and set, False otherwise
+        """
+        if max_depth <= 0:
+            self.logger.warning(f"Max depth reached while searching for epic in parent hierarchy for {issue_data.get('key')}")
+            return False
+        
+        parent_issue = issue_data.get('parent_issue')
+        if not parent_issue or not parent_issue.get('key'):
+            self.logger.debug(f"No parent issue found for {issue_data.get('key')}")
+            return False
+        
+        parent_key = parent_issue.get('key')
+        self.logger.debug(f"Checking parent issue {parent_key} for epic information")
+        
+        try:
+            # Get parent issue data using the delegate
+            parent_data = delegate_get_issue(parent_key)
+            if not parent_data:
+                self.logger.warning(f"Could not retrieve parent issue data for {parent_key}")
+                return False
+            
+            # Check if parent has epic information we can inherit
+            if self._copy_epic_from_parent(issue_data, parent_data):
+                return True
+            
+            # If parent doesn't have epic info, check if parent is an epic itself
+            if self._extract_epic_from_current_issue(parent_data):
+                # Copy the epic info from parent to current issue
+                issue_data['epic_issue'] = parent_data.get('epic_issue')
+                self.logger.debug(f"Inherited epic from parent epic {parent_key}")
+                return True
+            
+            # Recursively check parent's parent
+            return self._check_parent_for_epic(parent_data, delegate_get_issue, max_depth - 1)
+            
+        except Exception as e:
+            self.logger.error(f"Error checking parent {parent_key} for epic info: {str(e)}")
+            return False
+    
+    def _copy_epic_from_parent(self, issue_data: Dict[str, Any], parent_data: Dict[str, Any]) -> bool:
+        """
+        Copy epic information from parent to current issue if parent has it.
+        
+        Returns:
+            bool: True if epic info was copied, False otherwise
+        """
+        parent_epic = parent_data.get('epic_issue')
+        if parent_epic and parent_epic.get('key'):
+            issue_data['epic_issue'] = {
+                'key': parent_epic.get('key'),
+                'id': parent_epic.get('id'),
+                'name': parent_epic.get('name'),
+                'summary': parent_epic.get('summary')
+            }
+            self.logger.debug(f"Copied epic {parent_epic.get('key')} from parent {parent_data.get('key')}")
+            return True
+        return False
 
     def safe_get_field(self, obj, field_name, default=None):
         """Helper function to safely get a field from an object regardless of its type.

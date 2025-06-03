@@ -97,16 +97,13 @@ def test_get_issue(service=None):
     # Try to get an issue from previous search results if available
     try:
         # Search for any issue to use as a test
-        issues = service.search_issues("key = BZPB-25")
-        if not issues:
+        issue_details = service.get_issue("BAI-576")
+
+        if not issue_details:
             print("[ERROR] No issues found to test issue retrieval")
             return
             
-        test_issue_key = issues[0]["key"]
-        print(f"Using issue {test_issue_key} for testing...")
         
-        issue_details = service.get_issue(test_issue_key)
-        print(f"[SUCCESS] Successfully retrieved issue: {test_issue_key}")
         print(f"  Summary: {issue_details['summary']}")
         print(f"  Status: {issue_details['status']}")
         print(f"  Assignee: {issue_details['assignee']}")
