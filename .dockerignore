@@ -1,20 +1,75 @@
-# Ignore unnecessary files during Docker build
-__pycache__/
+# Git and version control
+.git
+.gitignore
+
+# Documentation
+*.md
+!README_Docker_ETL.md
+
+# Python cache and build artifacts
+__pycache__
 *.pyc
 *.pyo
 *.pyd
-.git/
-.gitignore
+.Python
+*.so
+.tox
+.coverage
+.pytest_cache
+*.egg-info
+
+# Virtual environments
+venv
+env
+.venv
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Log files (except structure)
+logs/*.log
 *.log
-logs/
-data/
-report/
+
+# Data and temporary files
+data/*
+mountdata/*
+*.tmp
+
+# Test files
+test_*.py
+*_test.py
+
+# Diagnostic files
+diagnostic/*
+
+# Docker files (not needed in container)
+docker-compose.yml
+Dockerfile
+.dockerignore
+
+# Windows specific
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Mac specific
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Environment files (will be mounted or configured separately)
+.env
+.env.local
+.env.*.local
 diagnostic/
 docs/
 .vscode/
 .idea/
 *.md
-requirements/
 sql/
 workflows/
 mountdata/*
