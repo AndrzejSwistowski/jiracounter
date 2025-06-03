@@ -21,20 +21,20 @@ echo "PYTHONPATH: $PYTHONPATH"
 
 # Validate required environment variables
 if [ -z "$JIRA_API_TOKEN" ]; then
-    echo "WARNING: JIRA_API_TOKEN is not set"
+  echo "WARNING: JIRA_API_TOKEN is not set"
 fi
 
 if [ -z "$ELASTIC_URL" ] && [ -z "$ELASTIC_APIKEY" ]; then
-    echo "WARNING: Elasticsearch connection variables not set"
+  echo "WARNING: Elasticsearch connection variables not set"
 fi
 
 # Test the populate_es.py script
 echo "Testing populate_es.py script..."
 if python -c "import populate_es; print('Import successful')"; then
-    echo "populate_es.py can be imported successfully"
+  echo "populate_es.py can be imported successfully"
 else
-    echo "ERROR: Cannot import populate_es.py"
-    exit 1
+  echo "ERROR: Cannot import populate_es.py"
+  exit 1
 fi
 
 # Start cron in the background

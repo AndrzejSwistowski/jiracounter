@@ -24,7 +24,7 @@ services:
       - TZ=${TZ:-Europe/Warsaw}
 
       # Logging
-      - JIRA_LOG_LEVEL=${JIRA_LOG_LEVEL:-INFO}      # Python path
+      - JIRA_LOG_LEVEL=${JIRA_LOG_LEVEL:-INFO} # Python path
       - PYTHONPATH=/app
     volumes:
       # Mount logs directory to persist logs
