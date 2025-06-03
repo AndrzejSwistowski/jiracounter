@@ -16,6 +16,7 @@ import json
 import requests
 from datetime import datetime, timedelta
 import config
+from es_utils import _setup_es_connection
 
 # Configure logging
 logging.basicConfig(
@@ -35,16 +36,16 @@ def connect_elasticsearch():
     try:
         es_config = config.get_elasticsearch_config()
         
-        # Build the connection URL
-        if es_config['url']:
-            url = es_config['url'].rstrip('/')
-        else:
-            url = f'{"https" if es_config["use_ssl"] else "http"}://{es_config["host"]}:{es_config["port"]}'
-            
-        # Prepare headers with API key authentication
-        headers = {"Content-Type": "application/json"}
+        # Setup connection using centralized helper
+        url, headers = _setup_es_connection(
+            host=es_config['host'],
+            port=es_config['port'],
+            api_key=es_config['api_key'],
+            use_ssl=es_config.get('use_ssl', False),
+            url=es_config['url']
+        )
+        
         if es_config['api_key']:
-            headers["Authorization"] = f"ApiKey {es_config['api_key']}"
             logger.info("Using API key authentication")
         
         # Test the connection by requesting cluster health

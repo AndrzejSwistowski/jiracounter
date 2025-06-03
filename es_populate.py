@@ -69,7 +69,7 @@ class JiraElasticsearchPopulator:
         self.connected = False
         self.base_url = None
         self.headers = None
-    
+   
     def connect(self):
         """Establishes a connection to Elasticsearch using HTTP requests."""
         try:

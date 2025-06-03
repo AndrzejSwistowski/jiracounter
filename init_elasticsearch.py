@@ -9,31 +9,31 @@ import json
 import time
 import sys
 import os
-from es_utils import create_index_with_auto_fallback
+from es_utils import create_index_with_auto_fallback, _setup_es_connection
 from es_populate import JiraElasticsearchPopulator
 import config
 
 def wait_for_elasticsearch(host="localhost", port=9200, timeout=300, auth=None, api_key=None, use_ssl=False):
     """Wait for Elasticsearch to be ready."""
-    protocol = "https" if use_ssl else "http"
-    print(f"Waiting for Elasticsearch at {protocol}://{host}:{port}...")
+    print(f"Waiting for Elasticsearch at {host}:{port}...")
     
-    # Prepare authentication headers
-    headers = {"Content-Type": "application/json"}
-    auth_tuple = None
+    # Setup connection using centralized helper
+    base_url, headers = _setup_es_connection(
+        host=host, port=port, api_key=api_key, use_ssl=use_ssl
+    )
     
     if api_key:
-        headers["Authorization"] = f"ApiKey {api_key}"
         print("Using API key authentication")
     elif auth and len(auth) == 2:
-        auth_tuple = auth
         print(f"Using basic authentication with user: {auth[0]}")
     
     start_time = time.time()
     while time.time() - start_time < timeout:
         try:
+            # Use basic auth if provided, otherwise rely on headers from helper
+            auth_tuple = auth if auth and len(auth) == 2 else None
             response = requests.get(
-                f"{protocol}://{host}:{port}/_cluster/health", 
+                f"{base_url}/_cluster/health", 
                 headers=headers,
                 auth=auth_tuple,
                 timeout=5,
@@ -58,19 +58,16 @@ def wait_for_elasticsearch(host="localhost", port=9200, timeout=300, auth=None, 
 def install_plugins(host="localhost", port=9200, auth=None, api_key=None, use_ssl=False):
     """Check if required plugins are installed."""
     try:
-        protocol = "https" if use_ssl else "http"
+        # Setup connection using centralized helper
+        base_url, headers = _setup_es_connection(
+            host=host, port=port, api_key=api_key, use_ssl=use_ssl
+        )
         
-        # Prepare authentication headers
-        headers = {"Content-Type": "application/json"}
-        auth_tuple = None
-        
-        if api_key:
-            headers["Authorization"] = f"ApiKey {api_key}"
-        elif auth and len(auth) == 2:
-            auth_tuple = auth
+        # Use basic auth if provided, otherwise rely on headers from helper
+        auth_tuple = auth if auth and len(auth) == 2 else None
             
         response = requests.get(
-            f"{protocol}://{host}:{port}/_nodes/plugins", 
+            f"{base_url}/_nodes/plugins", 
             headers=headers,
             auth=auth_tuple,
             timeout=10,
@@ -152,17 +149,14 @@ def create_index_unified(populator, index_name):
 
 def test_polish_analyzer(host, port, index_name, auth=None, api_key=None, use_ssl=False):
     """Test the Polish analyzer with sample text."""
-    protocol = "https" if use_ssl else "http"
-    url = f"{protocol}://{host}:{port}/{index_name}/_analyze"
+    # Setup connection using centralized helper
+    base_url, headers = _setup_es_connection(
+        host=host, port=port, api_key=api_key, use_ssl=use_ssl
+    )
+    url = f"{base_url}/{index_name}/_analyze"
     
-    # Prepare authentication headers
-    headers = {"Content-Type": "application/json"}
-    auth_tuple = None
-    
-    if api_key:
-        headers["Authorization"] = f"ApiKey {api_key}"
-    elif auth and len(auth) == 2:
-        auth_tuple = auth
+    # Use basic auth if provided, otherwise rely on headers from helper
+    auth_tuple = auth if auth and len(auth) == 2 else None
     
     test_texts = [
         "Aplikacja działa poprawnie",

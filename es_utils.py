@@ -9,6 +9,47 @@ import logging
 import requests
 import json  # Add json import for the create_index function
 
+def _setup_es_connection(host=None, port=None, api_key=None, use_ssl=True, url=None, populator=None):
+    """
+    Setup Elasticsearch connection parameters and return base URL and headers.
+    
+    Args:
+        host (str): Elasticsearch host
+        port (int): Elasticsearch port
+        api_key (str): Elasticsearch API key
+        use_ssl (bool): Whether to use SSL for the connection
+        url (str): Complete Elasticsearch URL
+        populator: An instance of JiraElasticsearchPopulator
+        
+    Returns:
+        tuple: (base_url, headers) for Elasticsearch requests
+    """
+    # If populator is provided, extract connection parameters from it
+    if populator:
+        if url is None:
+            url = populator.url
+        if host is None:
+            host = populator.host
+        if port is None:
+            port = populator.port
+        if api_key is None:
+            api_key = populator.api_key
+        if use_ssl is None:
+            use_ssl = populator.use_ssl
+    
+    # Build base URL if not provided
+    if url:
+        base_url = url.rstrip('/')
+    else:
+        base_url = f'{"https" if use_ssl else "http"}://{host}:{port}'
+    
+    # Prepare headers with API key authentication
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"ApiKey {api_key}"
+    
+    return base_url, headers
+
 def delete_index(host=None, port=None, api_key=None, use_ssl=True, url=None, 
                  index_name=None, logger=None, populator=None):
     """
@@ -36,29 +77,7 @@ def delete_index(host=None, port=None, api_key=None, use_ssl=True, url=None,
         logger = logging.getLogger(__name__)
         
     try:
-        # If populator is provided, extract connection parameters from it
-        if populator:
-            if url is None:
-                url = populator.url
-            if host is None:
-                host = populator.host
-            if port is None:
-                port = populator.port
-            if api_key is None:
-                api_key = populator.api_key
-            if use_ssl is None:
-                use_ssl = populator.use_ssl
-        
-        # Build base URL if not provided
-        if url:
-            base_url = url.rstrip('/')
-        else:
-            base_url = f'{"https" if use_ssl else "http"}://{host}:{port}'
-            
-        # Prepare headers with API key authentication
-        headers = {"Content-Type": "application/json"}
-        if api_key:
-            headers["Authorization"] = f"ApiKey {api_key}"
+        base_url, headers = _setup_es_connection(host, port, api_key, use_ssl, url, populator)
         
         # Delete the index
         logger.info(f"Deleting index {index_name}...")
@@ -160,28 +179,7 @@ def create_index(host=None, port=None, api_key=None, use_ssl=True, url=None,
         logger = logging.getLogger(__name__)
         
     try:
-        # If populator is provided, extract connection parameters from it
-        if populator:
-            if url is None:
-                url = populator.url
-            if host is None:
-                host = populator.host
-            if port is None:
-                port = populator.port
-            if api_key is None:
-                api_key = populator.api_key
-            if use_ssl is None:
-                use_ssl = populator.use_ssl
-        
-        # Build base URL if not provided
-        if url:
-            base_url = url.rstrip('/')
-        else:
-            base_url = f'{"https" if use_ssl else "http"}://{host}:{port}'
-              # Prepare headers with API key authentication
-        headers = {"Content-Type": "application/json"}
-        if api_key:
-            headers["Authorization"] = f"ApiKey {api_key}"
+        base_url, headers = _setup_es_connection(host, port, api_key, use_ssl, url, populator)
         
         # Check if index already exists
         try:

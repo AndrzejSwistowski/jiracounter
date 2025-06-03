@@ -7,6 +7,7 @@ import logging
 import requests
 import json
 import config
+from es_utils import _setup_es_connection
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -18,16 +19,16 @@ def main():
         # Get Elasticsearch settings from centralized config
         es_config = config.get_elasticsearch_config()
         
-        # Build the connection URL
-        if es_config['url']:
-            url = es_config['url'].rstrip('/')
-        else:
-            url = f"http://{es_config['host']}:{es_config['port']}"
+        # Setup connection using the centralized helper
+        url, headers = _setup_es_connection(
+            host=es_config['host'],
+            port=es_config['port'], 
+            api_key=es_config['api_key'],
+            use_ssl=es_config.get('use_ssl', False),
+            url=es_config['url']
+        )
         
-        # Prepare headers for HTTP requests
-        headers = {"Content-Type": "application/json"}
         if es_config['api_key']:
-            headers["Authorization"] = f"ApiKey {es_config['api_key']}"
             logger.info("Using API key authentication")
         
         # Check if ES is running

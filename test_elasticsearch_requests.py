@@ -9,6 +9,7 @@ import logging
 import requests
 import json
 import config
+from es_utils import _setup_es_connection
 
 # Configure logging
 logging.basicConfig(
@@ -21,21 +22,18 @@ def test_elasticsearch_connection():
     """Test connection to Elasticsearch using requests library."""
     es_config = config.get_elasticsearch_config()
     
-    # Build the connection URL
-    if es_config['url']:
-        connection_url = es_config['url']
-    else:
-        connection_url = f"http://{es_config['host']}:{es_config['port']}"
+    # Setup connection using centralized helper
+    url, headers = _setup_es_connection(
+        host=es_config['host'],
+        port=es_config['port'],
+        api_key=es_config['api_key'],
+        use_ssl=es_config.get('use_ssl', False),
+        url=es_config['url']
+    )
     
-    logger.info(f"Testing connection to Elasticsearch at {connection_url}")
+    logger.info(f"Testing connection to Elasticsearch at {url}")
     
-    # Remove trailing slash if present
-    url = connection_url.rstrip('/')
-    
-    # Prepare headers with API key authentication
-    headers = {"Content-Type": "application/json"}
     if es_config['api_key']:
-        headers["Authorization"] = f"ApiKey {es_config['api_key']}"
         logger.info("Using API key authentication")
     
     try:
