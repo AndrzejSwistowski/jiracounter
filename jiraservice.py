@@ -107,6 +107,8 @@ class JiraService:
             # Extract common issue data (including rodzaj_pracy and backet info)
             issue_data = self._extract_issue_data(issue)
 
+            self.data_extractor.epic_enricher(issue_data, self.get_issue)
+
             return issue_data
         except ConnectionError as e:
             logger.error(f"Connection error retrieving issue {issue_key}: {str(e)}")
@@ -195,14 +197,18 @@ class JiraService:
             issue = jira.issue(issue_key, expand='changelog,comment,parent')
             
             # Delegate to the history extractor
-            return self.history_extractor.extract_issue_changelog(issue, issue_key)
-            
+
+            issue_history =  self.history_extractor.extract_issue_changelog(issue, issue_key)
+            self.data_extractor.epic_enricher(issue_history['issue_data'], self.get_issue)
+            return issue_history
+
         except ConnectionError as e:
             logger.error(f"Connection error retrieving changelog for issue {issue_key}: {str(e)}")
             raise
         except Exception as e:
             logger.error(f"Error retrieving changelog for issue {issue_key}: {str(e)}")
             raise    
+    
     def get_issue_history(self, start_date=None, end_date=None, max_issues=None) -> List[Dict[str, Any]]:
         """Retrieve comprehensive issue records for issues updated within a date range.
         
