@@ -14,6 +14,12 @@ touch /app/logs/jira_etl_es.log
 # Set permissions for log files
 chmod 666 /app/logs/*.log
 
+# Create environment variables file for cron to use
+echo "Creating environment file for cron jobs..."
+env | grep -E '^(JIRA_|ELASTIC_|KIBANA_|DOCKER_|TZ|PYTHONPATH)' >/app/.env
+chmod 600 /app/.env
+echo "Environment file created with $(wc -l </app/.env) variables"
+
 # Print environment info
 echo "Python version: $(python --version)"
 echo "Working directory: $(pwd)"
@@ -44,7 +50,7 @@ cron
 # Run an initial population to test everything works
 echo "Running initial ETL test..."
 cd /app
-python populate_es.py --max-issues 10 || echo "Initial test run failed, but continuing with cron..."
+/app/docker/run_etl_simple.sh --max-issues 10 || echo "Initial test run failed, but continuing with cron..."
 
 echo "Cron started. ETL will run every hour."
 echo "Logs will be written to /app/logs/cron.log and /app/logs/jira_etl_es.log"

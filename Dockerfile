@@ -27,6 +27,10 @@ RUN mkdir -p /app/logs
 COPY docker/crontab /etc/cron.d/jira-etl
 RUN chmod 0644 /etc/cron.d/jira-etl
 
+# Make the ETL runner script executable
+RUN chmod +x /app/docker/run_etl.sh
+RUN chmod +x /app/docker/run_etl_simple.sh
+
 # Apply cron job
 RUN crontab /etc/cron.d/jira-etl
 

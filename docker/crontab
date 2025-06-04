@@ -1,5 +1,5 @@
 # Cron job to run Jira ETL every hour
 # Format: minute hour day month dayofweek command
-0 * * * * cd /app && /usr/local/bin/python populate_es.py --max-issues 1000 >> /app/logs/cron.log 2>&1
+0 * * * * cd /app && /app/docker/run_etl_simple.sh --max-issues 1000 >> /app/logs/cron.log 2>&1
 
 # Empty line required at end of cron file
