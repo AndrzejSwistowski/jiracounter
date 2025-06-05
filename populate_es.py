@@ -168,9 +168,9 @@ def main():
                 
             # Force full sync when recreating index
             args.full_sync = True
-            logger.info("Index recreated successfully, proceeding with full sync")
-          # Determine date range
-        end_date = datetime.now()
+            logger.info("Index recreated successfully, proceeding with full sync")          # Determine date range - ensure timezone consistency
+        from utils import APP_TIMEZONE
+        end_date = datetime.now(APP_TIMEZONE)
         
         if args.full_sync:
             # For full sync, default to 7 days if no previous sync date
@@ -183,7 +183,7 @@ def main():
             
             if start_date is None:
                 # If no previous sync, default to 7 days
-                default_days = 1200
+                default_days = 7
                 start_date = end_date - timedelta(days=default_days)
                 logger.info(f"No previous sync found, using last {default_days} days")
             else:
