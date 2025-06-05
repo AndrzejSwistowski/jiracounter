@@ -283,18 +283,18 @@ class JiraElasticsearchPopulator:
             "insert_issue_history is deprecated. Use bulk_insert_issue_history instead.", 
             DeprecationWarning, 
             stacklevel=2
-        )
-        
+        )        
         # Call bulk_insert_issue_history with a single record
         result = self.bulk_insert_issue_history([history_record])
         return result > 0
     
-    def bulk_insert_issue_history(self, history_records):
+    def bulk_insert_issue_history(self, history_records, force_override=False):
         """
         Inserts multiple issue history records into Elasticsearch using HTTP bulk operations.
         
         Args:
             history_records: List of dictionaries containing comprehensive issue records
+            force_override: If False (default), skip duplicates. If True, override existing records.
             
         Returns:
             int: Number of records successfully inserted
@@ -302,12 +302,12 @@ class JiraElasticsearchPopulator:
         try:
             if not history_records:
                 return 0
-                
-            # Make sure indices exist
+                  # Make sure indices exist
             self.create_indices()
             
             # Prepare the bulk operation
             bulk_body = []
+            skipped_count = 0
             for record in history_records:
                 try:
                     # All records are now issue records
@@ -318,6 +318,16 @@ class JiraElasticsearchPopulator:
                         issue_key = record.get('issue_data', {}).get('key', 'unknown')
                         raise ValueError(f"No document ID found for issue {issue_key}. Format_issue_record must return a valid ID.")
                     
+                    # Check for duplicates if force_override is False
+                    if not force_override:
+                        # Extract @timestamp from the document for duplicate checking
+                        timestamp = doc.get('@timestamp')
+                        if timestamp and self.document_exists_by_id_and_timestamp(doc_id, timestamp):
+                            skipped_count += 1
+                            issue_key = record.get('issue_data', {}).get('key', 'unknown')
+                            logger.debug(f"Skipping duplicate record for issue {issue_key} with timestamp {timestamp}")
+                            continue
+                    
                     # Add the index action
                     bulk_body.append(json.dumps({"index": {"_index": INDEX_CHANGELOG, "_id": doc_id}}))
                     bulk_body.append(json.dumps(doc))
@@ -326,8 +336,7 @@ class JiraElasticsearchPopulator:
                     logger.error(f"Error processing record: {e}")
                     issue_id = self._extract_issue_identifier(record)
                     logger.debug(f"Problematic record: {issue_id}")
-                    continue
-              # Execute the bulk operation
+                    continue            # Execute the bulk operation
             if bulk_body:
                 try:
                     bulk_data = "\n".join(bulk_body) + "\n"
@@ -350,9 +359,15 @@ class JiraElasticsearchPopulator:
                                     logger.error(f"Bulk error: {item['index']}")
                         
                         if failed_count > 0:
-                            logger.warning(f"Bulk insert: {success_count} succeeded, {failed_count} failed")
+                            if skipped_count > 0:
+                                logger.warning(f"Bulk insert: {success_count} succeeded, {failed_count} failed, {skipped_count} duplicates skipped")
+                            else:
+                                logger.warning(f"Bulk insert: {success_count} succeeded, {failed_count} failed")
                         else:
-                            logger.debug(f"Bulk insert: {success_count} succeeded")
+                            if skipped_count > 0:
+                                logger.info(f"Bulk insert: {success_count} succeeded, {skipped_count} duplicates skipped")
+                            else:
+                                logger.debug(f"Bulk insert: {success_count} succeeded")
                         
                         return success_count
                     else:
@@ -363,7 +378,10 @@ class JiraElasticsearchPopulator:
                     logger.error(f"Error during bulk operation: {e}")
                     return 0
             else:
-                logger.debug("No new records to insert")
+                if skipped_count > 0:
+                    logger.info(f"No new records to insert. {skipped_count} duplicates were skipped")
+                else:
+                    logger.debug("No new records to insert")
                 return 0
         except Exception as e:
             logger.error(f"Error in bulk insert: {e}")
@@ -479,8 +497,71 @@ class JiraElasticsearchPopulator:
                 logger.error(f"Error updating sync date: {e}")
         else:
             logger.warning("JIRA authorization failed. Not updating the sync date.")
-        
         return success_count
+
+    def document_exists_by_id_and_timestamp(self, doc_id, timestamp, index_name=INDEX_CHANGELOG):
+        """
+        Check if a document exists with the specified _id and @timestamp.
+        
+        Args:
+            doc_id: The document ID to search for
+            timestamp: The @timestamp datetime to match (can be string or datetime object)
+            index_name: The index to search in (default: INDEX_CHANGELOG)
+            
+        Returns:
+            bool: True if a document exists with the specified _id and @timestamp, False otherwise
+        """
+        try:
+            if not self.connected:
+                self.connect()
+            
+            # Convert timestamp to ISO format string if it's a datetime object
+            if isinstance(timestamp, datetime):
+                timestamp_str = timestamp.isoformat()
+            else:
+                timestamp_str = str(timestamp)
+            
+            # Try to get the document by ID first
+            response = requests.get(f"{self.base_url}/{index_name}/_doc/{doc_id}", 
+                                  headers=self.headers, timeout=10)
+            
+            if response.status_code == 200:
+                # Document exists, now check if the @timestamp matches
+                doc = response.json()
+                source = doc.get('_source', {})
+                doc_timestamp = source.get('@timestamp')
+                
+                if doc_timestamp:
+                    # Normalize both timestamps for comparison
+                    if isinstance(timestamp, datetime):
+                        # If input is datetime, parse doc timestamp and compare as datetime objects
+                        try:
+                            doc_datetime = datetime.fromisoformat(doc_timestamp.replace('Z', '+00:00'))
+                            # Convert to same timezone for comparison
+                            if timestamp.tzinfo:
+                                doc_datetime = doc_datetime.replace(tzinfo=timestamp.tzinfo)
+                            return doc_datetime == timestamp
+                        except (ValueError, TypeError):
+                            # Fall back to string comparison
+                            return doc_timestamp == timestamp_str
+                    else:
+                        # String comparison
+                        return doc_timestamp == timestamp_str
+                else:
+                    logger.debug(f"Document {doc_id} exists but has no @timestamp field")
+                    return False
+                    
+            elif response.status_code == 404:
+                # Document doesn't exist
+                logger.debug(f"Document {doc_id} not found in index {index_name}")
+                return False
+            else:
+                logger.warning(f"Failed to check document existence: {response.status_code} - {response.text}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"Error checking document existence: {e}")
+            return False
       
     def get_database_summary(self, days=30):
         """
@@ -626,8 +707,7 @@ class JiraElasticsearchPopulator:
             record: Dictionary containing comprehensive record data
             
         Returns:
-            str: Issue identifier for logging
-        """
+            str: Issue identifier for logging        """
         return record.get('issue_data', {}).get('key', 'unknown')
 
     def format_issue_record(self, issue_record):
@@ -641,7 +721,7 @@ class JiraElasticsearchPopulator:
             Tuple: (formatted_document, document_id) for Elasticsearch
         """
         return ElasticsearchDocumentFormatter.format_issue_record(issue_record)
-        
+
 # Example usage
 if __name__ == "__main__":
     # Configure logging
