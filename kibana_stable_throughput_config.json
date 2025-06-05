@@ -1,0 +1,205 @@
+{
+  "dashboard_name": "JIRA Stable Throughput Analysis - Time-Insensitive View",
+  "description": "Throughput analysis designed to minimize time period sensitivity",
+  "visualizations": [
+    {
+      "name": "Stable Development Throughput Distribution",
+      "type": "vertical_bar",
+      "description": "Development cycle time distribution with stability filters applied",
+      "config": {
+        "index": "jira-changelog",
+        "query": {
+          "bool": {
+            "must": [
+              {
+                "term": {
+                  "issue.status.name_lower": "done"
+                }
+              },
+              {
+                "range": {
+                  "from_selected_for_development.working_minutes": {
+                    "gte": 60,
+                    "lte": 14400
+                  }
+                }
+              },
+              {
+                "range": {
+                  "issue.created": {
+                    "gte": "now-6M",
+                    "lte": "now-1w"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "aggs": {
+          "development_time_buckets": {
+            "histogram": {
+              "field": "from_selected_for_development.working_minutes",
+              "interval": 480,
+              "min_doc_count": 1,
+              "extended_bounds": {
+                "min": 0,
+                "max": 14400
+              }
+            }
+          }
+        },
+        "axis": {
+          "x": {
+            "title": "Development Time (Hours)",
+            "labels": {
+              "formatter": "function(value) { return (value / 60).toFixed(1) + 'h'; }"
+            }
+          },
+          "y": {
+            "title": "Number of Issues"
+          }
+        },
+        "stability_notes": [
+          "Excludes issues completed in last week (incomplete data)",
+          "Filters out very quick (<1h) and very long (>10 days) completions",
+          "Uses issue creation date for time filtering instead of completion date",
+          "6-month rolling window for consistent sample size"
+        ]
+      }
+    },
+    {
+      "name": "Rolling Average Development Time",
+      "type": "line",
+      "description": "4-week rolling average of development time to smooth out variations",
+      "config": {
+        "index": "jira-changelog",
+        "query": {
+          "bool": {
+            "must": [
+              {
+                "term": {
+                  "issue.status.name_lower": "done"
+                }
+              },
+              {
+                "range": {
+                  "from_selected_for_development.working_minutes": {
+                    "gte": 60,
+                    "lte": 14400
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "aggs": {
+          "completion_over_time": {
+            "date_histogram": {
+              "field": "@timestamp",
+              "calendar_interval": "1w",
+              "min_doc_count": 1
+            },
+            "aggs": {
+              "avg_dev_time": {
+                "avg": {
+                  "field": "from_selected_for_development.working_minutes"
+                }
+              },
+              "rolling_avg": {
+                "moving_avg": {
+                  "buckets_path": "avg_dev_time",
+                  "window": 4,
+                  "model": "simple"
+                }
+              }
+            }
+          }
+        },
+        "axis": {
+          "x": {
+            "title": "Week"
+          },
+          "y": {
+            "title": "Average Development Time (Hours)",
+            "formatter": "function(value) { return (value / 60).toFixed(1) + 'h'; }"
+          }
+        }
+      }
+    },
+    {
+      "name": "Development Time by Issue Type (Stable View)",
+      "type": "horizontal_bar",
+      "description": "Average development time by issue type with outlier filtering",
+      "config": {
+        "index": "jira-changelog",
+        "query": {
+          "bool": {
+            "must": [
+              {
+                "term": {
+                  "issue.status.name_lower": "done"
+                }
+              },
+              {
+                "range": {
+                  "from_selected_for_development.working_minutes": {
+                    "gte": 60,
+                    "lte": 14400
+                  }
+                }
+              },
+              {
+                "range": {
+                  "issue.created": {
+                    "gte": "now-6M",
+                    "lte": "now-1w"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "aggs": {
+          "by_issue_type": {
+            "terms": {
+              "field": "issue.issue_type.name.keyword",
+              "size": 10
+            },
+            "aggs": {
+              "avg_dev_time": {
+                "avg": {
+                  "field": "from_selected_for_development.working_minutes"
+                }
+              },
+              "issue_count": {
+                "value_count": {
+                  "field": "from_selected_for_development.working_minutes"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  ],
+  "time_sensitivity_solutions": {
+    "applied_filters": {
+      "min_development_time": "60 minutes (1 hour)",
+      "max_development_time": "14400 minutes (10 days)",
+      "time_range": "Created 6 months ago to 1 week ago",
+      "exclusions": "Very quick fixes and very long development cycles"
+    },
+    "stability_features": {
+      "rolling_averages": "4-week moving average for trend analysis",
+      "outlier_filtering": "Removes statistical outliers that skew results",
+      "completion_lag": "Excludes last week to avoid incomplete data",
+      "fixed_window": "6-month rolling window for consistent sample size"
+    }
+  },
+  "kibana_settings": {
+    "recommended_time_picker": "Absolute time range: 6 months ago to 1 week ago",
+    "refresh_interval": "Daily",
+    "auto_refresh": false,
+    "notes": "Time picker should be set to absolute dates to prevent shifting baseline"
+  }
+}

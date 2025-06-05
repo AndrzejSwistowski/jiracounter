@@ -1,0 +1,195 @@
+{
+  "dashboard_name": "JIRA Throughput Time Analysis - Done Status",
+  "visualizations": [
+    {
+      "name": "Done Issues Over Time",
+      "type": "line_chart",
+      "description": "Count of issues completed per day",
+      "config": {
+        "index": "jira-changelog",
+        "filter": {
+          "term": {
+            "issue.status.name_lower": "done"
+          }
+        },
+        "x_axis": {
+          "field": "@timestamp",
+          "interval": "1d"
+        },
+        "y_axis": {
+          "metric": "count"
+        }
+      }
+    },
+    {
+      "name": "Development Throughput Distribution",
+      "type": "bar_chart",
+      "description": "Distribution of development cycle time from selected for development to done (filtered for stability)",
+      "config": {
+        "index": "jira-changelog",
+        "filter": {
+          "bool": {
+            "must": [
+              {
+                "term": {
+                  "issue.status.name_lower": "done"
+                }
+              },
+              {
+                "range": {
+                  "from_selected_for_development.working_minutes": {
+                    "gte": 60,
+                    "lte": 14400
+                  }
+                }
+              },
+              {
+                "range": {
+                  "issue.created": {
+                    "gte": "now-6M",
+                    "lte": "now-1w"
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "x_axis": {
+          "aggregation": "histogram",
+          "field": "from_selected_for_development.working_minutes",
+          "interval": 480,
+          "label": "Development Time (8-hour buckets)"
+        },
+        "y_axis": {
+          "aggregation": "count",
+          "label": "Number of Issues"
+        },
+        "options": {
+          "chart_title": "Development Throughput Time Distribution",
+          "show_values": true
+        }
+      }
+    },
+    {
+      "name": "Cycle Time by Project",
+      "type": "data_table",
+      "description": "Average cycle time by project for done issues",
+      "config": {
+        "index": "jira-changelog",
+        "filter": {
+          "term": {
+            "issue.status.name_lower": "done"
+          }
+        },
+        "group_by": "project.key",
+        "metrics": [
+          {
+            "field": "issue.working_minutes",
+            "metric": "avg"
+          },
+          {
+            "field": "issue.working_minutes",
+            "metric": "max"
+          },
+          {
+            "field": "issue.working_minutes",
+            "metric": "min"
+          },
+          {
+            "field": "",
+            "metric": "count"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Status Flow Analysis",
+      "type": "data_table",
+      "description": "Time spent in each status for done issues",
+      "config": {
+        "index": "jira-changelog",
+        "filter": {
+          "term": {
+            "issue.status.name_lower": "done"
+          }
+        },
+        "breakdown_fields": [
+          "backlog.working_minutes",
+          "processing.working_minutes",
+          "waiting.working_minutes",
+          "from_selected_for_development.working_minutes"
+        ]
+      }
+    },
+    {
+      "name": "Processing vs Waiting Time Analysis",
+      "type": "line_chart",
+      "description": "Compare processing time vs waiting time trends over time",
+      "config": {
+        "index": "jira-changelog",
+        "filter": {
+          "bool": {
+            "must": [
+              {
+                "term": {
+                  "issue.status.name_lower": "done"
+                }
+              },
+              {
+                "range": {
+                  "from_selected_for_development.working_minutes": {
+                    "gt": 0
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "x_axis": {
+          "field": "@timestamp",
+          "interval": "1w",
+          "label": "Week"
+        },
+        "y_axis": [
+          {
+            "field": "processing.working_minutes",
+            "metric": "avg",
+            "label": "Avg Processing Time"
+          },
+          {
+            "field": "waiting.working_minutes",
+            "metric": "avg",
+            "label": "Avg Waiting Time"
+          },
+          {
+            "field": "from_selected_for_development.working_minutes",
+            "metric": "avg",
+            "label": "Avg Total Development Time"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Throughput Trends by Issue Type",
+      "type": "line_chart",
+      "description": "Throughput time trends by issue type",
+      "config": {
+        "index": "jira-changelog",
+        "filter": {
+          "term": {
+            "issue.status.name_lower": "done"
+          }
+        },
+        "x_axis": {
+          "field": "@timestamp",
+          "interval": "1w"
+        },
+        "series": {
+          "field": "issue.type.name",
+          "metric": "avg",
+          "value_field": "issue.working_minutes"
+        }
+      }
+    }
+  ]
+}

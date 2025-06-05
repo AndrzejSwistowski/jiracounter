@@ -1,0 +1,121 @@
+{
+  "description": "Comprehensive throughput analysis query focusing on development cycle time",
+  "query": {
+    "bool": {
+      "filter": [
+        {
+          "term": {
+            "issue.status.name_lower": "done"
+          }
+        },
+        {
+          "range": {
+            "@timestamp": {
+              "gte": "now-30d",
+              "lte": "now"
+            }
+          }
+        },
+        {
+          "range": {
+            "from_selected_for_development.working_minutes": {
+              "gt": 0
+            }
+          }
+        }
+      ]
+    }
+  },
+  "aggs": {
+    "development_throughput_histogram": {
+      "histogram": {
+        "field": "from_selected_for_development.working_minutes",
+        "interval": 480,
+        "min_doc_count": 1
+      },
+      "aggs": {
+        "sample_issues": {
+          "top_hits": {
+            "size": 3,
+            "_source": [
+              "issue.key",
+              "project.key",
+              "summary",
+              "from_selected_for_development.working_minutes",
+              "processing.working_minutes",
+              "waiting.working_minutes"
+            ]
+          }
+        }
+      }
+    },
+    "development_stats": {
+      "stats": {
+        "field": "from_selected_for_development.working_minutes"
+      }
+    },
+    "development_percentiles": {
+      "percentiles": {
+        "field": "from_selected_for_development.working_minutes",
+        "percents": [
+          25,
+          50,
+          75,
+          90,
+          95
+        ]
+      }
+    },
+    "processing_vs_waiting": {
+      "terms": {
+        "script": {
+          "source": """
+            double processing = doc['processing.working_minutes'
+          ].size() > 0 ? doc['processing.working_minutes'
+          ].value : 0;
+            double waiting = doc['waiting.working_minutes'
+          ].size() > 0 ? doc['waiting.working_minutes'
+          ].value : 0;
+            double total = processing + waiting;
+            if (total == 0) return 'no-time';
+            double ratio = processing / total;
+            if (ratio >= 0.8) return 'mostly-processing';
+            else if (ratio >= 0.6) return 'processing-heavy';
+            else if (ratio >= 0.4) return 'balanced';
+            else if (ratio >= 0.2) return 'waiting-heavy';
+            else return 'mostly-waiting';
+          """
+        },
+        "size": 10
+      },
+      "aggs": {
+        "avg_development_time": {
+          "avg": {
+            "field": "from_selected_for_development.working_minutes"
+          }
+        }
+      }
+    },
+    "by_project": {
+      "terms": {
+        "field": "project.key.keyword",
+        "size": 10
+      },
+      "aggs": {
+        "avg_development_time": {
+          "avg": {
+            "field": "from_selected_for_development.working_minutes"
+          }
+        },
+        "development_histogram": {
+          "histogram": {
+            "field": "from_selected_for_development.working_minutes",
+            "interval": 480,
+            "min_doc_count": 1
+          }
+        }
+      }
+    }
+  },
+  "size": 0
+}

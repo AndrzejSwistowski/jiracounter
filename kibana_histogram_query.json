@@ -1,0 +1,31 @@
+{
+  "query": {
+    "bool": {
+      "filter": [
+        {
+          "term": {
+            "issue.status.name_lower": "done"
+          }
+        },
+        {
+          "range": {
+            "@timestamp": {
+              "gte": "now-30d",
+              "lte": "now"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "aggs": {
+    "working_time_histogram": {
+      "histogram": {
+        "field": "issue.working_minutes",
+        "interval": 480,
+        "min_doc_count": 1
+      }
+    }
+  },
+  "size": 0
+}
