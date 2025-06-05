@@ -387,7 +387,7 @@ class JiraElasticsearchPopulator:
             logger.error(f"Error in bulk insert: {e}")
             return 0
 
-    def populate_from_jira(self, start_date=None, end_date=None, max_issues=None, bulk_size=100):
+    def populate_from_jira(self, start_date=None, end_date=None, max_issues=None, bulk_size=100, force_override=False):
         """
         Fetches data from JIRA and populates Elasticsearch.
         
@@ -444,7 +444,7 @@ class JiraElasticsearchPopulator:
             # Process records in batches
             for i in range(0, len(history_records), bulk_size):
                 batch = history_records[i:i+bulk_size]
-                inserted_count = self.bulk_insert_issue_history(batch)
+                inserted_count = self.bulk_insert_issue_history(batch, force_override=force_override)
                 success_count += inserted_count
                 
                 # If nothing was inserted in this batch, there might be an issue

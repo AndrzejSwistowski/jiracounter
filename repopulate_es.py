@@ -74,7 +74,8 @@ def main():
                         start_date=current_start,
                         end_date=current_end,
                         max_issues=args.max_issues,
-                        bulk_size=args.bulk_size
+                        bulk_size=args.bulk_size,
+                        force_override=True  # Always override existing data in this full repopulation
                     )
                     
                     logger.info(f"Batch {batch_number} completed: Inserted {count} records")
