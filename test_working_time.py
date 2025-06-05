@@ -76,23 +76,23 @@ def test_edge_cases():
     """Test edge cases."""
     print("\n=== Testing Edge Cases ===")
     
-    # Test before work hours
+    # Test before work hours - NEW BEHAVIOR: same day counts all minutes
     start = "2025-05-27 07:00:00"  # 7 AM
     end = "2025-05-27 10:00:00"    # 10 AM
     minutes = calculate_working_minutes_between(start, end)
-    print(f"7 AM - 10 AM (only 9-10 AM counts): {minutes} minutes (expected: 60)")
+    print(f"7 AM - 10 AM (same day - all minutes counted): {minutes} minutes (expected: 180)")
     
-    # Test after work hours
+    # Test after work hours - NEW BEHAVIOR: same day counts all minutes
     start = "2025-05-27 16:00:00"  # 4 PM
     end = "2025-05-27 19:00:00"    # 7 PM
     minutes = calculate_working_minutes_between(start, end)
-    print(f"4 PM - 7 PM (only 4-5 PM counts): {minutes} minutes (expected: 60)")
+    print(f"4 PM - 7 PM (same day - all minutes counted): {minutes} minutes (expected: 180)")
     
-    # Test completely outside work hours
+    # Test completely outside work hours - NEW BEHAVIOR: same day counts all minutes
     start = "2025-05-27 19:00:00"  # 7 PM
     end = "2025-05-27 21:00:00"    # 9 PM
     minutes = calculate_working_minutes_between(start, end)
-    print(f"7 PM - 9 PM (outside work hours): {minutes} minutes (expected: 0)")
+    print(f"7 PM - 9 PM (same day - all minutes counted): {minutes} minutes (expected: 120)")
 
 def test_since_date():
     """Test calculation since a specific date."""

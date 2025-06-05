@@ -255,6 +255,9 @@ def calculate_working_minutes_between(start_date, end_date):
     Working hours: 9:00 to 17:00 (480 minutes per day)
     Excludes Polish holidays.
     
+    Special case: If start_date and end_date are on the same day,
+    all minutes between them are counted regardless of working hours.
+    
     Args:
         start_date: Start datetime (datetime object or string)
         end_date: End datetime (datetime object or string)
@@ -274,10 +277,20 @@ def calculate_working_minutes_between(start_date, end_date):
             
         if start_date is None or end_date is None:
             return None
-            
-        # Ensure start_date is before end_date
+              # Ensure start_date is before end_date
         if start_date > end_date:
             return 0
+        
+        # Special case: if start and end dates are on the same day,
+        # calculate actual minutes regardless of working hours
+        if start_date.date() == end_date.date():
+            if is_working_day(start_date):
+                total_minutes = int((end_date - start_date).total_seconds() / 60)
+                return total_minutes
+            else:
+                # Even on non-working days, if it's the same day, count the minutes
+                total_minutes = int((end_date - start_date).total_seconds() / 60)
+                return total_minutes
             
         total_minutes = 0
         current_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
