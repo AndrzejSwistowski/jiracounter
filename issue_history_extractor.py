@@ -653,7 +653,7 @@ class IssueHistoryExtractor:
                       # Calculate days and time period string for minutes_in_previous_status
                     # Using 8-hour working days (60 * 8 = 480 minutes per day)
                     days_in_previous = int(minutes_in_previous / 480) if minutes_in_previous else 0
-                    period_text = format_working_minutes_to_text(minutes_in_previous) if minutes_in_previous else None
+                    period_text = format_working_minutes_to_text(minutes_in_previous)
                     
                     transition_record = {
                         'from_status': change['from'],

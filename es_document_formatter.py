@@ -138,11 +138,12 @@ class ElasticsearchDocumentFormatter:
                     "name_lower": (issue_data.get('status') or issue_data.get('statusName') or '').lower(),
                     "change_at": metrics.get('status_change_date') or issue_data.get('status_chage_date') ,
                     "working_minutes": metrics.get('working_minutes_in_current_status'),
-                    "working_days": int(metrics.get('working_minutes_in_current_status', 0) / (60 * 8)) if metrics.get('working_minutes_in_current_status') else None,
+                    "working_days": int(metrics.get('working_minutes_in_current_status', 0) / (60 * 8)) if metrics.get('working_minutes_in_current_status') else 0,
                     "period": format_working_minutes_to_text(metrics.get('working_minutes_in_current_status'))
                 },
                 "created_at": issue_data.get('created'),
-                "working_minutes": metrics.get('working_minutes_from_create'),                "working_days": int(metrics.get('working_minutes_from_create', 0) / (60 * 8)) if metrics.get('working_minutes_from_create') else None,
+                "working_minutes": metrics.get('working_minutes_from_create'),                
+                "working_days": int(metrics.get('working_minutes_from_create', 0) / (60 * 8)) if metrics.get('working_minutes_from_create') else 0,
                 "period": format_working_minutes_to_text(metrics.get('working_minutes_from_create'))
             },
             "project": {"key": issue_data.get('project', {}).get('key') },

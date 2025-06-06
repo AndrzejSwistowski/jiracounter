@@ -291,7 +291,7 @@ def normalize_status_name(status_name: str) -> str:
         status_name: The original status name from JIRA
         
     Returns:
-        Normalized status name
+        Normalized status name or the original if no mapping is found.  
     """
     if not status_name:
         return status_name
@@ -327,7 +327,7 @@ def normalize_status_name(status_name: str) -> str:
         'resolved': 'Completed',
         
         # Common typos and variations
-        'in progres': 'In Progress',
+        'in progress': 'In Progress',
         'inprogress': 'In Progress',
         'in-progress': 'In Progress',
         'in_progress': 'In Progress',
@@ -370,6 +370,9 @@ def normalize_status_name(status_name: str) -> str:
     
     # Return mapped status or original if no mapping found
     normalized = status_mapping.get(status_lower, status_name)
+    if not normalized:
+        # If no mapping found, return the original status name
+        return status_name
     
     # Log when we're using a mapping for debugging purposes
     if normalized != status_name:

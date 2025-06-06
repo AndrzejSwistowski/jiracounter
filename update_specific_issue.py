@@ -15,7 +15,7 @@ from logger_utils import setup_logging
 def main():
     """Main entry point for updating a specific issue."""
     parser = argparse.ArgumentParser(description='Update a specific Jira issue in Elasticsearch')
-    parser.add_argument('--issue_key', type=str, default='AXA-107', help='The Jira issue key to update (e.g., POL-396)')
+    parser.add_argument('--issue_key', type=str, default='UTR-448', help='The Jira issue key to update (e.g., POL-396)')
     parser.add_argument('--agent', type=str, default='JiraETLAgent', 
                         help='Name of the ETL agent (default: JiraETLAgent)')
     parser.add_argument('--dry-run', action='store_true',
