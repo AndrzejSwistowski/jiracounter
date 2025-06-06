@@ -11,8 +11,43 @@ from time_utils import (
     to_iso8601, parse_date, 
     calculate_working_minutes_between, format_working_minutes_to_text
 )
+from utils import normalize_status_name
 from jira_field_manager import JiraFieldManager
 
+# Shared workflow order dictionary for consistent status ordering across methods
+WORKFLOW_ORDER = {
+    # Backlog/planning phase
+    'backlog': 1,
+    'draft': 2,
+    'open': 3,
+    'on hold': 4,  # Normalized from 'hold'
+    'planned': 5,
+    
+    # Development selection phase
+    'selected for development': 6,
+    
+    # Development phase
+    'in progress': 8,
+    
+    # Review phase
+    'ready for review': 9,
+    'in review': 10,  # Normalized from 'do poprawy'
+    
+    # Testing phase
+    'ready for testing': 11,
+    'testing': 12,  # Normalized from 'testy wewnętrzne'
+    
+    # Approval and release phase
+    'customer review': 14,  # Normalized from 'do akceptacji klienta'
+    'awaiting production release': 15,
+    'customer notification': 16,
+    
+    # Completion phase
+    'completed': 17,  # Normalized destination for 'closed', 'done'
+    'canceled': 18
+}
+
+logger = logging.getLogger(__name__)
 
 class IssueHistoryExtractor:
     """
@@ -233,7 +268,6 @@ class IssueHistoryExtractor:
                 self.logger.warning(f"Error processing comments for {issue_key}: {e}")                
         return comments_array
   
-      
     def _extract_status_change_history(self, issue) -> List[Dict[str, Any]]:
         """Extract all status changes from the changelog for analysis."""
         status_change_history = []
@@ -244,14 +278,12 @@ class IssueHistoryExtractor:
             for history in histories:
                 history_date = parse_date(history.created)
                 status_changes = []
-                
-                # Only include status field changes
+                  # Only include status field changes
                 for item in history.items:
-                    if item.field == 'status':
-                        status_changes.append({
+                    if item.field == 'status':                        status_changes.append({
                             'field': item.field,
-                            'from': item.fromString,
-                            'to': item.toString
+                            'from': normalize_status_name(item.fromString),
+                            'to': normalize_status_name(item.toString)
                         })
                 
                 # Only add history entry if it contains status changes
@@ -396,38 +428,16 @@ class IssueHistoryExtractor:
                 'unique_statuses_visited': ['Open', 'In progress', 'In review']
             }
         """
-        # Initialize result structure
+        # Initialize result structure        
         transitions = []
         unique_statuses = set()
-        backflow_count = 0        # Define typical workflow order for backflow detection (case-insensitive)
-        workflow_order_base = {
-            'backlog': 1,
-            'draft': 2,
-            'open': 3,
-            'hold': 4,
-            'planned': 5,
-            'selected for development': 6,
-            'do poprawy': 7,
-            'in progress': 8,
-            'ready for review': 9,
-            'in review': 10,
-            'ready for testing': 11,
-            'testy wewnętrzne': 12,
-            'testing': 13,
-            'do akceptacji klienta': 14,
-            'awaiting production release': 15,
-            'customer notification': 16,
-            'closed': 17,
-            'canceled': 18,
-            'completed': 19,
-            'done': 20
-        }
+        backflow_count = 0
         
         def get_workflow_order(status_name):
             """Get workflow order for a status name in a case-insensitive way."""
             if not status_name:
                 return 0
-            return workflow_order_base.get(status_name.lower().strip(), 0)
+            return WORKFLOW_ORDER.get(status_name.lower().strip(), 0)
         
         # Track current status and timing
         current_status = None
@@ -713,7 +723,6 @@ class IssueHistoryExtractor:
         
         # Sort by change date
         field_changes.sort(key=lambda x: x['change_date'])
-        
         return field_changes
     
     def _analyze_transition_direction(self, from_status: str, to_status: str) -> Tuple[bool, bool]:
@@ -726,50 +735,11 @@ class IssueHistoryExtractor:
             
         Returns:
             Tuple of (is_forward_transition, is_backflow)
-        """        # Define typical workflow order for backflow detection (case-insensitive)
-        workflow_order = {
-            # Backlog/planning phase
-            'backlog': 1,
-            'draft': 2,
-            'open': 3,
-            'hold': 4,
-            'planned': 5,
-            
-            # Development selection phase - handle legacy names
-            'selected for development': 6,
-            'to do': 6,  # Legacy name for 'selected for development'
-            'do zrobienia': 6,  # Legacy name for 'selected for development'
-            # Development phase
-            'do poprawy': 7,
-            'in progress': 8,
-            'w trakcie': 8,      # Legacy name for 'in progress' 
-            'in progress2': 8,   # Legacy name for 'in progress'
-            
-            # Review phase
-            'ready for review': 9,
-            'in review': 10,
-            
-            # Testing phase
-            'ready for testing': 11,
-            'testy wewnętrzne': 12,
-            'testing': 13,
-            
-            # Approval and release phase
-            'do akceptacji klienta': 14,
-            'awaiting production release': 15,
-            'customer notification': 16,
-            
-            # Completion phase
-            'closed': 17,
-            'canceled': 18,
-            'completed': 19,
-            'done': 20
-        }
-        
+        """
         def get_order(status):
             if not status:
                 return 0
-            return workflow_order.get(status.lower().strip(), 999)  # Unknown statuses get high number
+            return WORKFLOW_ORDER.get(status.lower().strip(), 999)  # Unknown statuses get high number
         
         from_order = get_order(from_status)
         to_order = get_order(to_status)

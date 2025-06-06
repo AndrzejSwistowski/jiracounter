@@ -2,6 +2,7 @@ import logging
 from typing import Dict, Any, Optional, List
 from time_utils import to_iso8601, calculate_working_minutes_since_date
 from jira_field_manager import JiraFieldManager
+from utils import normalize_status_name
 
 
 class IssueDataExtractor:
@@ -197,7 +198,7 @@ class IssueDataExtractor:
         # Handle status
         status = self.safe_get_field(fields, 'status')
         if status:
-            issue_data['status'] = self.safe_get_field(status, 'name')
+            issue_data['status'] = normalize_status_name(self.safe_get_field(status, 'name'))
         
         # Handle priority
         priority = self.safe_get_field(fields, 'priority')

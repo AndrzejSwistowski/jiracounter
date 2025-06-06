@@ -133,16 +133,16 @@ def test_status_transition_metrics_enhanced():
     
     # Check legacy status name handling
     status_progression = [t['from_status'] + ' -> ' + t['to_status'] for t in transitions]
-    assert "W TRAKCIE -> In review" in status_progression, "Legacy status 'W TRAKCIE' should be in transitions"
-    assert "In review -> IN PROGRESS2" in status_progression, "Legacy status 'IN PROGRESS2' should be in transitions"
+    assert "In Progress -> In Review" in status_progression, "Legacy status 'W TRAKCIE' should be in transitions"
+    assert "In Review -> In Progress" in status_progression, "Legacy status 'IN PROGRESS2' should be in transitions"
     
     # Verify that forward/backflow detection works with legacy status names
-    w_trakcie_to_review = next((t for t in transitions if t['from_status'] == 'W TRAKCIE'), None)
-    assert w_trakcie_to_review and w_trakcie_to_review['is_forward_transition'], "W TRAKCIE -> In review should be forward"
-    
-    review_to_progress2 = next((t for t in transitions if t['to_status'] == 'IN PROGRESS2'), None)
-    assert review_to_progress2 and review_to_progress2['is_backflow'], "In review -> IN PROGRESS2 should be backflow"
-    
+    w_trakcie_to_review = transitions[1]  # In Progress -> In Review
+    assert w_trakcie_to_review and w_trakcie_to_review['is_forward_transition'], "In Progress -> In Review should be forward"
+
+    review_to_progress2 = transitions[2]  # In Review -> In Progress
+    assert review_to_progress2 and review_to_progress2['is_backflow'], "In Review -> In Progress should be backflow"
+
     print("✅ Enhanced test passed! Status transitions with days and periods are working correctly.")
 
 if __name__ == "__main__":

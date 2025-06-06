@@ -279,3 +279,100 @@ def format_date_polish(date_str: str) -> str:
     except Exception as e:
         logger.error(f"Error formatting date in Polish: {e}")
         return date_str
+
+def normalize_status_name(status_name: str) -> str:
+    """
+    Normalize legacy status names to standardized status names.
+    
+    This function maps various legacy status names (including typos, different languages,
+    and old naming conventions) to their current standardized equivalents.
+    
+    Args:
+        status_name: The original status name from JIRA
+        
+    Returns:
+        Normalized status name
+    """
+    if not status_name:
+        return status_name
+        
+    # Convert to lowercase for case-insensitive matching
+    status_lower = status_name.lower().strip()
+    
+    # Define legacy to new status name mappings
+    status_mapping = {
+        # Polish to English mappings            
+        'do poprawy': 'In Review',
+        'testy wewnętrzne': 'Testing',
+        'powiadomienie klienta': 'Customer Notification',
+        'anulowane': 'Canceled',
+        'ukończone': 'Completed',
+        'zamknięte': 'Closed',
+        'otwarte': 'Open',
+        'w trakcie': 'In Progress',
+        'in progress2': 'In Progress',  # Legacy name variation
+        'oczekuje': 'Waiting',
+        'planowane': 'Planned',
+        'wybrane do realizacji': 'Selected for Development',
+        'do zrobienia': 'Selected for Development',  # Polish legacy name
+        'gotowe do przeglądu': 'Ready for Review',
+        'gotowe do testów': 'Ready for Testing',
+        'oczekuje na wydanie produkcyjne': 'Awaiting Production Release',
+        
+        # Legacy English variations
+        'todo': 'Selected for Development',
+        'to do': 'Selected for Development',
+        'new': 'Open',
+        'reopened': 'Open',            
+        'resolved': 'Completed',
+        
+        # Common typos and variations
+        'in progres': 'In Progress',
+        'inprogress': 'In Progress',
+        'in-progress': 'In Progress',
+        'in_progress': 'In Progress',
+        'in review': 'In Review',
+        'inreview': 'In Review',
+        'in-review': 'In Review',
+        'in_review': 'In Review',
+        'ready for review': 'Ready for Review',
+        'ready_for_review': 'Ready for Review',
+        'ready-for-review': 'Ready for Review',
+        'ready for testing': 'Ready for Testing',
+        'ready_for_testing': 'Ready for Testing',
+        'ready-for-testing': 'Ready for Testing',
+        'selected for development': 'Selected for Development',
+        'selected_for_development': 'Selected for Development',
+        'selected-for-development': 'Selected for Development',
+        'awaiting production release': 'Awaiting Production Release',
+        'awaiting_production_release': 'Awaiting Production Release',
+        'awaiting-production-release': 'Awaiting Production Release',
+        'customer notification': 'Customer Notification',
+        'customer_notification': 'Customer Notification',
+        'customer-notification': 'Customer Notification',
+        
+        # Status variations
+        'hold': 'Hold',
+        'on hold': 'Hold',
+        'on-hold': 'Hold',
+        'on_hold': 'Hold',
+        'blocked': 'Blocked',
+        'waiting': 'Waiting',
+        'pending': 'Waiting',
+        'draft': 'Draft',
+        'backlog': 'Backlog',
+        'open': 'Open',
+        'planned': 'Planned',
+        'testing': 'Testing',
+        'completed': 'Completed',
+        'canceled': 'Canceled'
+    }
+    
+    # Return mapped status or original if no mapping found
+    normalized = status_mapping.get(status_lower, status_name)
+    
+    # Log when we're using a mapping for debugging purposes
+    if normalized != status_name:
+        logger.debug(f"Normalized status '{status_name}' to '{normalized}'")
+        
+    return normalized

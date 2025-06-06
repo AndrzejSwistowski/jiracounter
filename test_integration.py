@@ -84,7 +84,7 @@ def test_jiraservice_integration():
         assert result['key'] == "INTEGRATION-123", f"Expected key INTEGRATION-123, got {result['key']}"
         assert result['summary'] == "Integration Test Issue", f"Expected correct summary, got {result['summary']}"
         assert result['issue_type'] == "Task", f"Expected issue_type Task, got {result['issue_type']}"
-        assert result['status'] == "To Do", f"Expected status 'To Do', got {result['status']}"
+        assert result['status'] == "Selected for Development", f"Expected status 'Selected for Development', got {result['status']}"
         
         print(f"✓ Key: {result['key']}")
         print(f"✓ Summary: {result['summary']}")
