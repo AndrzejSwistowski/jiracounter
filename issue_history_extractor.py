@@ -514,16 +514,16 @@ class IssueHistoryExtractor:
         working_minutes_from_create = 0
         if creation_date and update_date:
             working_minutes_from_create = calculate_working_minutes_between(creation_date, update_date)
-        
-        # Find current status change date and calculate minutes in current status
+          # Find current status change date and calculate minutes in current status
         status_name = issue_data['status']
+        status_name_lower = status_name.lower().strip() if status_name else ''
         status_change_date = None
         working_minutes_in_current_status = 0
-        
-        # Find the most recent status change to the current status
+          # Find the most recent status change to the current status
         for history in reversed(status_change_history):
             for change in history['changes']:
-                if change['field'] == 'status' and change['to'] == status_name:
+                if (change['field'] == 'status' and 
+                    change['to'].lower().strip() == status_name_lower):
                     status_change_date = history['historyDate']
                     break
             if status_change_date:
@@ -580,11 +580,12 @@ class IssueHistoryExtractor:
                     initial_status_found = True
                     break
             if initial_status_found:
-                break
-          # Now find the first status change from this initial status
+                break        # Now find the first status change from this initial status
         for history_item in status_change_history:
             for change in history_item['changes']:
-                if change['field'] == 'status' and change['from'] == initial_status:
+                if (change['field'] == 'status' and 
+                    change['from'] and initial_status and 
+                    change['from'].lower().strip() == initial_status.lower().strip()):
                     todo_exit_date = history_item['historyDate']
                     self.logger.debug(f"First status change from '{initial_status}' on {todo_exit_date}")
                     break

@@ -151,27 +151,7 @@ def format_for_jql(date_value):
         logger.error(f"Error formatting date for JQL: {e}")
         return None
 
-def find_status_change_date(change_history, status_name, default=None):
-    """
-    Find the date when an issue transitioned to a specific status.
-    
-    Args:
-        change_history: List of changelog entries
-        status_name: Status name to find
-        default: Default value if not found
-        
-    Returns:
-        datetime: Date when the issue changed to the specified status, or default if not found
-    """
-    if not change_history or not status_name:
-        return default
-        
-    for history in change_history:
-        for change in history['changes']:
-            if change['field'] == 'status' and change['to'] == status_name:
-                return history['historyDate']
-    
-    return default
+
 
 def find_first_status_change_date(change_history, default=None):
     """

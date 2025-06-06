@@ -15,7 +15,7 @@ from logger_utils import setup_logging
 def main():
     """Main entry point for updating a specific issue."""
     parser = argparse.ArgumentParser(description='Update a specific Jira issue in Elasticsearch')
-    parser.add_argument('--issue_key', type=str, default='POL-396', help='The Jira issue key to update (e.g., POL-396)')
+    parser.add_argument('--issue_key', type=str, default='BAI-634', help='The Jira issue key to update (e.g., POL-396)')
     parser.add_argument('--agent', type=str, default='JiraETLAgent', 
                         help='Name of the ETL agent (default: JiraETLAgent)')
     parser.add_argument('--dry-run', action='store_true',
@@ -56,7 +56,7 @@ def main():
         
         # Insert or update the issue in Elasticsearch
         logger.info(f"Inserting/updating issue {args.issue_key} in Elasticsearch")
-        inserted_count = populator.bulk_insert_issue_history([issue_record])
+        inserted_count = populator.bulk_insert_issue_history([issue_record], force_override=True)
         
         if inserted_count > 0:
             logger.info(f"Successfully inserted/updated {inserted_count} records for issue {args.issue_key}")

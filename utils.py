@@ -155,34 +155,7 @@ def calculate_working_days_between(start_date, end_date=None):
         logger.error(f"Error calculating working days between dates: {e}")
         return None
 
-def find_status_change_date(issue_history, target_status, start_from=None):
-    """Find the date when an issue moved to a specific status.
-    
-    Args:
-        issue_history: List of changelog entries for the issue
-        target_status: The status to look for
-        start_from: Optional datetime to start searching from
-        
-    Returns:
-        datetime: The date when the issue moved to the status, or None if not found
-    """
-    if not issue_history or not target_status:
-        return None
-        
-    # Sort history by date, newest first
-    sorted_history = sorted(issue_history, key=lambda x: x.get('historyDate', ''), reverse=True)
-    
-    for entry in sorted_history:
-        # Skip entries before start_from date if specified
-        if start_from and entry.get('historyDate') < start_from:
-            continue
-            
-        # Look for status change in each change item
-        for change in entry.get('changes', []):
-            if change.get('field') == 'status' and change.get('to') == target_status:
-                return entry.get('historyDate')
-                
-    return None
+
 
 def find_first_status_change_date(issue_history):
     """Find the date when an issue had its first status change.
